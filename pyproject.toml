@@ -1,0 +1,52 @@
+[tool.poetry]
+name = "telegram-voice-bot-v2"
+version = "0.1.0"
+description = "Telegram bot for voice message transcription using local Whisper"
+authors = ["Your Name <[email protected]>"]
+readme = "README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+python-telegram-bot = "^22.5"
+faster-whisper = "^1.2.0"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.44"}
+aiosqlite = "^0.20.0"
+alembic = "^1.13"
+python-dotenv = "^1.0.0"
+pydantic = "^2.10"
+pydantic-settings = "^2.6"
+httpx = "^0.28"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = "^0.24"
+pytest-cov = "^6.0"
+black = "^24.10"
+ruff = "^0.8"
+mypy = "^1.13"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true

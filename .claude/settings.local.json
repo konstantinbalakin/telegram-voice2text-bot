@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree -a -L 3 /Users/k.balakin/MyProjects/telegram-voice-bot-v2)",
+      "Bash(git :*)",
+      "WebSearch",
+      "WebFetch(domain:pypi.org)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
