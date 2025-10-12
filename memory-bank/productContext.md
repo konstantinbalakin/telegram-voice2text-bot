@@ -1,4 +1,4 @@
-# Product Context: Telegram Voice Bot v2
+# Product Context: Telegram Voice2Text Bot
 
 ## Problem Space
 

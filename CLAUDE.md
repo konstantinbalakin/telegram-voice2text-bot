@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Telegram Voice Bot v2 - A Telegram bot for working with voice messages. Currently in initial draft stage.
+Telegram Voice2Text Bot - A Telegram bot for working with voice messages. Currently in initial draft stage.
 
 ## Memory Bank System
 

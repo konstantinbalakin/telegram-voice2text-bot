@@ -1,4 +1,4 @@
-# Progress: Telegram Voice Bot v2
+# Progress: Telegram Voice2Text Bot
 
 ## Project Timeline
 

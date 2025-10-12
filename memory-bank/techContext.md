@@ -1,4 +1,4 @@
-# Technical Context: Telegram Voice Bot v2
+# Technical Context: Telegram Voice2Text Bot
 
 ## Technology Stack
 

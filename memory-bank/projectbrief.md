@@ -1,4 +1,4 @@
-# Project Brief: Telegram Voice Bot v2
+# Project Brief: Telegram Voice2Text Bot
 
 ## Project Vision
 

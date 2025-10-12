@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "telegram-voice-bot-v2"
+name = "telegram-voice2text-bot"
 version = "0.1.0"
 description = "Telegram bot for voice message transcription using local Whisper"
 authors = ["Your Name <[email protected]>"]

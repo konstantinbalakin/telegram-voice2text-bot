@@ -1,4 +1,4 @@
-# Implementation Plan: MVP Telegram Voice Bot with Hybrid Queue Architecture
+# Implementation Plan: MVP Telegram Voice2Text Bot with Hybrid Queue Architecture
 
 **Date**: 2025-10-12
 **Selected Option**: Option 3 - Hybrid Queue Approach
@@ -128,7 +128,7 @@ mypy = "^1.13"
 ## Project Structure
 
 ```
-telegram-voice-bot-v2/
+telegram-voice2text-bot/
 ├── src/
 │   ├── __init__.py
 │   ├── main.py                    # Application entry point

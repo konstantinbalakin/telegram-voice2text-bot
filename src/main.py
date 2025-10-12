@@ -1,5 +1,5 @@
 """
-Telegram Voice Bot v2
+Telegram Voice2Text Bot
 Entry point for the application
 """
 import asyncio
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 async def main() -> None:
     """Main application entry point."""
-    logger.info("Starting Telegram Voice Bot v2")
+    logger.info("Starting Telegram Voice2Text Bot")
     logger.info(f"Bot mode: {settings.bot_mode}")
     logger.info(f"Whisper model: {settings.whisper_model_size}")
     logger.info(f"Database: {settings.database_url}")

@@ -1,4 +1,4 @@
-# Active Context: Telegram Voice Bot v2
+# Active Context: Telegram Voice2Text Bot
 
 ## Current Status
 

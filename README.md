@@ -1,4 +1,4 @@
-# Telegram Voice Bot v2
+# Telegram Voice2Text Bot
 
 Telegram бот для транскрибации голосовых сообщений с использованием локальной модели Whisper.
 
@@ -26,7 +26,7 @@ Telegram бот для транскрибации голосовых сообщ�
 ```bash
 # Клонировать репозиторий
 git clone <repo_url>
-cd telegram-voice-bot-v2
+cd telegram-voice2text-bot
 
 # Убедиться что Python 3.11+ установлен
 python3 --version
@@ -72,7 +72,7 @@ python -m src.main
 ## Структура проекта
 
 ```
-telegram-voice-bot-v2/
+telegram-voice2text-bot/
 ├── src/
 │   ├── bot/              # Telegram bot handlers
 │   ├── processing/       # Queue and worker pool

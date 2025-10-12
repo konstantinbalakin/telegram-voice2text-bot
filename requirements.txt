@@ -1,0 +1,18 @@
+# Core dependencies
+python-telegram-bot==22.5
+faster-whisper==1.2.0
+sqlalchemy[asyncio]==2.0.44
+aiosqlite==0.20.0
+alembic==1.13
+python-dotenv==1.0.0
+pydantic==2.10
+pydantic-settings==2.6
+httpx==0.28
+
+# Dev dependencies (optional)
+pytest==8.3
+pytest-asyncio==0.24
+pytest-cov==6.0
+black==24.10
+ruff==0.8
+mypy==1.13

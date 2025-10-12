@@ -1,4 +1,4 @@
-# System Patterns: Telegram Voice Bot v2
+# System Patterns: Telegram Voice2Text Bot
 
 ## Architecture Overview
 
