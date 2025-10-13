@@ -463,3 +463,67 @@ This architecture prioritizes:
 4. **Scalability path**: Can migrate to microservices when needed
 
 The hybrid approach means we don't over-engineer for scale we don't have yet, but we also don't paint ourselves into a corner.
+
+## Development Workflow
+
+### Git Strategy
+**Workflow**: Feature Branch Workflow (documented in `.github/WORKFLOW.md`)
+
+**Branch Structure**:
+```
+main (protected, PR-only)
+  ├── feature/database-models
+  ├── feature/whisper-service
+  ├── feature/bot-handlers
+  ├── feature/queue-system
+  └── feature/integration-tests
+```
+
+**Commit Convention**: Conventional Commits format
+- `feat:` - New functionality
+- `fix:` - Bug fixes
+- `refactor:` - Code refactoring
+- `docs:` - Documentation
+- `test:` - Tests
+- `chore:` - Maintenance tasks
+
+**PR Process**:
+1. Create feature branch from `main`
+2. Implement feature with regular commits
+3. Push to GitHub for backup
+4. Create PR when complete
+5. Review and merge via GitHub
+6. Delete feature branch
+
+**Phase-Based Branching**:
+- Phase 2: `feature/database-models`, `feature/whisper-service`
+- Phase 3: `feature/queue-system`
+- Phase 4: `feature/bot-handlers`
+- Phase 5: `feature/integration`
+- Phase 6: `feature/docker-deployment`
+
+**Integration with Tools**:
+- `/commit` slash command for git commits
+- `gh pr create` for pull request creation
+- Conventional commit messages for clear history
+
+**Repository**: `konstantinbalakin/telegram-voice2text-bot`
+
+### Development Cycle Pattern
+```
+1. Start: Review Memory Bank → Understand context
+2. Plan: Break down task → Create todos
+3. Branch: Create feature branch
+4. Code: Implement → Test → Commit
+5. Push: Regular pushes to GitHub (backup)
+6. PR: Create pull request with summary
+7. Merge: Merge to main via GitHub
+8. Update: Update Memory Bank with learnings
+```
+
+**Key Principles**:
+- Work in feature branches, never directly in `main`
+- Regular commits with conventional format
+- Push often for backup and visibility
+- PR-based code review (even solo development)
+- Memory Bank updates at significant milestones
