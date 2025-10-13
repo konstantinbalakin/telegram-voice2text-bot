@@ -12,12 +12,15 @@ This project uses the Claude Code Memory Bank system located in `.claude/`. The 
 
 ### Key Memory Bank Files
 
+Located in `.claude/memory-bank/`:
+
 - `projectbrief.md` - Core requirements and project goals
 - `productContext.md` - Problem statement and user experience goals
 - `activeContext.md` - Current work focus, recent changes, and next steps
 - `systemPatterns.md` - Architecture and technical decisions
 - `techContext.md` - Technologies, dependencies, and development setup
 - `progress.md` - Current status, what works, and what's left to build
+- `plans/` - Detailed implementation plans
 
 ### Workflow
 
