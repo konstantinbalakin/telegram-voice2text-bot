@@ -25,6 +25,7 @@ pytest-cov = "^6.0"
 black = "^24.10"
 ruff = "^0.8"
 mypy = "^1.13"
+alembic = "^1.17.0"
 
 [build-system]
 requires = ["poetry-core"]

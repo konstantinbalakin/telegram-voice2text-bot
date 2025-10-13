@@ -5,7 +5,10 @@
       "Bash(git :*)",
       "WebSearch",
       "WebFetch(domain:pypi.org)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\ndocs: reorganize Memory Bank structure and add Git workflow\n\n- Move Memory Bank files to .claude/memory-bank/ (per standard)\n- Update all Memory Bank files with Phase 1 completion status\n- Add comprehensive Git/GitHub workflow documentation\n- Update CLAUDE.md and README.md with correct paths\n\nMemory Bank updates:\n- projectbrief.md: Added complete scope and timeline\n- productContext.md: Defined users, value prop, MVP scope\n- activeContext.md: Documented Sessions 1-2, current Phase 2 focus\n- progress.md: Added milestones, decision log, learning insights\n- systemPatterns.md: No changes (already comprehensive)\n- techContext.md: No changes (already comprehensive)\n\nProject status: Phase 1 complete, ready for Phase 2 (Database & Whisper)\nEOF\n)\")",
+      "Bash(gh:*)",
+      "Bash(poetry install)"
     ],
     "deny": [],
     "ask": []

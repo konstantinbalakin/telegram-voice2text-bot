@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Telegram Voice2Text Bot - A Telegram bot for working with voice messages. Currently in initial draft stage.
+Telegram Voice2Text Bot - A Telegram bot for working with voice messages. Currently in initial setup stage.
+
+**GitHub Repository**: `konstantinbalakin/telegram-voice2text-bot`
 
 ## Memory Bank System
 
@@ -39,9 +41,56 @@ Located in `.claude/memory-bank/`:
 
 Use the `/workflow:update-memory` slash command to update the Memory Bank.
 
+## Git Workflow
+
+This project uses **Feature Branch Workflow** with protected main branch. See `.github/WORKFLOW.md` for complete details.
+
+### Quick Reference
+
+**Start Feature**:
+```bash
+git checkout main
+git pull origin main
+git checkout -b feature/your-feature-name
+```
+
+**Commit Changes** (use Conventional Commits):
+```bash
+git add <files>
+git commit -m "feat: add something"
+git push origin feature/your-feature-name
+```
+
+**Create PR**:
+```bash
+gh pr create --title "feat: description" --body "..."
+```
+
+**Commit Types**:
+- `feat:` - New functionality
+- `fix:` - Bug fixes
+- `refactor:` - Code refactoring
+- `docs:` - Documentation
+- `test:` - Tests
+- `chore:` - Maintenance
+
+**Slash Command Integration**:
+- Use `/commit` for automatic commit message generation
+- Push manually after commit: `git push origin <branch-name>`
+
 ## Development Status
 
-⚠️ Project is in initial draft stage. Build system, dependencies, and core functionality are not yet implemented.
+⚠️ **Current Phase**: Phase 1 Complete (Project Setup)
+
+**Next Steps**:
+1. Install dependencies: `poetry install`
+2. Create feature branch for database work
+3. Begin Phase 2: Database Models & Whisper Service
+
+**Project Structure**: ✅ Ready
+**Dependencies**: ✅ Configured (not yet installed)
+**Configuration**: ✅ Implemented (src/config.py)
+**Entry Point**: ✅ Ready (src/main.py)
 
 ## Additional Instructions
 - @.claude/claude-memory-bank.md
