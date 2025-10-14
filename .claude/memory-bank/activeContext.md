@@ -2,11 +2,12 @@
 
 ## Current Status
 
-**Phase**: Implementation Phase 2 - Database Layer ✅ COMPLETE
+**Phase**: Implementation Phase 2.2 - Whisper Service Integration ✅ COMPLETE
 **Date**: 2025-10-14
-**Stage**: Ready for Phase 2.2 - Whisper Service Integration OR PR Review
+**Stage**: Ready for Phase 3 - Processing Queue OR Local Testing
 **GitHub**: Repository `konstantinbalakin/telegram-voice2text-bot`
-**PR**: `feature/database-models` branch pushed, ready for PR creation
+**Branch**: `main` (up to date)
+**Latest PR**: #3 merged - Whisper service integration and bot handlers
 
 ## What Just Happened (Recent Sessions)
 
@@ -163,18 +164,93 @@
      - `c81c69c` - feat: database layer implementation
      - `178715c` - docs: Memory Bank updates
    - Branch pushed to GitHub
-   - Ready for PR creation
+   - PR #1 & #2 created and merged
+
+### Session #5 (2025-10-14) - Whisper Service Integration ✅
+
+1. ✅ **WhisperService Implemented** (`src/transcription/whisper_service.py` - 195 lines)
+   - faster-whisper integration with async support
+   - Thread pool executor for CPU-bound transcription (max 3 workers)
+   - Model initialization with configurable settings (model_size, device, compute_type)
+   - Timeout handling and comprehensive error management
+   - Returns tuple: (transcription_text, processing_duration)
+   - Singleton pattern with `get_whisper_service()` global instance getter
+   - Graceful shutdown with resource cleanup
+
+2. ✅ **AudioHandler Implemented** (`src/transcription/audio_handler.py` - 211 lines)
+   - Download voice messages and audio files from Telegram
+   - Support for multiple audio formats (.ogg, .mp3, .wav, .m4a, .opus)
+   - File validation: format, size (20MB limit), existence
+   - Temporary file management with automatic cleanup
+   - Alternative URL download method via httpx
+   - Old file cleanup utility (configurable age threshold)
+
+3. ✅ **BotHandlers Implemented** (`src/bot/handlers.py` - 307 lines)
+   - **Commands** (all in Russian):
+     - `/start` - User registration with welcome message
+     - `/help` - Usage instructions
+     - `/stats` - User statistics (count, total/avg duration, registration date)
+   - **Message Handlers**:
+     - Voice message handler with full transcription flow
+     - Audio file handler
+     - Status updates during processing ("Обрабатываю...")
+   - **Error Handling**:
+     - Error handler with user-friendly Russian messages
+     - Exception logging with full traceback
+   - **Database Integration**:
+     - Per-request session management using `get_session()`
+     - User creation/lookup
+     - Transcription history storage
+
+4. ✅ **Main Application Integration** (`src/main.py` - updated)
+   - Database initialization on startup (`init_db()`)
+   - Whisper service initialization with settings
+   - Audio handler initialization
+   - Bot handlers creation
+   - Telegram Application builder with token
+   - Command and message handler registration
+   - Polling mode implementation
+   - Graceful shutdown with cleanup (whisper, database, bot)
+
+5. ✅ **Package Exports**
+   - `src/bot/__init__.py` - Export BotHandlers
+   - `src/transcription/__init__.py` - Export WhisperService, AudioHandler, get_whisper_service
+
+6. ✅ **Comprehensive Testing** (32+ tests, all passing)
+   - **WhisperService Tests** (`tests/unit/test_whisper_service.py` - 15+ tests):
+     - Service initialization and idempotency
+     - Successful transcription with mocked faster-whisper
+     - Timeout handling with asyncio.TimeoutError
+     - Error handling and failure scenarios
+     - Synchronous transcription method (`_transcribe_sync`)
+     - Global instance singleton pattern
+   - **AudioHandler Tests** (`tests/unit/test_audio_handler.py` - 17+ tests):
+     - Voice message download success and failure
+     - File size validation (20MB limit)
+     - Format validation (supported/unsupported)
+     - Cleanup operations (single file, old files)
+     - URL download method
+     - File validation (existence, format, empty files)
+
+7. ✅ **Git Workflow & PR Management**
+   - Created feature branch: `feature/whisper-service`
+   - Commit: `4aa8597` - feat: implement Whisper service integration and bot handlers
+   - Branch pushed to GitHub
+   - PR #3 created with comprehensive description
+   - **PR #3 auto-merged via GitHub CLI** (`gh pr merge 3 --merge --delete-branch`)
+   - Switched back to `main` branch
+   - Remote branches pruned and cleaned up
 
 ## Current Focus
 
-**Completed**: Database Layer Implementation (Phase 2.1) ✅
+**Completed**: Whisper Service Integration (Phase 2.2) ✅
 
 **Options for Next Session**:
-1. **Create PR** and wait for review
-2. **Continue to Phase 2.2** - Whisper Service Integration
-3. **Merge and move to Phase 3** - Processing Queue
+1. **Test Bot Locally** - Create .env and test with real Telegram bot
+2. **Continue to Phase 3** - Processing Queue implementation
+3. **Update Documentation** - README, usage instructions
 
-**Recommended**: Create PR for review, then continue with Whisper Service in parallel
+**Recommended**: Test bot locally first to validate Phase 2 implementation
 
 **What Needs to Happen Next**:
 1. ~~**Database Layer** (Priority 1)~~ ✅ COMPLETE
@@ -183,14 +259,29 @@
    - ✅ Implement repository pattern
    - ✅ Write database tests (13 tests passing)
 
-2. **Whisper Service** (Priority 2) - NEXT UP
-   - WhisperService class implementation
-   - Model loading and caching
-   - Thread pool executor setup
-   - Transcription with timeout
-   - Audio download handler
+2. ~~**Whisper Service** (Priority 2)~~ ✅ COMPLETE
+   - ✅ WhisperService class implementation
+   - ✅ Model loading and caching
+   - ✅ Thread pool executor setup
+   - ✅ Transcription with timeout
+   - ✅ AudioHandler for file download
+   - ✅ Write transcription tests (32+ tests passing)
 
-3. **Queue System** (Priority 3)
+3. ~~**Bot Handlers** (Priority 3)~~ ✅ COMPLETE
+   - ✅ Command handlers (/start, /help, /stats)
+   - ✅ Voice message handler
+   - ✅ Audio file handler
+   - ✅ Error handler
+   - ✅ Database session management
+
+4. **Local Testing** (Priority 4) - NEXT UP
+   - Create .env file with BOT_TOKEN
+   - Test bot startup
+   - Test /start, /help, /stats commands
+   - Test voice message transcription
+   - Verify database records
+
+5. **Queue System** (Priority 5) - OPTIONAL
    - QueueManager implementation
    - Worker pool setup
    - Task models and lifecycle

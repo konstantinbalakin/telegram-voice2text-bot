@@ -2,44 +2,49 @@
 
 Telegram бот для транскрибации голосовых сообщений с использованием локальной модели Whisper.
 
-## Особенности
+## ✨ Особенности
 
 - ✅ Локальная транскрибация через faster-whisper (без API, без затрат)
-- ✅ Асинхронная архитектура с системой очередей
-- ✅ Система квот (60 сек/день бесплатно)
-- ✅ Безлимитный доступ для отдельных пользователей
-- 🚧 Суммаризация текста (планируется)
-- 🚧 Система биллинга (планируется)
+- ✅ Поддержка русского и других языков
+- ✅ Асинхронная архитектура
+- ✅ База данных для хранения истории транскрибаций
+- ✅ Статистика использования
+- 🚧 Система квот (60 сек/день бесплатно) - планируется
+- 🚧 Суммаризация текста - планируется
+- 🚧 Система биллинга - планируется
 
-## Технологии
+## 🛠 Технологии
 
-- **Python 3.11+**
+- **Python 3.12+**
 - **faster-whisper 1.2.0** - транскрибация (4x быстрее openai-whisper)
 - **python-telegram-bot 22.5** - Telegram Bot API
 - **SQLAlchemy + SQLite/PostgreSQL** - хранение данных
 - **asyncio** - асинхронная обработка
 
-## Быстрый старт
+## 🚀 Быстрый старт
 
 ### 1. Подготовка
 
 ```bash
 # Клонировать репозиторий
-git clone <repo_url>
+git clone https://github.com/konstantinbalakin/telegram-voice2text-bot.git
 cd telegram-voice2text-bot
 
-# Убедиться что Python 3.11+ установлен
+# Убедиться что Python 3.12+ установлен
 python3 --version
-
-# Установить Poetry (опционально)
-curl -sSL https://install.python-poetry.org | python3 -
 ```
 
 ### 2. Установка зависимостей
 
-**С Poetry:**
+**С Poetry (рекомендуется):**
 ```bash
+# Установить Poetry если еще не установлен
+curl -sSL https://install.python-poetry.org | python3 -
+
+# Установить зависимости
 poetry install
+
+# Активировать виртуальное окружение
 poetry shell
 ```
 
@@ -51,44 +56,90 @@ source venv/bin/activate  # Linux/Mac
 pip install -e .
 ```
 
-### 3. Конфигурация
+### 3. Получение Telegram Bot Token
+
+1. Открыть Telegram и найти [@BotFather](https://t.me/BotFather)
+2. Отправить команду `/newbot`
+3. Следовать инструкциям для создания бота
+4. Скопировать полученный токен (формат: `1234567890:ABCdefGHIjklMNOpqrsTUVwxyz`)
+
+### 4. Конфигурация
 
 ```bash
 # Скопировать шаблон конфигурации
 cp .env.example .env
 
-# Получить токен бота от @BotFather в Telegram
-
 # Отредактировать .env и указать токен
 nano .env  # или любой редактор
 ```
 
-### 4. Запуск
+Минимальная конфигурация в `.env`:
+```env
+BOT_TOKEN=your_bot_token_here
+```
+
+### 5. Запуск бота
 
 ```bash
+# С Poetry
+poetry run python -m src.main
+
+# Без Poetry (в активированном venv)
 python -m src.main
 ```
 
-## Структура проекта
+При первом запуске Whisper модель будет автоматически загружена (~140MB для модели `base`).
+
+### 6. Тестирование
+
+1. Открыть бота в Telegram
+2. Отправить команду `/start`
+3. Отправить голосовое сообщение
+4. Получить транскрибацию!
+
+## 📋 Доступные команды
+
+- `/start` - Начать работу с ботом и зарегистрироваться
+- `/help` - Показать справку
+- `/stats` - Посмотреть статистику использования
+
+## 📁 Структура проекта
 
 ```
 telegram-voice2text-bot/
 ├── src/
 │   ├── bot/              # Telegram bot handlers
-│   ├── processing/       # Queue and worker pool
+│   │   ├── handlers.py   # Command and message handlers
+│   │   └── __init__.py
 │   ├── transcription/    # Whisper integration
+│   │   ├── whisper_service.py   # faster-whisper integration
+│   │   ├── audio_handler.py     # Audio file management
+│   │   └── __init__.py
 │   ├── storage/          # Database models
-│   ├── quota/            # Quota management
-│   ├── config.py         # Configuration
+│   │   ├── models.py     # SQLAlchemy models
+│   │   ├── database.py   # Database connection
+│   │   ├── repositories.py  # Repository pattern
+│   │   └── __init__.py
+│   ├── config.py         # Configuration (Pydantic Settings)
 │   └── main.py           # Entry point
-├── tests/                # Tests
-├── docker/               # Docker files
-├── memory-bank/          # Project documentation
-└── pyproject.toml        # Dependencies
+├── tests/
+│   ├── unit/             # Unit tests
+│   │   ├── test_models.py
+│   │   ├── test_repositories.py
+│   │   ├── test_whisper_service.py
+│   │   └── test_audio_handler.py
+│   ├── integration/      # Integration tests
+│   └── conftest.py       # Pytest fixtures
+├── alembic/              # Database migrations
+├── .claude/              # Memory Bank documentation
+├── .env.example          # Configuration template
+├── pyproject.toml        # Dependencies (Poetry)
+└── README.md
+```
 
-## Разработка
+## 🧪 Разработка
 
-### Тесты
+### Запуск тестов
 
 ```bash
 # Запустить все тесты
@@ -99,12 +150,15 @@ pytest --cov=src --cov-report=html
 
 # Только unit тесты
 pytest tests/unit/
+
+# Конкретный тест
+pytest tests/unit/test_whisper_service.py
 ```
 
 ### Форматирование и линтинг
 
 ```bash
-# Форматирование
+# Форматирование кода
 black src/ tests/
 
 # Линтинг
@@ -114,7 +168,37 @@ ruff check src/ tests/
 mypy src/
 ```
 
-## Docker
+### База данных
+
+```bash
+# Создать новую миграцию
+alembic revision --autogenerate -m "description"
+
+# Применить миграции
+alembic upgrade head
+
+# Откатить миграцию
+alembic downgrade -1
+```
+
+## ⚙️ Конфигурация
+
+Все настройки настраиваются через файл `.env` или переменные окружения:
+
+| Параметр | По умолчанию | Описание |
+|----------|--------------|----------|
+| `BOT_TOKEN` | - | **Обязательно**. Telegram Bot Token от @BotFather |
+| `BOT_MODE` | `polling` | Режим работы: `polling` или `webhook` |
+| `WHISPER_MODEL_SIZE` | `base` | Размер модели: `tiny`, `base`, `small`, `medium`, `large` |
+| `WHISPER_DEVICE` | `cpu` | Устройство: `cpu` или `cuda` |
+| `DATABASE_URL` | `sqlite:///./data/bot.db` | URL базы данных |
+| `LOG_LEVEL` | `INFO` | Уровень логирования |
+| `TRANSCRIPTION_TIMEOUT` | `120` | Таймаут транскрибации (секунды) |
+| `MAX_CONCURRENT_WORKERS` | `3` | Максимум параллельных транскрибаций |
+
+Полный список настроек см. в файле `.env.example`.
+
+## 🐳 Docker
 
 ```bash
 # Build
@@ -122,43 +206,76 @@ docker build -t telegram-voice-bot .
 
 # Run
 docker-compose up -d
+
+# Logs
+docker-compose logs -f
+
+# Stop
+docker-compose down
 ```
 
-## Roadmap
+## 📈 Roadmap
 
-### Phase 1: MVP (Текущая)
+### Phase 1: MVP ✅ COMPLETE
 - [x] Проектная структура
-- [ ] Базовая транскрибация
-- [ ] Система квот
-- [ ] Polling режим
+- [x] Database layer (SQLAlchemy + Alembic)
+- [x] Whisper integration (faster-whisper)
+- [x] Bot handlers (/start, /help, /stats)
+- [x] Voice message transcription
+- [x] Audio file support
+- [x] Polling режим
+- [x] Unit tests (45+ tests)
 
-### Phase 2: Docker
+### Phase 2: Testing & Polish (CURRENT)
+- [ ] Local testing with real bot
+- [ ] Documentation updates
+- [ ] Bug fixes and improvements
+
+### Phase 3: Docker & Deployment
 - [ ] Контейнеризация
 - [ ] Docker Compose
-- [ ] Персистентное хранилище
-
-### Phase 3: Production
 - [ ] VPS деплой
 - [ ] Webhook режим
-- [ ] PostgreSQL
+- [ ] PostgreSQL migration
 - [ ] SSL сертификат
 
-### Phase 4: Features
+### Phase 4: Advanced Features
+- [ ] Система квот
 - [ ] Суммаризация текста
 - [ ] Платежная интеграция
 - [ ] CI/CD pipeline
+- [ ] Horizontal scaling
 
-## Документация
+## 📚 Документация
 
 Подробная документация в директории `.claude/memory-bank/`:
-- `projectbrief.md` - общее описание проекта
+- `projectbrief.md` - общее описание проекта и требования
 - `productContext.md` - контекст продукта и пользователей
 - `activeContext.md` - текущий статус и следующие шаги
-- `techContext.md` - технологический стек
+- `techContext.md` - технологический стек и зависимости
 - `systemPatterns.md` - архитектура системы
-- `progress.md` - прогресс разработки
+- `progress.md` - прогресс разработки и метрики
 - `plans/` - детальные планы реализации
 
-## Лицензия
+## 🤝 Contributing
+
+1. Fork репозиторий
+2. Создать feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit изменения (`git commit -m 'feat: add amazing feature'`)
+4. Push в branch (`git push origin feature/amazing-feature`)
+5. Открыть Pull Request
+
+Следуйте [Conventional Commits](https://www.conventionalcommits.org/) для commit сообщений.
+
+## 📄 Лицензия
 
 MIT
+
+## 👤 Автор
+
+Konstantin Balakin - [@konstantinbalakin](https://github.com/konstantinbalakin)
+
+## 🙏 Благодарности
+
+- [faster-whisper](https://github.com/guillaumekln/faster-whisper) - за отличную библиотеку транскрибации
+- [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) - за удобный Bot API wrapper

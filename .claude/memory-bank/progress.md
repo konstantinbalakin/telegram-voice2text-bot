@@ -3,10 +3,11 @@
 ## Project Timeline
 
 **Started**: 2025-10-12
-**Current Phase**: Phase 2.1 Complete (Database Layer) → Phase 2.2 (Whisper Service)
+**Current Phase**: Phase 2.2 Complete (Whisper Service Integration) → Phase 3 (Queue) OR Local Testing
 **Status**: 🟢 In Active Development
 **GitHub**: `konstantinbalakin/telegram-voice2text-bot`
-**Active Branch**: `feature/database-models` (pushed, ready for PR)
+**Active Branch**: `main` (up to date)
+**Latest PR**: #3 merged (Whisper service integration)
 
 ## What Works
 
@@ -140,49 +141,120 @@
    - Feature branch: `feature/database-models`
    - 2 commits (feat + docs)
    - Branch pushed to GitHub
-   - Ready for PR creation
+   - PR #1 & #2 created and merged to main
+
+#### Phase 2.2: Whisper Service Integration ✅ (2025-10-14)
+1. **WhisperService Implementation** (`src/transcription/whisper_service.py` - 195 lines)
+   - faster-whisper integration with async support
+   - Thread pool executor for CPU-bound operations (max 3 workers)
+   - Configurable model settings (size, device, compute_type)
+   - Timeout handling and error management
+   - Returns (transcription_text, duration) tuple
+   - Singleton pattern with global instance getter
+   - Graceful shutdown with resource cleanup
+
+2. **AudioHandler Implementation** (`src/transcription/audio_handler.py` - 211 lines)
+   - Download voice messages and audio files from Telegram
+   - Multi-format support (.ogg, .mp3, .wav, .m4a, .opus)
+   - File validation (format, size limit 20MB, existence)
+   - Temporary file management with automatic cleanup
+   - Alternative URL download method via httpx
+   - Old file cleanup utility (age-based)
+
+3. **Bot Handlers Implementation** (`src/bot/handlers.py` - 307 lines)
+   - Command handlers (all in Russian):
+     - `/start` - User registration with welcome message
+     - `/help` - Usage instructions
+     - `/stats` - User statistics display
+   - Message handlers:
+     - Voice message handler with full transcription flow
+     - Audio file handler
+     - Processing status updates ("Обрабатываю...")
+   - Error handler with user-friendly Russian messages
+   - Per-request database session management (`get_session()`)
+   - User creation/lookup and transcription history storage
+
+4. **Main Application Integration** (`src/main.py` - updated to 133 lines)
+   - Database initialization on startup
+   - Whisper service initialization with settings
+   - Audio handler initialization
+   - Bot handlers creation and registration
+   - Telegram Application builder with token
+   - Command and message handler registration
+   - Polling mode implementation
+   - Graceful shutdown with full cleanup
+
+5. **Package Exports**
+   - `src/bot/__init__.py` - Export BotHandlers
+   - `src/transcription/__init__.py` - Export WhisperService, AudioHandler, get_whisper_service
+
+6. **Comprehensive Testing** (32+ tests total)
+   - **WhisperService Tests** (`tests/unit/test_whisper_service.py` - 15+ tests):
+     - Initialization, idempotency, timeout, errors
+     - Mocked transcription with faster-whisper
+     - Singleton pattern validation
+   - **AudioHandler Tests** (`tests/unit/test_audio_handler.py` - 17+ tests):
+     - Download (success/failure), validation, cleanup
+     - File size/format validation, URL downloads
+
+7. **Git Workflow & PR Management**
+   - Feature branch: `feature/whisper-service`
+   - Commit: `4aa8597` - feat: implement Whisper service integration and bot handlers
+   - PR #3 created with comprehensive description (1319 lines added)
+   - **PR #3 auto-merged via `gh pr merge`**
+   - Branch deleted, switched to `main`
+   - Remote branches pruned
 
 ## What's In Progress
 
 ### 🔄 Current Work (2025-10-14)
 
-**Phase 2.1 Database Layer**: ✅ COMPLETE
-
-**Phase 2.2 Whisper Service**: Ready to start
+**Phase 2.2 Whisper Service Integration**: ✅ COMPLETE
 
 **Next Actions**:
-1. Create PR for database layer OR
-2. Continue on same branch with Whisper Service
+1. **Local Testing** - Create .env and test bot with real Telegram token
+2. **Continue to Phase 3** - Processing Queue implementation (optional)
+3. **Update Documentation** - README with setup/usage instructions
 
-**Database Layer** ✅ COMPLETE:
-- ✅ Define SQLAlchemy models (User, Usage, Transaction)
-- ✅ Setup Alembic migrations
-- ✅ Create database connection management
-- ✅ Implement repository pattern
-- ✅ Write database unit tests (13 tests passing)
+**Completed in Phase 2**:
+- ✅ Database Layer (models, migrations, repositories, tests)
+- ✅ Whisper Service (transcription with faster-whisper)
+- ✅ Audio Handler (download, validation, cleanup)
+- ✅ Bot Handlers (commands, message handlers, error handling)
+- ✅ Main integration (full startup/shutdown flow)
+- ✅ 45+ unit tests (all passing)
 
-**Whisper Service** (Priority 2) - NEXT UP:
-- [ ] WhisperService class implementation
-- [ ] Model loading and caching logic
-- [ ] Thread pool executor setup
-- [ ] Async transcribe() with timeout
-- [ ] AudioHandler for file download
-- [ ] Write transcription tests
+**Ready for Local Testing**:
+- ✅ Bot can start and initialize all components
+- ✅ Database creates tables automatically
+- ✅ Whisper model will download on first run
+- ✅ Bot handlers registered for /start, /help, /stats, voice, audio
+- ⏳ Needs BOT_TOKEN in .env file
 
 ## What's Left to Build
 
 ### 📋 Remaining MVP Work
 
-#### Phase 2: Database & Whisper
+#### Phase 2: Database & Whisper ✅ COMPLETE
 - ✅ SQLAlchemy models with relationships
 - ✅ Alembic migration system setup
 - ✅ Repository layer implementation
 - ✅ Unit tests for database (13 tests passing)
-- [ ] faster-whisper integration
-- [ ] Audio download and validation
-- [ ] Unit tests for whisper
+- ✅ faster-whisper integration
+- ✅ Audio download and validation
+- ✅ Unit tests for whisper and audio (32+ tests passing)
+- ✅ Bot handlers (/start, /help, /stats, voice, audio)
+- ✅ Main application integration
 
-#### Phase 3: Processing Queue (~1 day)
+#### Phase 2.5: Local Testing & Documentation (CURRENT)
+- [ ] Create .env.example template
+- [ ] Update README.md with setup instructions
+- [ ] Test bot locally with real Telegram token
+- [ ] Test voice message transcription
+- [ ] Verify database record creation
+- [ ] Document any issues found
+
+#### Phase 3: Processing Queue (~1 day) - OPTIONAL
 - [ ] QueueManager implementation
 - [ ] Worker pool with semaphore control
 - [ ] Task data models
