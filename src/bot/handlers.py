@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from src.storage.database import get_session
-from src.storage.repositories import UserRepository, TranscriptionRepository
+from src.storage.repositories import UserRepository, UsageRepository
 from src.transcription.whisper_service import WhisperService
 from src.transcription.audio_handler import AudioHandler
 
@@ -41,9 +41,9 @@ class BotHandlers:
             return
 
         # Register or update user in database
-        async for session in get_session():
+        async with get_session() as session:
             user_repo = UserRepository(session)
-            await user_repo.create_or_update(
+            await user_repo.create(
                 telegram_id=user.id,
                 username=user.username,
                 first_name=user.first_name,
@@ -98,9 +98,9 @@ class BotHandlers:
         if not user:
             return
 
-        async for session in get_session():
+        async with get_session() as session:
             user_repo = UserRepository(session)
-            transcription_repo = TranscriptionRepository(session)
+            usage_repo = UsageRepository(session)
 
             # Get user from database
             db_user = await user_repo.get_by_telegram_id(user.id)
@@ -109,8 +109,8 @@ class BotHandlers:
                 return
 
             # Get transcription statistics
-            transcriptions = await transcription_repo.get_by_user_id(db_user.id)
-            total_count = len(transcriptions)
+            usages = await usage_repo.get_by_user_id(db_user.id)
+            total_count = len(usages)
 
             if total_count == 0:
                 await update.message.reply_text(
@@ -120,7 +120,7 @@ class BotHandlers:
                 return
 
             # Calculate statistics
-            total_duration = sum(t.duration_seconds or 0 for t in transcriptions)
+            total_duration = sum(u.voice_duration_seconds or 0 for u in usages)
             avg_duration = total_duration / total_count if total_count > 0 else 0
 
             stats_message = (
@@ -157,15 +157,15 @@ class BotHandlers:
         )
 
         try:
-            async for session in get_session():
+            async with get_session() as session:
                 user_repo = UserRepository(session)
-                transcription_repo = TranscriptionRepository(session)
+                usage_repo = UsageRepository(session)
 
                 # Get user from database
                 db_user = await user_repo.get_by_telegram_id(user.id)
                 if not db_user:
                     # Create user if not exists
-                    db_user = await user_repo.create_or_update(
+                    db_user = await user_repo.create(
                         telegram_id=user.id,
                         username=user.username,
                         first_name=user.first_name,
@@ -179,16 +179,16 @@ class BotHandlers:
                 )
 
                 # Transcribe
-                transcription_text, duration = await self.whisper_service.transcribe(file_path)
+                transcription_text, processing_time = await self.whisper_service.transcribe(file_path)
 
                 # Save to database
-                await transcription_repo.create(
+                await usage_repo.create(
                     user_id=db_user.id,
-                    telegram_message_id=update.message.message_id,
-                    file_id=voice.file_id,
-                    file_size=voice.file_size,
-                    duration_seconds=voice.duration,
-                    transcription=transcription_text,
+                    voice_duration_seconds=voice.duration,
+                    voice_file_id=voice.file_id,
+                    transcription_text=transcription_text,
+                    model_size=self.whisper_service.model_size,
+                    processing_time_seconds=processing_time,
                 )
 
                 # Clean up files
@@ -234,15 +234,15 @@ class BotHandlers:
         )
 
         try:
-            async for session in get_session():
+            async with get_session() as session:
                 user_repo = UserRepository(session)
-                transcription_repo = TranscriptionRepository(session)
+                usage_repo = UsageRepository(session)
 
                 # Get user from database
                 db_user = await user_repo.get_by_telegram_id(user.id)
                 if not db_user:
                     # Create user if not exists
-                    db_user = await user_repo.create_or_update(
+                    db_user = await user_repo.create(
                         telegram_id=user.id,
                         username=user.username,
                         first_name=user.first_name,
@@ -256,16 +256,16 @@ class BotHandlers:
                 )
 
                 # Transcribe
-                transcription_text, duration = await self.whisper_service.transcribe(file_path)
+                transcription_text, processing_time = await self.whisper_service.transcribe(file_path)
 
                 # Save to database
-                await transcription_repo.create(
+                await usage_repo.create(
                     user_id=db_user.id,
-                    telegram_message_id=update.message.message_id,
-                    file_id=audio.file_id,
-                    file_size=audio.file_size,
-                    duration_seconds=audio.duration,
-                    transcription=transcription_text,
+                    voice_duration_seconds=audio.duration,
+                    voice_file_id=audio.file_id,
+                    transcription_text=transcription_text,
+                    model_size=self.whisper_service.model_size,
+                    processing_time_seconds=processing_time,
                 )
 
                 # Clean up files

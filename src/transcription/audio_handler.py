@@ -29,7 +29,7 @@ class AudioHandler:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Supported audio formats
-        self.supported_formats = {".ogg", ".mp3", ".wav", ".m4a", ".opus"}
+        self.supported_formats = {".ogg", ".oga", ".mp3", ".wav", ".m4a", ".opus"}
 
         logger.info(f"AudioHandler initialized with temp_dir: {self.temp_dir}")
 

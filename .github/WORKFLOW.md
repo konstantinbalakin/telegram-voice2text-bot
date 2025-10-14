@@ -81,15 +81,34 @@ git push origin feature/database-models
 - ✅ Видимость прогресса
 - ✅ Возможность продолжить с другой машины
 
-### 5. Завершение работы над фичей
+### 5. Обновление документации (перед PR)
 
-Когда фича готова:
+**ВАЖНО**: Перед созданием PR обновите документацию:
 
 ```bash
-# Убедитесь что все запушено
-git push origin feature/database-models
+# После завершения кода и тестов, обновите документацию
+# Memory Bank: activeContext.md, progress.md (если значимые изменения)
+# README.md: если изменился API или добавились новые возможности
+# .env.example: если добавились новые настройки
 
-# Создайте Pull Request через GitHub CLI или веб-интерфейс
+# Сделайте отдельный коммит с документацией
+git add .claude/memory-bank/*.md README.md .env.example
+git commit -m "docs: update documentation after Phase X completion"
+git push origin feature/database-models
+```
+
+**Зачем это нужно**:
+- PR содержит полную картину: код + тесты + документация
+- Документация синхронизирована с кодом
+- Будущие разработчики видят актуальное состояние
+- Memory Bank обновлен для следующей сессии Claude Code
+
+### 6. Создание Pull Request
+
+Когда фича готова (код + тесты + документация):
+
+```bash
+# Создайте Pull Request через GitHub CLI
 gh pr create --title "feat: implement database models and repositories" \
   --body "$(cat <<'EOF'
 ## Summary
@@ -97,6 +116,7 @@ gh pr create --title "feat: implement database models and repositories" \
 - Added Alembic migrations
 - Implemented repository pattern with async methods
 - Added comprehensive tests (85% coverage)
+- Updated Memory Bank and documentation
 
 ## Test plan
 - [x] All unit tests pass
@@ -111,11 +131,23 @@ EOF
 )"
 ```
 
-### 6. Code Review и Merge
+### 7. Code Review и Auto-Merge
+
+**Автоматический мерж** (рекомендуется для solo-разработки):
+
+```bash
+# Сразу после создания PR, автоматически мержим его
+gh pr merge <PR_NUMBER> --merge --delete-branch
+
+# Или можно настроить auto-merge на GitHub:
+gh pr merge <PR_NUMBER> --auto --merge --delete-branch
+```
+
+**Ручной процесс** (если нужен review):
 
 1. **Review**: Проверьте PR (или попросите кого-то)
 2. **Tests**: Убедитесь что CI/CD пройден (когда настроим)
-3. **Merge**: Влейте в main через GitHub
+3. **Merge**: Влейте в main через GitHub веб-интерфейс
 4. **Cleanup**: Удалите feature ветку
 
 ```bash
@@ -124,6 +156,12 @@ git checkout main
 git pull origin main
 git branch -d feature/database-models  # Удалить локально
 ```
+
+**Преимущества auto-merge**:
+- ✅ Быстрый workflow для solo-разработки
+- ✅ PR история сохраняется
+- ✅ Автоматическая очистка feature веток
+- ✅ Меньше ручных операций
 
 ## Частые сценарии
 
@@ -196,9 +234,54 @@ git push --force-with-lease  # Осторожно! Только если ник�
 2. Branch name pattern: `main`
 3. Включить:
    - ✅ Require pull request before merging
-   - ✅ Require approvals: 1 (или 0 если работаете один)
+   - ✅ Require approvals: 0 (для solo-разработки с auto-merge)
    - ✅ Dismiss stale PR approvals when new commits are pushed
    - ✅ Require status checks to pass (когда настроим CI/CD)
+
+**Примечание**: Для solo-разработки с auto-merge установите "Require approvals: 0", чтобы можно было мержить PR без ожидания review.
+
+### Auto-Merge Configuration
+
+**Способ 1: Через GitHub CLI** (рекомендуется)
+```bash
+# После создания PR
+gh pr merge <PR_NUMBER> --merge --delete-branch
+
+# Или с автоматическим ожиданием проверок
+gh pr merge <PR_NUMBER> --auto --merge --delete-branch
+```
+
+**Способ 2: Включить Auto-Merge в GitHub Settings**
+1. Settings → General → Pull Requests
+2. ✅ Allow auto-merge
+3. При создании PR: нажмите "Enable auto-merge"
+
+**Способ 3: GitHub Actions** (для автоматизации)
+```yaml
+# .github/workflows/auto-merge.yml
+name: Auto-merge
+on:
+  pull_request:
+    types: [opened, ready_for_review]
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.actor == 'konstantinbalakin'  # Только для владельца
+    steps:
+      - uses: pascalgn/automerge-action@v0.15.6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MERGE_LABELS: ""
+          MERGE_METHOD: "merge"
+```
+
+**Когда использовать auto-merge**:
+- ✅ Solo-разработка (вы единственный разработчик)
+- ✅ Все тесты проходят автоматически
+- ✅ Нужен быстрый workflow
+- ❌ Командная разработка (нужен code review)
+- ❌ Критичные изменения (требуют проверки)
 
 ### Labels для PR
 
@@ -264,15 +347,20 @@ git add tests/unit/test_repositories.py
 git commit -m "test: add repository unit tests"
 git push
 
-# 3. Создать PR
+# 3. Обновить документацию (ВАЖНО!)
+git add .claude/memory-bank/activeContext.md .claude/memory-bank/progress.md README.md
+git commit -m "docs: update Memory Bank and README after Phase 2.1 completion"
+git push
+
+# 4. Создать PR
 gh pr create --title "feat: implement database layer" --body "..."
 
-# 4. Ревью и merge через GitHub
+# 5. Auto-merge (рекомендуется)
+gh pr merge <PR_NUMBER> --merge --delete-branch
 
-# 5. Обновить main локально
+# 6. Обновить main локально
 git checkout main
 git pull origin main
-git branch -d feature/database-models
 ```
 
 ## Следующие шаги
