@@ -56,6 +56,9 @@ venv.bak/
 *.swo
 *~
 
+# Claude Code settings
+.claude/settings.local.json
+
 # Project specific
 data/*.db
 data/*.db-*

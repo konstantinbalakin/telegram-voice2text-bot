@@ -377,6 +377,34 @@
 - Phase-based branching strategy aligns with implementation plan
 - Slash command integration (`/commit`) streamlines workflow
 
+### Session #6 Key Insights (2025-10-14) - Workflow Enhancement
+
+**Documentation Workflow** (NEW):
+- **Document before PR** pattern ensures completeness
+- Separate `docs:` commit makes changes explicit
+- Memory Bank updates synchronized with code
+- README and .env.example stay current
+
+**Auto-Merge Strategy**:
+- `gh pr merge <PR> --merge --delete-branch` streamlines solo dev
+- PR history preserved for audit trail
+- Automatic cleanup of feature branches
+- Faster iteration without manual merge steps
+
+**Complete PR Cycle**:
+```
+Code → Test → Commit (feat:) →
+Document → Commit (docs:) →
+PR → Auto-merge →
+Sync main → Continue
+```
+
+**Benefits**:
+- ✅ Full traceability (code + docs in same PR)
+- ✅ Memory Bank always current for Claude Code
+- ✅ Fast workflow without sacrificing structure
+- ✅ Clean git history with conventional commits
+
 ## Next Steps
 
 ### Immediate (Current Session)

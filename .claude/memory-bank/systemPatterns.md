@@ -516,14 +516,33 @@ main (protected, PR-only)
 3. Branch: Create feature branch
 4. Code: Implement → Test → Commit
 5. Push: Regular pushes to GitHub (backup)
-6. PR: Create pull request with summary
-7. Merge: Merge to main via GitHub
-8. Update: Update Memory Bank with learnings
+6. Document: Update Memory Bank, README, .env.example
+7. PR: Create pull request with comprehensive summary
+8. Auto-merge: Merge via gh pr merge (solo development)
+9. Sync: git checkout main && git pull origin main
+10. Update: Memory Bank reflects final state
 ```
 
 **Key Principles**:
 - Work in feature branches, never directly in `main`
 - Regular commits with conventional format
 - Push often for backup and visibility
+- **Document before PR** - ensure Memory Bank is current
 - PR-based code review (even solo development)
+- **Auto-merge for speed** - `gh pr merge <PR> --merge --delete-branch`
 - Memory Bank updates at significant milestones
+
+**Documentation Commit Pattern** (NEW):
+```bash
+# After code + tests, before PR:
+git add .claude/memory-bank/activeContext.md .claude/memory-bank/progress.md
+git add README.md .env.example  # if changed
+git commit -m "docs: update documentation after Phase X completion"
+git push
+```
+
+**Why Document Before PR**:
+- PR contains complete picture: code + tests + docs
+- Documentation synchronized with code
+- Future developers see current state
+- Memory Bank ready for next Claude Code session

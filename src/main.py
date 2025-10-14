@@ -57,7 +57,7 @@ async def main() -> None:
     )
 
     # Build telegram bot application
-    application = Application.builder().token(settings.bot_token).build()
+    application = Application.builder().token(settings.telegram_bot_token).build()
 
     # Register handlers
     application.add_handler(CommandHandler("start", bot_handlers.start_command))
