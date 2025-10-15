@@ -40,15 +40,20 @@ class BotHandlers:
         if not user:
             return
 
-        # Register or update user in database
+        # Register or get existing user from database
         async with get_session() as session:
             user_repo = UserRepository(session)
-            await user_repo.create(
-                telegram_id=user.id,
-                username=user.username,
-                first_name=user.first_name,
-                last_name=user.last_name,
-            )
+
+            # Check if user exists
+            db_user = await user_repo.get_by_telegram_id(user.id)
+            if not db_user:
+                # Create new user
+                await user_repo.create(
+                    telegram_id=user.id,
+                    username=user.username,
+                    first_name=user.first_name,
+                    last_name=user.last_name,
+                )
 
         welcome_message = (
             f"Привет, {user.first_name}!\n\n"

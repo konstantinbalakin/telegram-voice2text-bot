@@ -329,6 +329,7 @@
 - [ ] Nginx reverse proxy
 - [ ] systemd service configuration
 - [ ] Monitoring and logging setup
+- [ ] **Production logging**: Use LOG_LEVEL=WARNING to hide bot token in HTTP logs
 
 #### Phase 8: Text Processing Pipeline
 - [ ] Summary generation service
