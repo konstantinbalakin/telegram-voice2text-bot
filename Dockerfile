@@ -1,50 +1,61 @@
-# Multi-stage build for Telegram Voice2Text Bot
-FROM python:3.11-slim AS base
+# ===== Stage 1: Builder =====
+FROM python:3.11-slim AS builder
 
-# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    POETRY_VERSION=1.8.0 \
+    POETRY_VERSION=2.2.1 \
     POETRY_HOME="/opt/poetry" \
     POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false \
-    PATH="/opt/poetry/bin:$PATH"
+    POETRY_VIRTUALENVS_CREATE=false
 
-# Install system dependencies
+# --- Build deps ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    ffmpeg \
-    ca-certificates \
+    curl build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry via pip (more reliable in corporate networks)
+# --- Install Poetry ---
 RUN pip install "poetry==$POETRY_VERSION"
 
-# Set working directory
 WORKDIR /app
 
-# Copy dependency files
+# --- Copy dependency manifests first for cache efficiency ---
 COPY pyproject.toml poetry.lock* ./
 
-# Install dependencies (use --only main instead of --no-dev for Poetry 1.8+)
-RUN poetry install --no-root --only main
+# --- Install production dependencies (Poetry 2.x syntax) ---
+RUN poetry install --no-root --without dev
 
-# Copy application code
+# --- Copy application code ---
 COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
-# Create necessary directories
-RUN mkdir -p /app/data /app/logs
+# ===== Stage 2: Runtime =====
+FROM python:3.11-slim AS runtime
 
-# Expose port (for future webhook support)
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# --- Runtime deps only ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# --- Copy from builder ---
+COPY --from=builder /app /app
+
+# --- Non-root user ---
+RUN useradd -m appuser && \
+    mkdir -p /app/data /app/logs && \
+    chown -R appuser:appuser /app
+USER appuser
+
 EXPOSE 8080
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import sys; sys.exit(0)"
 
-# Run the bot
 CMD ["python", "-m", "src.main"]
