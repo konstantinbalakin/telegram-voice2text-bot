@@ -1,0 +1,106 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# Poetry
+poetry.lock
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/
+*.db-journal
+
+# Logs
+logs/
+*.log
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+README.md
+CLAUDE.md
+.github/
+docs/
+
+# Tests
+tests/
+pytest.ini
+
+# Development tools
+.mypy_cache/
+.ruff_cache/
+.black/
+
+# CI/CD
+.travis.yml
+.gitlab-ci.yml
+Jenkinsfile
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose*.yml
+
+# Alembic (migrations are copied, but not needed for rebuild)
+alembic/versions/__pycache__/
+
+# Claude Code
+.claude/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS
+Thumbs.db

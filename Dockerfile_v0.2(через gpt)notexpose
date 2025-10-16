@@ -1,0 +1,43 @@
+# Multi-stage build for Telegram Voice2Text Bot
+FROM python:3.11-slim AS base
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    POETRY_VERSION=2.2.1 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=false \
+    PYTHONPATH=/app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 - && \
+    ln -s /root/.local/bin/poetry /usr/local/bin/poetry
+
+# Set working directory
+WORKDIR /app
+
+# Copy dependency files and install dependencies
+COPY pyproject.toml poetry.lock* ./
+RUN poetry install --only main --no-root --no-interaction --no-ansi
+
+# Copy source code
+COPY . ./
+
+# Create necessary directories
+RUN mkdir -p /app/data /app/logs
+
+# Optional: Health check (only if you really want it)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD pgrep -f "python -m src.main" || exit 1
+
+# Run the bot
+CMD ["python", "-m", "src.main"]

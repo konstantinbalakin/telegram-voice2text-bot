@@ -1,24 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(tree -a -L 3 /Users/k.balakin/MyProjects/telegram-voice2text-bot)",
-      "Bash(git :*)",
-      "WebSearch",
-      "WebFetch(domain:pypi.org)",
-      "Bash(tree:*)",
-      "Bash(git commit -m \"$(cat <<''EOF''\ndocs: reorganize Memory Bank structure and add Git workflow\n\n- Move Memory Bank files to .claude/memory-bank/ (per standard)\n- Update all Memory Bank files with Phase 1 completion status\n- Add comprehensive Git/GitHub workflow documentation\n- Update CLAUDE.md and README.md with correct paths\n\nMemory Bank updates:\n- projectbrief.md: Added complete scope and timeline\n- productContext.md: Defined users, value prop, MVP scope\n- activeContext.md: Documented Sessions 1-2, current Phase 2 focus\n- progress.md: Added milestones, decision log, learning insights\n- systemPatterns.md: No changes (already comprehensive)\n- techContext.md: No changes (already comprehensive)\n\nProject status: Phase 1 complete, ready for Phase 2 (Database & Whisper)\nEOF\n)\")",
-      "Bash(gh:*)",
-      "Bash(poetry install)",
-      "Bash(mkdir -p src/bot)",
-      "Bash(touch:*)",
-      "Bash(git pull origin main)",
-      "Bash(git add .claude/memory-bank/activeContext.md .claude/memory-bank/progress.md .env.example README.md)",
-      "Bash(git commit -m \"$(cat <<''EOF''\ndocs: update documentation after Phase 2.2 completion\n\nUpdated Memory Bank and project documentation to reflect Phase 2.2 completion:\n\nMemory Bank updates:\n- activeContext.md: Added Session #5 (Whisper Service Integration)\n  - Documented WhisperService, AudioHandler, BotHandlers implementation\n  - Updated Current Focus section with local testing as next step\n  - Added Session #5 key insights and learnings\n  \n- progress.md: Added Phase 2.2 completion details\n  - Updated project timeline and current phase\n  - Added comprehensive Phase 2.2 section (7 subsections)\n  - Updated \"What's In Progress\"\" and \"\"What's Left to Build\"\n  - Updated Roadmap with Phase 1 MVP marked as COMPLETE\n\nREADME.md updates:\n- Complete rewrite with detailed setup instructions\n- Added step-by-step quick start guide\n- Added Telegram Bot Token acquisition instructions\n- Detailed project structure documentation\n- Configuration reference table with all parameters\n- Development section (tests, linting, database)\n- Updated roadmap showing Phase 1 as COMPLETE\n- Added Contributing section\n- Enhanced with emojis for better readability\n\n.env.example updates:\n- Comprehensive comments for all configuration options\n- Model size recommendations and performance comparison\n- Database URL examples (SQLite and PostgreSQL)\n- Processing settings explanations\n- Future webhook settings placeholders\n\nProject Status:\n- Phase 2.2: Whisper Service Integration ✅ COMPLETE\n- Ready for local testing\n- 45+ unit tests passing\n- Full bot functionality implemented\nEOF\n)\")",
-      "Bash(git log -5 --pretty=format:\"%h - %an, %ar : %s\" --stat)",
-      "Bash(poetry show)",
-      "Bash(test -f .env)",
-      "Bash(poetry run pytest tests/ -v)",
-      "Bash(git add .claude/memory-bank/progress.md .claude/settings.local.json .env.example src/bot/handlers.py)"
+      "Bash(git add run.sh)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nchore: add run.sh helper script for bot execution\n\n- Creates logs directory automatically\n- Generates timestamped log files\n- Runs bot with poetry and captures all output\n- Includes usage instructions in comments\nEOF\n)\")",
+      "Bash(docker build -t telegram-voice2text-bot:test .)"
     ],
     "deny": [],
     "ask": []

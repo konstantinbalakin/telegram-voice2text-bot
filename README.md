@@ -30,16 +30,36 @@ Telegram бот для транскрибации голосовых сообщ�
 git clone https://github.com/konstantinbalakin/telegram-voice2text-bot.git
 cd telegram-voice2text-bot
 
-# Убедиться что Python 3.12+ установлен
+# Убедиться что Python 3.11+ установлен
 python3 --version
-```
+
+## Если меньше, чем 3.11, то установить
+brew install python@3.11
+
+## Сбросить кэш zsh для python3
+hash -r
+
+## Перепроверить версию. Должна быть больше 3.11
+python3 --version
+`
 
 ### 2. Установка зависимостей
 
-**С Poetry (рекомендуется):**
+С Poetry (рекомендуется):
 ```bash
 # Установить Poetry если еще не установлен
 curl -sSL https://install.python-poetry.org | python3 -
+
+# После установки добавь в ~/.zshrc (если не добавилось автоматически)
+export PATH="$HOME/.local/bin:$PATH"
+
+# И проверь
+poetry --version
+
+# Затем
+poetry env use /opt/homebrew/bin/python3.11
+или
+poetry env use /opt/homebrew/bin/python3
 
 # Установить зависимости
 poetry install
@@ -200,18 +220,74 @@ alembic downgrade -1
 
 ## 🐳 Docker
 
-```bash
-# Build
-docker build -t telegram-voice-bot .
+Docker - самый простой способ запуска бота. Все зависимости, включая Whisper модели, будут установлены автоматически.
 
-# Run
+### Быстрый старт с Docker
+
+```bash
+# 1. Клонировать репозиторий
+git clone https://github.com/konstantinbalakin/telegram-voice2text-bot.git
+cd telegram-voice2text-bot
+
+# 2. Настроить .env файл
+cp .env.example .env
+nano .env  # указать BOT_TOKEN
+
+# 3. Запустить
+docker-compose up -d
+```
+
+### Управление контейнером
+
+```bash
+# Запуск (фоновый режим)
 docker-compose up -d
 
-# Logs
-docker-compose logs -f
+# Просмотр логов
+docker-compose logs -f bot
 
-# Stop
+# Остановка
+docker-compose stop
+
+# Перезапуск
+docker-compose restart
+
+# Полная остановка и удаление
 docker-compose down
+
+# Пересборка после изменения кода
+docker-compose up -d --build
+```
+
+### Особенности Docker версии
+
+- **Персистентность данных**: База данных и логи хранятся в `./data` и `./logs`
+- **Кеширование моделей**: Whisper модели сохраняются в volume `whisper-models`
+- **Resource limits**: По умолчанию: 2 CPU, 2GB RAM (настраивается в `docker-compose.yml`)
+- **Auto-restart**: Бот автоматически перезапускается при падении
+
+### Использование PostgreSQL (опционально)
+
+Для production развертывания можно использовать PostgreSQL вместо SQLite:
+
+1. Раскомментировать секцию `postgres` в `docker-compose.yml`
+2. Обновить `DATABASE_URL` в `.env`:
+   ```env
+   DATABASE_URL=postgresql+asyncpg://botuser:botpassword@postgres:5432/telegram_bot
+   ```
+3. Перезапустить: `docker-compose up -d`
+
+### Проверка статуса
+
+```bash
+# Проверить что контейнер работает
+docker-compose ps
+
+# Проверить здоровье контейнера
+docker inspect telegram-voice2text-bot | grep Health
+
+# Подключиться к контейнеру
+docker-compose exec bot bash
 ```
 
 ## 📈 Roadmap
@@ -226,14 +302,14 @@ docker-compose down
 - [x] Polling режим
 - [x] Unit tests (45+ tests)
 
-### Phase 2: Testing & Polish (CURRENT)
-- [ ] Local testing with real bot
-- [ ] Documentation updates
-- [ ] Bug fixes and improvements
+### Phase 2: Testing & Polish ✅ COMPLETE
+- [x] Local testing with real bot
+- [x] Bug fixes and improvements
+- [x] Documentation updates
 
-### Phase 3: Docker & Deployment
-- [ ] Контейнеризация
-- [ ] Docker Compose
+### Phase 3: Docker & Deployment ✅ COMPLETE
+- [x] Dockerfile
+- [x] Docker Compose
 - [ ] VPS деплой
 - [ ] Webhook режим
 - [ ] PostgreSQL migration
