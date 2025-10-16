@@ -1,0 +1,115 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Export requirements.txt
+        run: |
+          poetry export --without dev -f requirements.txt -o requirements.txt
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:latest
+            ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            # Navigate to project directory
+            cd /opt/telegram-voice2text-bot || exit 1
+
+            # Pull latest code (for docker-compose.yml updates)
+            git pull origin main
+
+            # Create .env file with secrets
+            cat > .env <<EOF
+            BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+            BOT_MODE=polling
+            WHISPER_MODEL_SIZE=base
+            WHISPER_DEVICE=cpu
+            WHISPER_COMPUTE_TYPE=int8
+            DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
+            LOG_LEVEL=INFO
+            TRANSCRIPTION_TIMEOUT=120
+            MAX_CONCURRENT_WORKERS=3
+            EOF
+
+            # Pull new Docker image
+            docker pull ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }}
+
+            # Tag as latest
+            docker tag ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+                       ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:latest
+
+            # Update IMAGE_NAME in .env for docker-compose
+            echo "IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:latest" >> .env
+
+            # Rolling update with zero downtime
+            docker compose -f docker-compose.prod.yml up -d --no-deps bot
+
+            # Wait for container to be healthy
+            echo "⏳ Waiting for health check..."
+            sleep 15
+
+            # Check if container is healthy
+            CONTAINER_STATUS=$(docker inspect --format='{{.State.Health.Status}}' telegram-voice2text-bot 2>/dev/null || echo "unknown")
+
+            if [ "$CONTAINER_STATUS" != "healthy" ] && [ "$CONTAINER_STATUS" != "unknown" ]; then
+              echo "❌ Health check failed! Container status: $CONTAINER_STATUS"
+              docker compose -f docker-compose.prod.yml logs --tail=50 bot
+              exit 1
+            fi
+
+            # Show status
+            echo "✅ Deployment successful!"
+            docker compose -f docker-compose.prod.yml ps
+
+            # Cleanup old images (keep last 3)
+            docker images ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot --format "{{.ID}} {{.CreatedAt}}" | \
+              tail -n +4 | awk '{print $1}' | xargs -r docker rmi || true

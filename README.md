@@ -310,6 +310,7 @@ docker-compose exec bot bash
 ### Phase 3: Docker & Deployment ✅ COMPLETE
 - [x] Dockerfile
 - [x] Docker Compose
+- [x] CI/CD Pipeline (GitHub Actions)
 - [ ] VPS деплой
 - [ ] Webhook режим
 - [ ] PostgreSQL migration
@@ -319,8 +320,59 @@ docker-compose exec bot bash
 - [ ] Система квот
 - [ ] Суммаризация текста
 - [ ] Платежная интеграция
-- [ ] CI/CD pipeline
 - [ ] Horizontal scaling
+
+## 🚀 CI/CD & Production Deployment
+
+Проект настроен для автоматического развертывания на VPS с zero-downtime deployment.
+
+### Features
+
+- ✅ **Automated Testing**: CI runs on every PR (pytest, mypy, ruff, black)
+- ✅ **Docker Build**: Auto-build and push to Docker Hub on merge to main
+- ✅ **Zero-Downtime Deployment**: Rolling updates with health checks
+- ✅ **Secure Secret Management**: GitHub Secrets for sensitive data
+
+### Quick Start
+
+1. **Setup GitHub Secrets**:
+   - `DOCKER_USERNAME` & `DOCKER_PASSWORD` - Docker Hub credentials
+   - `BOT_TOKEN` - Telegram Bot Token
+   - `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` - VPS access
+
+2. **Workflow**:
+   ```bash
+   # Create feature branch
+   git checkout -b feature/new-feature
+
+   # Make changes and commit
+   git commit -m "feat: add new feature"
+
+   # Push and create PR
+   git push origin feature/new-feature
+   gh pr create
+
+   # CI runs automatically
+   # Merge PR → Auto-deploy to VPS
+   ```
+
+3. **Monitoring**:
+   ```bash
+   # Check deployment status
+   # GitHub → Actions tab
+
+   # SSH to VPS and view logs
+   ssh user@your-vps
+   cd /opt/telegram-voice2text-bot
+   docker compose -f docker-compose.prod.yml logs -f bot
+   ```
+
+### Documentation
+
+- 📖 **[DEPLOYMENT.md](DEPLOYMENT.md)** - Complete deployment guide
+- 📋 **[Implementation Plan](.claude/memory-bank/plans/2025-10-17-cicd-pipeline-plan.md)** - Detailed CI/CD setup
+
+---
 
 ## 📚 Документация
 
@@ -332,6 +384,10 @@ docker-compose exec bot bash
 - `systemPatterns.md` - архитектура системы
 - `progress.md` - прогресс разработки и метрики
 - `plans/` - детальные планы реализации
+
+**Deployment**:
+- `DEPLOYMENT.md` - Production deployment guide
+- `.github/workflows/` - CI/CD workflows
 
 ## 🤝 Contributing
 
