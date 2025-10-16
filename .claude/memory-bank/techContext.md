@@ -149,32 +149,47 @@ cp .env.example .env
 
 **Data Storage**: SQLite database (`./data/bot.db`)
 
-### Production/Deployment (Future)
+### Production/Deployment (Current Status)
 
-**Selected Approach**: Docker + VPS
+**Deployment Approach**: Docker + docker-compose ✅ IMPLEMENTED (2025-10-16)
 
-**Phase 1 (MVP)**: Local polling
-- Run locally via `python -m src.main`
-- Polling mode (no SSL needed)
-- SQLite database
+**Current Phase**: Local Docker deployment complete, ready for VPS
 
-**Phase 2**: Docker containerization
-- Dockerfile with multi-stage build
-- docker-compose.yml for orchestration
-- Volumes for model cache and database
-- Still polling mode
+**Docker Implementation**:
+- **Dockerfile**: Single-stage python:3.11-slim-bookworm
+  - ffmpeg for audio processing
+  - Build cache mounting for faster rebuilds
+  - Non-root user (appuser) for security
+  - Health checks (30s interval)
+  - Image size: ~1GB (acceptable for ML workload)
+  - Build time: ~4 minutes (with cache)
 
-**Phase 3**: VPS deployment
-- Deploy to VPS (minimum 4GB RAM)
-- Switch to webhook mode
-- SSL certificate (Let's Encrypt)
-- PostgreSQL database
-- Nginx reverse proxy
+- **docker-compose.yml**: Production-ready orchestration
+  - Service: telegram-voice2text-bot
+  - Restart policy: unless-stopped
+  - Environment: .env file support
+  - Volumes:
+    - ./data:/app/data (SQLite persistence)
+    - ./logs:/app/logs (log persistence)
+    - whisper-models (named volume for model cache)
+  - Resource limits: 2 CPUs, 2GB RAM
+  - PostgreSQL service ready (commented out)
 
-**Phase 4**: CI/CD
-- GitHub Actions pipeline
-- Automated tests on PR
-- Auto-deploy to VPS on merge to main
+- **Makefile**: Workflow automation
+  - `make deps` - Export Poetry dependencies
+  - `make build` - Build Docker image
+  - `make up` - Start container
+  - `make down` - Stop container
+  - `make logs` - View logs
+  - `make rebuild` - Full rebuild
+  - `make clean` - Docker cleanup
+
+**Phase Progression**:
+- ✅ **Phase 1 (Current)**: Local Docker with polling
+- ⏳ **Phase 2**: VPS deployment (polling mode)
+- ⏳ **Phase 3**: Webhook mode with SSL
+- ⏳ **Phase 4**: PostgreSQL migration
+- ⏳ **Phase 5**: CI/CD pipeline
 
 ## Technical Constraints
 
@@ -318,6 +333,9 @@ Key APIs to use:
 | 2025-10-12 | Architecture | Hybrid Queue (Option 3) | Monolith, Microservices | Balance simplicity/scalability |
 | 2025-10-12 | Database | SQLAlchemy + SQLite/PostgreSQL | MongoDB, raw SQL | Async ORM, migration support |
 | 2025-10-12 | Deployment | Docker + VPS | Serverless, PaaS | Full control, cost-effective |
+| 2025-10-16 | Docker Base Image | python:3.11-slim-bookworm | Alpine, full Python image | Good balance of size and compatibility |
+| 2025-10-16 | Dockerfile Strategy | Single-stage | Multi-stage build | Simpler, adequate optimization for use case |
+| 2025-10-16 | Build Optimization | Build cache mounting | No cache | Significantly faster rebuilds (minutes vs tens of minutes) |
 
 ## Learning Resources
 

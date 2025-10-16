@@ -2,12 +2,12 @@
 
 ## Current Status
 
-**Phase**: Phase 2.2 Complete → Local Testing ✅ VERIFIED
-**Date**: 2025-10-15
-**Stage**: Bot running locally, ready for real-world testing and Phase 3
+**Phase**: Phase 3 Complete → Docker & Deployment ✅ COMPLETE
+**Date**: 2025-10-16
+**Stage**: Bot containerized, Makefile workflow established, ready for VPS deployment
 **GitHub**: Repository `konstantinbalakin/telegram-voice2text-bot`
 **Branch**: `main` (up to date)
-**Latest PR**: #4 merged - Bot handlers, main app updates, audio processing adjustments
+**Latest Commits**: Docker implementation (5 commits) - Dockerfile, docker-compose, Makefile, .dockerignore
 
 ## What Just Happened (Recent Sessions)
 
@@ -170,6 +170,68 @@
 
 *See detailed description below*
 
+### Session #7 (2025-10-16) - Docker Implementation ✅
+
+1. ✅ **Dockerfile Created and Optimized** (5 iterations)
+   - Started with multi-stage draft approaches
+   - Final version: Single-stage with python:3.11-slim-bookworm
+   - Optimizations applied:
+     - Build cache mounting for pip packages
+     - ffmpeg installation for audio processing
+     - Removed test directories and __pycache__ from final image
+     - Non-root user (appuser) for security
+     - Health check endpoint
+     - Image size optimizations (cleanup apt cache, remove __pycache__)
+
+2. ✅ **docker-compose.yml Configuration**
+   - Service: `bot` (telegram-voice2text-bot)
+   - Restart policy: `unless-stopped`
+   - Environment: `.env` file support
+   - Volumes configured:
+     - `./data:/app/data` - SQLite persistence
+     - `./logs:/app/logs` - Log persistence
+     - `whisper-models` volume - Whisper model cache (avoid re-downloads)
+   - Resource limits: 2 CPUs, 2GB RAM (configurable)
+   - Health checks enabled (30s interval)
+   - PostgreSQL section (commented, ready for production)
+
+3. ✅ **Makefile Created** (51 lines)
+   - Commands:
+     - `make deps` - Export Poetry dependencies to requirements.txt
+     - `make build` - Build Docker image (with deps export)
+     - `make up` - Start container in background
+     - `make down` - Stop container
+     - `make logs` - View container logs
+     - `make rebuild` - Full rebuild without cache
+     - `make clean` - Docker system cleanup
+   - Russian comments for user convenience
+   - Streamlined Docker workflow
+
+4. ✅ **.dockerignore Created** (107 lines)
+   - Excludes Python artifacts, IDE files, tests
+   - Excludes Git, documentation, CI/CD files
+   - Excludes logs, data, temporary files
+   - Optimizes build context (faster builds)
+
+5. ✅ **requirements.txt Updated** (802 lines)
+   - Full Poetry export with all transitive dependencies
+   - Pinned versions for reproducible builds
+   - Used by Dockerfile for installation
+
+6. ✅ **README.md Updated** (Docker section enhanced)
+   - Quick start with Docker instructions
+   - Container management commands
+   - Docker-specific features documented
+   - PostgreSQL migration path described
+   - Status checking commands added
+
+7. ✅ **Working Status**: Docker WORKING!
+   - All 5 iteration commits pushed to main
+   - Final optimized Dockerfile (32 lines)
+   - Cleaned up draft Dockerfiles (v0.1, v0.2, v0.3 removed in commit 2)
+   - Issue: Image size ~1GB, build time ~4 minutes (acceptable for now)
+   - Makefile provides convenient workflow
+
 ### Session #6 (2025-10-14 to 2025-10-15) - Bot Refinement & Local Testing ✅
 
 1. ✅ **PR #4 Merged** (nestor-fix-poetry-run-python)
@@ -277,17 +339,19 @@
 ## Current Focus
 
 **Completed**:
-- Phase 2.2 (Whisper Service Integration) ✅
-- Local Testing Setup ✅
-- Bot Launch Verification ✅
+- Phase 1: Project Setup ✅
+- Phase 2.1: Database Layer ✅
+- Phase 2.2: Whisper Service Integration ✅
+- Phase 2.3: Local Testing Setup ✅
+- **Phase 3: Docker & Deployment** ✅ COMPLETE (2025-10-16)
 
-**Current State**: Bot is running locally and polling Telegram API successfully
+**Current State**: Bot fully containerized with Docker + docker-compose + Makefile workflow
 
 **Next Actions**:
-1. **Real-world Testing** - Test bot with actual voice messages
-2. **Verify Full Flow** - /start → voice message → transcription → database record
-3. **Bug Fixes** - Address any issues discovered during testing
-4. **Optional: Phase 3** - Processing Queue implementation (if needed based on testing)
+1. **Optional: VPS Deployment** - Deploy to production server
+2. **Optional: Webhook Mode** - Switch from polling to webhook (requires SSL)
+3. **Optional: PostgreSQL Migration** - Switch from SQLite to PostgreSQL for production
+4. **Optional: Real-World Testing** - Test in production environment with actual users
 
 **What Needs to Happen Next**:
 1. ~~**Database Layer** (Priority 1)~~ ✅ COMPLETE
@@ -442,6 +506,41 @@
 - **Phase 2.3**: Local Testing ✅ BOT RUNNING
 - **Phase 3**: Queue System (optional, deferred)
 - **Next**: Real-world functional testing
+
+### Session #7 Key Insights (2025-10-16) - Docker Implementation
+
+**Docker Learning Curve**:
+- Multiple iterations needed to optimize Dockerfile (5 drafts)
+- Started with complex multi-stage builds, simplified to single-stage
+- Build cache mounting critical for faster rebuilds
+- Image size (1GB) and build time (4 minutes) acceptable for ML/Whisper workload
+- Final image highly optimized: cleanup steps reduce size significantly
+
+**Makefile Benefits**:
+- Simplifies Docker workflow dramatically
+- Russian comments help user remember commands
+- `make deps` ensures requirements.txt always current
+- `make build` handles full workflow (deps → docker build)
+- Convenient commands: `up`, `down`, `logs`, `rebuild`, `clean`
+
+**docker-compose Patterns**:
+- Volume mounting for persistence (data, logs, models)
+- Named volume for Whisper models (shared across rebuilds)
+- Resource limits prevent system overload
+- Health checks ensure container health
+- PostgreSQL section ready for production (commented out)
+
+**Development Workflow**:
+- Direct commits to main (no PRs) for rapid iteration
+- 5 commits show iterative refinement process
+- Cleaned up intermediate files (draft Dockerfiles removed)
+- requirements.txt now source of truth for dependencies
+
+**Key Success**:
+- ✅ Docker WORKING after 5 iterations
+- ✅ Complete containerization in single session
+- ✅ Makefile provides polished developer experience
+- ✅ Ready for VPS deployment (Phase 4)
 
 ### Session #6 (Earlier) Key Insights (2025-10-14) - Workflow Enhancement
 
