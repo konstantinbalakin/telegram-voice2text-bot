@@ -3,30 +3,25 @@ FROM python:3.11-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     POETRY_VERSION=2.2.1 \
-    POETRY_HOME="/opt/poetry" \
-    POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_CREATE=false
+    POETRY_NO_INTERACTION=1
 
-# --- Build deps ---
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl build-essential \
-    && rm -rf /var/lib/apt/lists/*
+    curl \
+ && rm -rf /var/lib/apt/lists/*
 
-# --- Install Poetry ---
-RUN pip install "poetry==$POETRY_VERSION"
+RUN pip install --no-cache-dir "poetry==$POETRY_VERSION"
 
 WORKDIR /app
 
-# --- Copy dependency manifests first for cache efficiency ---
+# Только манифесты — чтобы кэшировать резолв
 COPY pyproject.toml poetry.lock* ./
 
-# --- Install production dependencies (Poetry 2.x syntax) ---
-RUN poetry install --no-root --without dev
+# Экспорт prod-зависимостей (Poetry 2.x)
+RUN poetry export --without dev -f requirements.txt -o requirements.txt
 
-# --- Copy application code ---
+# Код уже не влияет на слой зависимостей
 COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
@@ -37,20 +32,24 @@ FROM python:3.11-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# --- Runtime deps only ---
+# Только рантайм-пакеты ОС
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# --- Copy from builder ---
+# Ставим Python-зависимости в финальном образе
+COPY --from=builder /app/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt && rm -rf /root/.cache/pip
+
+# Копируем приложение
 COPY --from=builder /app /app
 
-# --- Non-root user ---
+# Non-root и права на тома/кэш
 RUN useradd -m appuser && \
-    mkdir -p /app/data /app/logs && \
-    chown -R appuser:appuser /app
+    mkdir -p /app/data /app/logs /home/appuser/.cache/huggingface && \
+    chown -R appuser:appuser /app /home/appuser
 USER appuser
 
 EXPOSE 8080

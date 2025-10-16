@@ -18,7 +18,7 @@ services:
       # Persist logs
       - ./logs:/app/logs
       # Cache Whisper models to avoid re-downloading
-      - whisper-models:/root/.cache/huggingface
+      - whisper-models:/home/appuser/.cache/huggingface
     healthcheck:
       test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
       interval: 30s
