@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - name: Checkout code
@@ -53,6 +54,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - name: Checkout code
@@ -73,7 +75,7 @@ jobs:
 
             # Create .env file with secrets
             cat > .env <<EOF
-            BOT_TOKEN=${{ secrets.BOT_TOKEN }}
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             BOT_MODE=polling
             WHISPER_MODEL_SIZE=base
             WHISPER_DEVICE=cpu
