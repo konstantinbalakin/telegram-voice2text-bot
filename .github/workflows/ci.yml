@@ -8,6 +8,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      TELEGRAM_BOT_TOKEN: "test_token_for_ci"  # Dummy token for testing
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
