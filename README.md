@@ -337,7 +337,7 @@ docker-compose exec bot bash
 
 1. **Setup GitHub Secrets**:
    - `DOCKER_USERNAME` & `DOCKER_PASSWORD` - Docker Hub credentials
-   - `BOT_TOKEN` - Telegram Bot Token
+   - `TELEGRAM_BOT_TOKEN` - Telegram Bot Token
    - `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY` - VPS access
 
 2. **Workflow**:
@@ -411,3 +411,4 @@ Konstantin Balakin - [@konstantinbalakin](https://github.com/konstantinbalakin)
 
 - [faster-whisper](https://github.com/guillaumekln/faster-whisper) - за отличную библиотеку транскрибации
 - [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) - за удобный Bot API wrapper
+
