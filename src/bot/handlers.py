@@ -1,6 +1,6 @@
 """Telegram bot handlers for voice message processing."""
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -65,7 +65,8 @@ class BotHandlers:
             "/stats - Статистика использования"
         )
 
-        await update.message.reply_text(welcome_message)
+        if update.message:
+            await update.message.reply_text(welcome_message)
         logger.info(f"User {user.id} started the bot")
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -89,8 +90,10 @@ class BotHandlers:
             "/stats - Посмотреть статистику"
         )
 
-        await update.message.reply_text(help_message)
-        logger.info(f"User {update.effective_user.id} requested help")
+        if update.message:
+            await update.message.reply_text(help_message)
+        if update.effective_user:
+            logger.info(f"User {update.effective_user.id} requested help")
 
     async def stats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /stats command.
@@ -110,7 +113,8 @@ class BotHandlers:
             # Get user from database
             db_user = await user_repo.get_by_telegram_id(user.id)
             if not db_user:
-                await update.message.reply_text("Пользователь не найден. Используйте /start")
+                if update.message:
+                    await update.message.reply_text("Пользователь не найден. Используйте /start")
                 return
 
             # Get transcription statistics
@@ -118,10 +122,11 @@ class BotHandlers:
             total_count = len(usages)
 
             if total_count == 0:
-                await update.message.reply_text(
-                    "У вас пока нет обработанных голосовых сообщений.\n"
-                    "Отправьте голосовое сообщение, чтобы начать!"
-                )
+                if update.message:
+                    await update.message.reply_text(
+                        "У вас пока нет обработанных голосовых сообщений.\n"
+                        "Отправьте голосовое сообщение, чтобы начать!"
+                    )
                 return
 
             # Calculate statistics
@@ -136,7 +141,8 @@ class BotHandlers:
                 f"Дата регистрации: {db_user.created_at.strftime('%d.%m.%Y')}"
             )
 
-            await update.message.reply_text(stats_message)
+            if update.message:
+                await update.message.reply_text(stats_message)
             logger.info(f"User {user.id} requested statistics")
 
     async def voice_message_handler(
@@ -149,7 +155,7 @@ class BotHandlers:
             context: Telegram context object
         """
         user = update.effective_user
-        if not user:
+        if not user or not update.message:
             return
 
         voice = update.message.voice
@@ -186,10 +192,18 @@ class BotHandlers:
                 # Transcribe
                 transcription_text, processing_time = await self.whisper_service.transcribe(file_path)
 
+                # Convert duration to int
+                duration_seconds = 0
+                if voice.duration:
+                    if isinstance(voice.duration, timedelta):
+                        duration_seconds = int(voice.duration.total_seconds())
+                    else:
+                        duration_seconds = int(voice.duration)
+
                 # Save to database
                 await usage_repo.create(
                     user_id=db_user.id,
-                    voice_duration_seconds=voice.duration,
+                    voice_duration_seconds=duration_seconds,
                     voice_file_id=voice.file_id,
                     transcription_text=transcription_text,
                     model_size=self.whisper_service.model_size,
@@ -226,7 +240,7 @@ class BotHandlers:
             context: Telegram context object
         """
         user = update.effective_user
-        if not user:
+        if not user or not update.message:
             return
 
         audio = update.message.audio
@@ -263,10 +277,18 @@ class BotHandlers:
                 # Transcribe
                 transcription_text, processing_time = await self.whisper_service.transcribe(file_path)
 
+                # Convert duration to int
+                duration_seconds = 0
+                if audio.duration:
+                    if isinstance(audio.duration, timedelta):
+                        duration_seconds = int(audio.duration.total_seconds())
+                    else:
+                        duration_seconds = int(audio.duration)
+
                 # Save to database
                 await usage_repo.create(
                     user_id=db_user.id,
-                    voice_duration_seconds=audio.duration,
+                    voice_duration_seconds=duration_seconds,
                     voice_file_id=audio.file_id,
                     transcription_text=transcription_text,
                     model_size=self.whisper_service.model_size,

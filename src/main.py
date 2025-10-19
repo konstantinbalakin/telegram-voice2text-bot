@@ -77,7 +77,8 @@ async def main() -> None:
             logger.info("Starting bot in polling mode...")
             await application.initialize()
             await application.start()
-            await application.updater.start_polling(drop_pending_updates=True)
+            if application.updater:
+                await application.updater.start_polling(drop_pending_updates=True)
             logger.info("Bot is ready and running (polling mode)")
 
             # Keep running

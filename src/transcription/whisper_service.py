@@ -4,10 +4,10 @@ Whisper transcription service using faster-whisper
 import asyncio
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 from concurrent.futures import ThreadPoolExecutor
 
-from faster_whisper import WhisperModel
+from faster_whisper import WhisperModel  # type: ignore[import-untyped]
 
 from src.config import settings
 
@@ -134,7 +134,7 @@ class WhisperService:
 
     def _transcribe_sync(
         self, audio_path: str, language: Optional[str]
-    ) -> tuple[list, any]:
+    ) -> tuple[list[Any], Any]:
         """
         Synchronous transcription (runs in thread pool).
 
@@ -145,6 +145,9 @@ class WhisperService:
         Returns:
             Tuple of (segments, info)
         """
+        if self._model is None:
+            raise RuntimeError("Model not initialized")
+
         segments, info = self._model.transcribe(
             audio_path,
             language=language,
