@@ -156,9 +156,10 @@ class TestWhisperServiceTranscribe:
         audio_file = tmp_path / "test.wav"
         audio_file.write_bytes(b"fake audio data")
 
-        # Mock slow transcription
-        async def slow_transcribe(*args, **kwargs):
-            await asyncio.sleep(10)  # Simulate slow transcription
+        # Mock slow transcription (sync function since _transcribe_sync is sync)
+        def slow_transcribe(*args, **kwargs):
+            import time
+            time.sleep(10)  # Simulate slow transcription
             return [], Mock()
 
         with patch.object(initialized_whisper_service, "_transcribe_sync", side_effect=slow_transcribe):

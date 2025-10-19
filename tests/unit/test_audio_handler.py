@@ -45,7 +45,7 @@ class TestAudioHandlerInit:
 
     def test_supported_formats(self, audio_handler):
         """Test supported audio formats."""
-        expected_formats = {".ogg", ".mp3", ".wav", ".m4a", ".opus"}
+        expected_formats = {".ogg", ".mp3", ".wav", ".m4a", ".opus", ".oga"}
         assert audio_handler.supported_formats == expected_formats
 
 
