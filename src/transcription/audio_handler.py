@@ -1,7 +1,6 @@
 """
 Audio file handler for downloading and processing Telegram voice messages
 """
-import asyncio
 import logging
 import tempfile
 from pathlib import Path
@@ -10,7 +9,6 @@ from typing import Optional
 import httpx
 from telegram import File as TelegramFile
 
-from src.config import settings
 
 logger = logging.getLogger(__name__)
 

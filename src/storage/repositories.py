@@ -4,7 +4,7 @@ Repository pattern for database access
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.models import User, Usage, Transaction

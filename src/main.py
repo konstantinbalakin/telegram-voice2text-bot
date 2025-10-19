@@ -6,7 +6,6 @@ import asyncio
 import logging
 import sys
 
-from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from src.config import settings

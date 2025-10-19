@@ -1,6 +1,6 @@
 """Telegram bot handlers for voice message processing."""
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 from telegram import Update
 from telegram.ext import ContextTypes
 
