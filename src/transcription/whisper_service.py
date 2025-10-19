@@ -1,6 +1,7 @@
 """
 Whisper transcription service using faster-whisper
 """
+
 import asyncio
 import logging
 from pathlib import Path
@@ -125,16 +126,12 @@ class WhisperService:
 
         except asyncio.TimeoutError:
             logger.error(f"Transcription timeout after {timeout_seconds}s")
-            raise TimeoutError(
-                f"Transcription exceeded timeout of {timeout_seconds} seconds"
-            )
+            raise TimeoutError(f"Transcription exceeded timeout of {timeout_seconds} seconds")
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
             raise RuntimeError(f"Transcription failed: {e}") from e
 
-    def _transcribe_sync(
-        self, audio_path: str, language: Optional[str]
-    ) -> tuple[list[Any], Any]:
+    def _transcribe_sync(self, audio_path: str, language: Optional[str]) -> tuple[list[Any], Any]:
         """
         Synchronous transcription (runs in thread pool).
 
@@ -153,9 +150,7 @@ class WhisperService:
             language=language,
             beam_size=5,  # Balance between speed and accuracy
             vad_filter=True,  # Voice activity detection filter
-            vad_parameters=dict(
-                min_silence_duration_ms=500  # Minimum silence to split
-            ),
+            vad_parameters=dict(min_silence_duration_ms=500),  # Minimum silence to split
         )
 
         # Convert generator to list to avoid issues with async

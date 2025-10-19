@@ -1,6 +1,7 @@
 """
 Audio file handler for downloading and processing Telegram voice messages
 """
+
 import logging
 import tempfile
 from pathlib import Path
@@ -51,7 +52,9 @@ class AudioHandler:
             RuntimeError: If download fails
         """
         # Validate file
-        if telegram_file.file_size is not None and telegram_file.file_size > 20 * 1024 * 1024:  # 20MB limit
+        if (
+            telegram_file.file_size is not None and telegram_file.file_size > 20 * 1024 * 1024
+        ):  # 20MB limit
             raise ValueError(f"File too large: {telegram_file.file_size} bytes")
 
         # Determine file extension (Telegram voice messages are usually .ogg)

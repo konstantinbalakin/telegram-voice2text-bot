@@ -1,4 +1,5 @@
 """Telegram bot handlers for voice message processing."""
+
 import logging
 from datetime import timedelta
 from telegram import Update
@@ -163,9 +164,7 @@ class BotHandlers:
             return
 
         # Send processing message
-        processing_msg = await update.message.reply_text(
-            "Обрабатываю голосовое сообщение..."
-        )
+        processing_msg = await update.message.reply_text("Обрабатываю голосовое сообщение...")
 
         try:
             async with get_session() as session:
@@ -190,7 +189,9 @@ class BotHandlers:
                 )
 
                 # Transcribe
-                transcription_text, processing_time = await self.whisper_service.transcribe(file_path)
+                transcription_text, processing_time = await self.whisper_service.transcribe(
+                    file_path
+                )
 
                 # Convert duration to int
                 duration_seconds = 0
@@ -214,9 +215,7 @@ class BotHandlers:
                 self.audio_handler.cleanup_file(file_path)
 
                 # Send transcription
-                await processing_msg.edit_text(
-                    f"Расшифровка:\n\n{transcription_text}"
-                )
+                await processing_msg.edit_text(f"Расшифровка:\n\n{transcription_text}")
 
                 logger.info(
                     f"Successfully transcribed voice message for user {user.id}, "
@@ -248,9 +247,7 @@ class BotHandlers:
             return
 
         # Send processing message
-        processing_msg = await update.message.reply_text(
-            "Обрабатываю аудиофайл..."
-        )
+        processing_msg = await update.message.reply_text("Обрабатываю аудиофайл...")
 
         try:
             async with get_session() as session:
@@ -275,7 +272,9 @@ class BotHandlers:
                 )
 
                 # Transcribe
-                transcription_text, processing_time = await self.whisper_service.transcribe(file_path)
+                transcription_text, processing_time = await self.whisper_service.transcribe(
+                    file_path
+                )
 
                 # Convert duration to int
                 duration_seconds = 0
@@ -299,9 +298,7 @@ class BotHandlers:
                 self.audio_handler.cleanup_file(file_path)
 
                 # Send transcription
-                await processing_msg.edit_text(
-                    f"Расшифровка:\n\n{transcription_text}"
-                )
+                await processing_msg.edit_text(f"Расшифровка:\n\n{transcription_text}")
 
                 logger.info(
                     f"Successfully transcribed audio file for user {user.id}, "
@@ -311,13 +308,10 @@ class BotHandlers:
         except Exception as e:
             logger.error(f"Error processing audio file: {e}", exc_info=True)
             await processing_msg.edit_text(
-                "Произошла ошибка при обработке аудиофайла. "
-                "Пожалуйста, попробуйте еще раз."
+                "Произошла ошибка при обработке аудиофайла. " "Пожалуйста, попробуйте еще раз."
             )
 
-    async def error_handler(
-        self, update: object, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle errors.
 
         Args:

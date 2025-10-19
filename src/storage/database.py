@@ -1,6 +1,7 @@
 """
 Database connection and session management
 """
+
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
     AsyncSession,
     AsyncEngine,
-    async_sessionmaker
+    async_sessionmaker,
 )
 
 from src.config import settings

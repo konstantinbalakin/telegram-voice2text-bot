@@ -2,6 +2,7 @@
 Telegram Voice2Text Bot
 Entry point for the application
 """
+
 import asyncio
 import logging
 import sys
