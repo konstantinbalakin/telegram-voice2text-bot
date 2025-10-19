@@ -1,10 +1,11 @@
 """
 Repository pattern for database access
 """
+
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.models import User, Usage, Transaction
@@ -18,16 +19,12 @@ class UserRepository:
 
     async def get_by_telegram_id(self, telegram_id: int) -> Optional[User]:
         """Get user by Telegram ID."""
-        result = await self.session.execute(
-            select(User).where(User.telegram_id == telegram_id)
-        )
+        result = await self.session.execute(select(User).where(User.telegram_id == telegram_id))
         return result.scalar_one_or_none()
 
     async def get_by_id(self, user_id: int) -> Optional[User]:
         """Get user by internal ID."""
-        result = await self.session.execute(
-            select(User).where(User.id == user_id)
-        )
+        result = await self.session.execute(select(User).where(User.id == user_id))
         return result.scalar_one_or_none()
 
     async def create(
@@ -130,9 +127,7 @@ class UsageRepository:
 
     async def get_user_total_duration(self, user_id: int) -> int:
         """Get total duration of all usage for a user."""
-        result = await self.session.execute(
-            select(Usage).where(Usage.user_id == user_id)
-        )
+        result = await self.session.execute(select(Usage).where(Usage.user_id == user_id))
         usages = result.scalars().all()
         return sum(u.voice_duration_seconds for u in usages)
 
@@ -188,9 +183,7 @@ class TransactionRepository:
         await self.session.flush()
         return transaction
 
-    async def get_by_user_id(
-        self, user_id: int, limit: int = 10
-    ) -> list[Transaction]:
+    async def get_by_user_id(self, user_id: int, limit: int = 10) -> list[Transaction]:
         """Get transactions for a user (most recent first)."""
         result = await self.session.execute(
             select(Transaction)

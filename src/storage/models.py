@@ -1,6 +1,7 @@
 """
 Database models for Telegram Voice2Text Bot
 """
+
 from datetime import datetime, date
 from typing import Optional
 
@@ -10,6 +11,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
+
     pass
 
 
@@ -39,22 +41,15 @@ class User(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-        nullable=False
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
     # Relationships
     usage_records: Mapped[list["Usage"]] = relationship(
-        "Usage",
-        back_populates="user",
-        cascade="all, delete-orphan"
+        "Usage", back_populates="user", cascade="all, delete-orphan"
     )
     transactions: Mapped[list["Transaction"]] = relationship(
-        "Transaction",
-        back_populates="user",
-        cascade="all, delete-orphan"
+        "Transaction", back_populates="user", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
@@ -70,7 +65,9 @@ class Usage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Foreign key
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
 
     # Voice message data
     voice_duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -103,7 +100,9 @@ class Transaction(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # Foreign key
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
 
     # Transaction data
     amount: Mapped[int] = mapped_column(Integer, nullable=False)  # Amount in cents
@@ -112,9 +111,7 @@ class Transaction(Base):
 
     # Status
     status: Mapped[str] = mapped_column(
-        String(50),
-        default="pending",
-        nullable=False
+        String(50), default="pending", nullable=False
     )  # pending, completed, failed, refunded
 
     # Payment provider data

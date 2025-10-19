@@ -81,7 +81,7 @@ Feature Branch → PR → CI Tests → Merge to main → Build Docker Image → 
 |-------------|-------|-------------|
 | `DOCKER_USERNAME` | your-dockerhub-username | Docker Hub username |
 | `DOCKER_PASSWORD` | token-from-step-1 | Docker Hub access token |
-| `BOT_TOKEN` | 1234567890:ABC... | Telegram Bot Token from @BotFather |
+| `TELEGRAM_BOT_TOKEN` | 1234567890:ABC... | Telegram Bot Token from @BotFather |
 | `VPS_HOST` | 1.2.3.4 | VPS IP address or domain |
 | `VPS_USER` | root | SSH username (usually `root` or `ubuntu`) |
 | `VPS_SSH_KEY` | -----BEGIN OPENSSH... | SSH private key (see below) |
@@ -220,7 +220,7 @@ cd /opt/telegram-voice2text-bot
 
 # Create .env file
 cat > .env <<EOF
-BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
+TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
 BOT_MODE=polling
 WHISPER_MODEL_SIZE=base
 WHISPER_DEVICE=cpu

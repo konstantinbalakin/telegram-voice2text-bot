@@ -4,7 +4,6 @@ Pytest configuration and fixtures
 import pytest
 import pytest_asyncio
 import asyncio
-from typing import Generator
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
@@ -12,11 +11,9 @@ from src.storage.models import Base
 
 
 @pytest.fixture(scope="session")
-def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
-    """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
+def event_loop_policy():
+    """Set event loop policy for the test session."""
+    return asyncio.get_event_loop_policy()
 
 
 @pytest.fixture
