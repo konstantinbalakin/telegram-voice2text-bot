@@ -467,16 +467,22 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
 ## Development Workflow
 
 ### Git Strategy
-**Workflow**: Feature Branch Workflow (documented in `.github/WORKFLOW.md`)
+**Workflow**: Feature Branch Workflow with Protected Main Branch (documented in `.github/WORKFLOW.md`)
+
+**Branch Protection** (implemented 2025-10-19):
+- Main branch is protected on GitHub
+- All changes must go through Pull Requests
+- CI checks must pass before merge allowed
+- Prevents accidental direct commits to main
 
 **Branch Structure**:
 ```
 main (protected, PR-only)
-  ├── feature/database-models
-  ├── feature/whisper-service
-  ├── feature/bot-handlers
-  ├── feature/queue-system
-  └── feature/integration-tests
+  ├── feature/database-models ✅ merged
+  ├── feature/whisper-service ✅ merged
+  ├── feature/bot-handlers ✅ merged
+  ├── feature/test-cicd ✅ merged
+  └── feature/your-next-feature
 ```
 
 **Commit Convention**: Conventional Commits format
@@ -546,3 +552,98 @@ git push
 - Documentation synchronized with code
 - Future developers see current state
 - Memory Bank ready for next Claude Code session
+
+### CI/CD Pipeline (implemented 2025-10-19)
+
+**Platform**: GitHub Actions
+
+**Architecture**: Two separate workflows for separation of concerns
+
+#### CI Workflow (`.github/workflows/ci.yml`)
+**Trigger**: On pull requests to `main` branch
+**Purpose**: Quality gates before code merge
+
+**Steps**:
+1. **Environment Setup**
+   - Ubuntu latest runner
+   - Python 3.11
+   - Poetry installation
+   - Dependency caching (.venv cached by poetry.lock hash)
+
+2. **Testing**
+   - `pytest` with coverage reporting
+   - Coverage uploaded to Codecov
+   - Dummy TELEGRAM_BOT_TOKEN for tests
+
+3. **Code Quality Checks** (all must pass):
+   - `mypy src/` - Type checking (strict mode)
+   - `ruff check src/` - Linting
+   - `black --check src/` - Formatting verification
+
+**Fail Fast**: If any check fails, PR cannot be merged
+
+#### Build & Deploy Workflow (`.github/workflows/build-and-deploy.yml`)
+**Trigger**: On push to `main` branch (after PR merge)
+**Purpose**: Automated build and deployment
+
+**Build Stage**:
+1. Export Poetry dependencies → requirements.txt
+2. Set up Docker Buildx
+3. Login to Docker Hub (secrets: DOCKER_USERNAME, DOCKER_PASSWORD)
+4. Build Docker image with cache
+5. Push with two tags:
+   - `{username}/telegram-voice2text-bot:latest` (stable)
+   - `{username}/telegram-voice2text-bot:{commit-sha}` (versioned)
+6. Use GitHub Actions cache for Docker layers
+
+**Deploy Stage** (ready, awaiting VPS):
+1. SSH to VPS server (secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY)
+2. Pull latest code (for docker-compose.yml updates)
+3. Create .env file with secrets from GitHub
+4. Pull new Docker image by commit SHA
+5. Tag as latest locally
+6. Rolling update: `docker compose up -d --no-deps bot`
+7. Health check verification (15s wait)
+8. Cleanup old images (keep last 3)
+
+**Zero Downtime Strategy**:
+- Use `--no-deps` flag for isolated bot service update
+- Health checks verify container is healthy before considering deployment successful
+- Automatic rollback if health check fails
+
+**Environment**: Uses GitHub "production" environment for secret management
+
+### CI/CD Patterns
+
+**Pattern 1: Fail Fast**
+- Tests run first, before code quality checks
+- Any failure stops the pipeline immediately
+- Prevents wasted time on bad builds
+
+**Pattern 2: Immutable Versioning**
+- Every commit gets unique SHA-tagged Docker image
+- Enables rollback to any previous version
+- `latest` tag always points to most recent successful build
+
+**Pattern 3: Secrets Management**
+- All sensitive data in GitHub Secrets
+- Never committed to repository
+- Injected at runtime via environment variables
+
+**Pattern 4: Caching Strategy**
+- Poetry dependencies cached by poetry.lock hash
+- Docker build layers cached in GitHub Actions
+- Significantly faster builds (minutes vs tens of minutes)
+
+**Pattern 5: Quality Gates**
+- Protected branch enforces PR workflow
+- CI checks must pass before merge
+- No manual merge to main possible
+
+### Deployment Automation Benefits
+
+1. **Consistency**: Same process every time, no manual steps
+2. **Speed**: Merge to main → production in ~10 minutes
+3. **Safety**: Health checks catch failures, automatic rollback
+4. **Traceability**: Every deployment tracked by commit SHA
+5. **Reliability**: Tested process, no human error

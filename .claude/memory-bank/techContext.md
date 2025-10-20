@@ -298,16 +298,51 @@ tests/
 └── conftest.py  # Fixtures
 ```
 
-### CI/CD (Future - Phase 4)
+### CI/CD (Future - Phase 4) ✅ IMPLEMENTED (2025-10-19)
 
-**Platform**: GitHub Actions
+**Platform**: GitHub Actions ✅
 
-**Pipeline**:
-1. Run tests on PR
-2. Check code formatting (black/ruff)
-3. Type checking (mypy)
-4. Build Docker image
-5. Deploy to VPS on merge to main
+**Workflows Operational**:
+
+1. **CI Workflow** (`.github/workflows/ci.yml`) ✅
+   - **Trigger**: Pull requests to main branch
+   - **Quality Gates**:
+     - pytest with coverage reporting
+     - mypy type checking (strict mode)
+     - ruff linting
+     - black formatting verification
+   - **Caching**: Poetry dependencies cached by poetry.lock hash
+   - **Coverage**: Reports uploaded to Codecov
+
+2. **Build & Deploy Workflow** (`.github/workflows/build-and-deploy.yml`) ✅
+   - **Trigger**: Push to main branch (after PR merge)
+   - **Build Stage**:
+     - Export Poetry dependencies
+     - Build Docker image with Docker Buildx
+     - Push to Docker Hub with dual tags (latest + SHA)
+     - GitHub Actions cache for Docker layers
+   - **Deploy Stage** (ready, awaiting VPS):
+     - SSH to VPS server
+     - Pull latest code
+     - Create .env from GitHub Secrets
+     - Pull and deploy new Docker image
+     - Rolling update with health checks
+     - Automatic image cleanup
+
+**Protection**:
+- ✅ Main branch protected on GitHub
+- ✅ Requires PR for all changes
+- ✅ CI checks must pass before merge
+
+**Secrets Configured**:
+- ✅ TELEGRAM_BOT_TOKEN
+- ✅ DOCKER_USERNAME
+- ✅ DOCKER_PASSWORD
+- ⏳ VPS_HOST (pending VPS purchase)
+- ⏳ VPS_USER (pending VPS purchase)
+- ⏳ VPS_SSH_KEY (pending VPS purchase)
+
+**Status**: ✅ Fully operational, awaiting VPS infrastructure only
 
 ## Tool Usage Patterns
 
@@ -336,6 +371,10 @@ Key APIs to use:
 | 2025-10-16 | Docker Base Image | python:3.11-slim-bookworm | Alpine, full Python image | Good balance of size and compatibility |
 | 2025-10-16 | Dockerfile Strategy | Single-stage | Multi-stage build | Simpler, adequate optimization for use case |
 | 2025-10-16 | Build Optimization | Build cache mounting | No cache | Significantly faster rebuilds (minutes vs tens of minutes) |
+| 2025-10-19 | CI/CD Platform | GitHub Actions | GitLab CI, Jenkins, CircleCI | Free for public repos, native GitHub integration, excellent caching |
+| 2025-10-19 | Branch Protection | Protected main branch | Open main branch | Enforces code review, prevents direct commits |
+| 2025-10-19 | Deployment Strategy | Automated via SSH | Manual deployment, Kubernetes | Simple, reliable, zero-downtime rolling updates |
+| 2025-10-19 | Docker Registry | Docker Hub | GitHub Container Registry, private registry | Free for public images, widely used, reliable |
 
 ## Learning Resources
 
