@@ -11,10 +11,99 @@ class Settings(BaseSettings):
     telegram_bot_token: str = Field(..., description="Telegram Bot API token")
     bot_mode: str = Field(default="polling", description="Bot mode: polling or webhook")
 
-    # Whisper
-    whisper_model_size: str = Field(default="base", description="Whisper model size")
+    # Transcription Provider Configuration
+    whisper_providers: list[str] = Field(
+        default=["faster-whisper"],
+        description="Enabled providers: faster-whisper, openai, whisper",
+    )
+    whisper_routing_strategy: str = Field(
+        default="single", description="Routing strategy: single, fallback, benchmark"
+    )
+
+    # Strategy Configuration
+    primary_provider: str = Field(default="faster-whisper", description="Primary provider name")
+    fallback_provider: str = Field(default="openai", description="Fallback provider name")
+    duration_threshold_seconds: int = Field(
+        default=30, description="Duration threshold for routing"
+    )
+
+    # FasterWhisper Configuration
+    faster_whisper_model_size: str = Field(
+        default="base",
+        description="FasterWhisper model size: tiny, base, small, medium, large-v2, large-v3",
+    )
+    faster_whisper_device: str = Field(default="cpu", description="Device: cpu or cuda")
+    faster_whisper_compute_type: str = Field(
+        default="int8", description="Compute type: int8, float16, float32"
+    )
+    faster_whisper_beam_size: int = Field(
+        default=5, description="Beam size: 1 (greedy), 5 (default), 10 (high quality)"
+    )
+    faster_whisper_vad_filter: bool = Field(
+        default=True, description="Enable voice activity detection filter"
+    )
+
+    # Original Whisper Configuration
+    whisper_model_size: str = Field(
+        default="base", description="Original Whisper model size: tiny, base, small, medium, large"
+    )
     whisper_device: str = Field(default="cpu", description="Device: cpu or cuda")
-    whisper_compute_type: str = Field(default="int8", description="Compute type")
+
+    # OpenAI API Configuration
+    openai_api_key: str | None = Field(default=None, description="OpenAI API key")
+    openai_model: str = Field(default="whisper-1", description="OpenAI model name")
+    openai_timeout: int = Field(default=60, description="OpenAI API timeout in seconds")
+
+    # Benchmark Mode
+    benchmark_mode: bool = Field(default=False, description="Enable benchmark mode")
+    benchmark_configs: list[dict] = Field(
+        default_factory=lambda: [
+            # FasterWhisper variants
+            {
+                "provider_name": "faster-whisper",
+                "model_size": "tiny",
+                "compute_type": "int8",
+                "beam_size": 5,
+            },
+            {
+                "provider_name": "faster-whisper",
+                "model_size": "base",
+                "compute_type": "int8",
+                "beam_size": 5,
+            },
+            {
+                "provider_name": "faster-whisper",
+                "model_size": "small",
+                "compute_type": "int8",
+                "beam_size": 5,
+            },
+            {
+                "provider_name": "faster-whisper",
+                "model_size": "medium",
+                "compute_type": "int8",
+                "beam_size": 5,
+            },
+            # Quality variants
+            {
+                "provider_name": "faster-whisper",
+                "model_size": "small",
+                "compute_type": "float32",
+                "beam_size": 5,
+            },
+            {
+                "provider_name": "faster-whisper",
+                "model_size": "small",
+                "compute_type": "int8",
+                "beam_size": 10,
+            },
+            # Original Whisper
+            {"provider_name": "whisper", "model_size": "base"},
+            {"provider_name": "whisper", "model_size": "small"},
+            # OpenAI API (reference)
+            {"provider_name": "openai"},
+        ],
+        description="Benchmark configurations to test",
+    )
 
     # Database
     database_url: str = Field(

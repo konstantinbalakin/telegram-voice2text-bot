@@ -9,7 +9,6 @@ packages = [{include = "src"}]
 [tool.poetry.dependencies]
 python = "^3.11"
 python-telegram-bot = "^22.5"
-faster-whisper = "^1.2.0"
 sqlalchemy = {extras = ["asyncio"], version = "^2.0.44"}
 aiosqlite = "^0.20.0"
 alembic = "^1.13"
@@ -17,6 +16,19 @@ python-dotenv = "^1.0.0"
 pydantic = "^2.10"
 pydantic-settings = "^2.6"
 httpx = "^0.28"
+psutil = "^6.1"
+
+# Optional transcription providers
+faster-whisper = {version = "^1.2.0", optional = true}
+openai = {version = "^1.50.0", optional = true}
+whisper = {version = "^1.0.0", optional = true}
+torch = {version = "^2.0.0", optional = true}
+
+[tool.poetry.extras]
+faster-whisper = ["faster-whisper"]
+openai-api = ["openai"]
+whisper = ["whisper", "torch"]
+all-providers = ["faster-whisper", "openai", "whisper", "torch"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"
