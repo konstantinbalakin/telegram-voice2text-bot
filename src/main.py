@@ -11,8 +11,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from src.config import settings
 from src.storage.database import init_db, close_db
-from src.transcription.whisper_service import WhisperService
-from src.transcription.audio_handler import AudioHandler
+from src.transcription import get_transcription_router, shutdown_transcription_router, AudioHandler
 from src.bot.handlers import BotHandlers
 
 # Configure logging
@@ -27,7 +26,8 @@ async def main() -> None:
     """Main application entry point."""
     logger.info("Starting Telegram Voice2Text Bot")
     logger.info(f"Bot mode: {settings.bot_mode}")
-    logger.info(f"Whisper model: {settings.whisper_model_size}")
+    logger.info(f"Enabled providers: {settings.whisper_providers}")
+    logger.info(f"Routing strategy: {settings.whisper_routing_strategy}")
     logger.info(f"Database: {settings.database_url}")
 
     # Initialize database
@@ -35,16 +35,10 @@ async def main() -> None:
     await init_db()
     logger.info("Database initialized")
 
-    # Initialize Whisper service
-    logger.info("Initializing Whisper service...")
-    whisper_service = WhisperService(
-        model_size=settings.whisper_model_size,
-        device=settings.whisper_device,
-        compute_type=settings.whisper_compute_type,
-        max_workers=settings.max_concurrent_workers,
-    )
-    whisper_service.initialize()
-    logger.info("Whisper service initialized")
+    # Initialize transcription router
+    logger.info("Initializing transcription router...")
+    transcription_router = get_transcription_router()
+    logger.info("Transcription router initialized")
 
     # Initialize audio handler
     audio_handler = AudioHandler()
@@ -52,7 +46,7 @@ async def main() -> None:
 
     # Create bot handlers
     bot_handlers = BotHandlers(
-        whisper_service=whisper_service,
+        whisper_service=transcription_router,
         audio_handler=audio_handler,
     )
 
@@ -102,7 +96,7 @@ async def main() -> None:
             await application.stop()
             await application.shutdown()
 
-        await whisper_service.shutdown()
+        await shutdown_transcription_router()
         await close_db()
 
         logger.info("Cleanup complete")
