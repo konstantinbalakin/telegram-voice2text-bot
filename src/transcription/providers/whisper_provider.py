@@ -45,7 +45,7 @@ class WhisperProvider(TranscriptionProvider):
         if not WHISPER_AVAILABLE:
             raise ImportError(
                 "Original OpenAI Whisper is not installed. "
-                "Install with: poetry install --extras whisper"
+                "Install with: poetry install --extras='openai-whisper'"
             )
 
         self.model_size = model_size or settings.whisper_model_size
@@ -178,11 +178,29 @@ class WhisperProvider(TranscriptionProvider):
         if self._model is None:
             raise RuntimeError("Model not initialized")
 
+        logger.debug(f"Calling whisper.transcribe(audio={audio_path}, language={language})")
+
+        # Try transcription with various parameters to handle edge cases
         result = self._model.transcribe(
             audio_path,
             language=language,
-            verbose=False,
+            verbose=True,  # Enable verbose for debugging
+            task="transcribe",  # Explicitly set task
+            fp16=False,  # Disable FP16 (not supported on CPU anyway)
         )
+
+        logger.debug(
+            f"Whisper raw result - text length: {len(result.get('text', ''))}, "
+            f"segments: {len(result.get('segments', []))}, "
+            f"language: {result.get('language', 'unknown')}"
+        )
+
+        if "segments" in result and result["segments"]:
+            for i, seg in enumerate(result["segments"][:3]):  # Log first 3 segments
+                logger.debug(
+                    f"Segment {i}: start={seg.get('start')}, end={seg.get('end')}, "
+                    f"text='{seg.get('text', '')}'"
+                )
 
         return result
 

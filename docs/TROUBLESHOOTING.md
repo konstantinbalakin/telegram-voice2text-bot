@@ -23,17 +23,37 @@ If both packages are installed, the Graphite `whisper` module shadows the `opena
    poetry run pip uninstall -y whisper
    ```
 
-2. **Reinstall openai-whisper (if needed):**
+2. **Reinstall openai-whisper:**
+
+   **Important:** The extra is called `openai-whisper`, not `whisper`:
+
    ```bash
-   # Note: Requires VPN or direct PyPI access in some regions
+   # Correct command:
+   poetry install --extras="openai-whisper"
+
+   # Wrong command (will fail):
+   # poetry install --extras="whisper"  ❌
+   ```
+
+   **If you have network/SSL issues:**
+   ```bash
+   # Option 1: Use VPN (recommended)
+   # Enable your VPN, then:
+   poetry install --extras="openai-whisper"
+
+   # Option 2: Disable SSL verification (not recommended, use only if VPN doesn't work)
+   export PIP_TRUSTED_HOST="pypi.org files.pythonhosted.org"
+   poetry config certificates.pypi.cert false
    poetry install --extras="openai-whisper"
    ```
 
-3. **Verify the fix:**
+3. **Verify the installation:**
    ```bash
    poetry run python -c "import whisper; print('load_model:', hasattr(whisper, 'load_model'))"
    ```
    Should output: `load_model: True`
+
+   If you get `ModuleNotFoundError: No module named 'whisper'`, the installation didn't complete. Check network and try again.
 
 **Prevention:**
 - The `whisper` (Graphite) package is not a dependency of this project
@@ -95,7 +115,50 @@ PRIMARY_PROVIDER=faster-whisper
 
 ---
 
-### 3. Network Connection Issues During Installation
+### 3. OpenAI Whisper: "No such file or directory: 'ffmpeg'"
+
+**Symptom:**
+```
+FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
+```
+
+**Cause:**
+The original OpenAI Whisper provider requires `ffmpeg` to decode audio files. `faster-whisper` does not have this requirement.
+
+**Solution:**
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install ffmpeg
+```
+
+**Verify installation:**
+```bash
+ffmpeg -version
+```
+
+**Note:** This is only required for the `whisper` provider. The `faster-whisper` provider works without ffmpeg.
+
+**Known Issue with Original Whisper Provider:**
+
+Even with ffmpeg installed, the original OpenAI Whisper provider may return empty transcriptions (0 segments) for some audio files, while `faster-whisper` handles the same files correctly. This is a known compatibility issue with the original Whisper implementation.
+
+**Recommendation:** Use `faster-whisper` instead of the original `whisper` provider. It's faster, more reliable, and doesn't require ffmpeg.
+
+```bash
+WHISPER_PROVIDERS=["faster-whisper"]
+PRIMARY_PROVIDER=faster-whisper
+```
+
+---
+
+### 4. Network Connection Issues During Installation
 
 **Symptom:**
 ```
@@ -124,7 +187,7 @@ All attempts to connect to pypi.org failed.
 
 ---
 
-### 4. Model Download Delays
+### 5. Model Download Delays
 
 **Symptom:**
 Long delay when initializing a model for the first time (e.g., 20+ seconds for `small` model, 60+ seconds for `medium`)
@@ -151,7 +214,7 @@ poetry run python -c "from faster_whisper import WhisperModel; WhisperModel('bas
 
 ---
 
-### 5. High Memory Usage with Large Models
+### 6. High Memory Usage with Large Models
 
 **Symptom:**
 System becomes slow or runs out of memory when using `medium` or `large` models
@@ -183,7 +246,7 @@ Large models require significant RAM:
 
 ---
 
-### 6. Slow Transcription Speed
+### 7. Slow Transcription Speed
 
 **Symptom:**
 Transcription takes longer than the audio duration (RTF > 1.0)

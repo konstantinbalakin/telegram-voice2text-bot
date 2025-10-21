@@ -73,6 +73,9 @@ def create_transcription_router() -> TranscriptionRouter:
             else:
                 logger.warning(f"Unknown provider: {provider_name}")
 
+        except ImportError as e:
+            logger.warning(f"Skipping provider '{provider_name}': {e}")
+            continue
         except Exception as e:
             logger.error(f"Failed to configure provider '{provider_name}': {e}")
             raise
@@ -80,22 +83,42 @@ def create_transcription_router() -> TranscriptionRouter:
     if not providers:
         raise ValueError("No providers configured. Check WHISPER_PROVIDERS setting.")
 
-    # Create routing strategy
-    strategy = _create_routing_strategy(providers)
+    logger.info(f"Successfully configured {len(providers)} provider(s): {list(providers.keys())}")
 
-    # Create router
-    router = TranscriptionRouter(providers=providers, strategy=strategy)
-
-    # Initialize providers (except in benchmark mode - they're initialized on demand)
+    # Initialize providers first (except in benchmark mode - they're initialized on demand)
     if not settings.benchmark_mode:
         logger.info("Initializing providers...")
+        initialized_providers = {}
         for name, provider in providers.items():
             try:
                 provider.initialize()
                 logger.info(f"✓ Provider '{name}' initialized")
+                initialized_providers[name] = provider
             except Exception as e:
                 logger.error(f"✗ Failed to initialize provider '{name}': {e}")
-                raise
+                logger.warning(f"Skipping provider '{name}' due to initialization failure")
+
+        # Update providers dict with only successfully initialized ones
+        providers = initialized_providers
+
+        logger.info(
+            f"Successfully initialized {len(providers)} provider(s): {list(providers.keys())}"
+        )
+
+        if not providers:
+            raise ValueError(
+                "No providers successfully initialized. Check your configuration and dependencies."
+            )
+    else:
+        logger.info(
+            "Benchmark mode enabled - providers will be initialized on demand during benchmark"
+        )
+
+    # Create routing strategy with initialized providers
+    strategy = _create_routing_strategy(providers)
+
+    # Create router
+    router = TranscriptionRouter(providers=providers, strategy=strategy)
 
     logger.info("Transcription router created successfully")
     return router
@@ -122,9 +145,14 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
     if strategy_name == "single":
         primary = settings.primary_provider
         if primary not in providers:
-            raise ValueError(
-                f"Primary provider '{primary}' not in enabled providers: "
-                f"{list(providers.keys())}"
+            # Auto-select first available provider if configured one is not available
+            available_providers = list(providers.keys())
+            if not available_providers:
+                raise ValueError("No providers available for single provider strategy")
+            primary = available_providers[0]
+            logger.warning(
+                f"Configured primary provider '{settings.primary_provider}' not available. "
+                f"Using '{primary}' instead."
             )
         strategy = SingleProviderStrategy(provider_name=primary)
         logger.info(f"✓ Single provider strategy: {primary}")
@@ -134,15 +162,30 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
         fallback = settings.fallback_provider
 
         if primary not in providers:
-            raise ValueError(
-                f"Primary provider '{primary}' not in enabled providers: "
-                f"{list(providers.keys())}"
+            # Auto-select first available provider
+            available_providers = list(providers.keys())
+            if not available_providers:
+                raise ValueError("No providers available for fallback strategy")
+            primary = available_providers[0]
+            logger.warning(
+                f"Configured primary provider '{settings.primary_provider}' not available. "
+                f"Using '{primary}' instead."
             )
+
         if fallback not in providers:
-            raise ValueError(
-                f"Fallback provider '{fallback}' not in enabled providers: "
-                f"{list(providers.keys())}"
-            )
+            # Auto-select second provider or same as primary if only one available
+            available_providers = [p for p in providers.keys() if p != primary]
+            if available_providers:
+                fallback = available_providers[0]
+                logger.warning(
+                    f"Configured fallback provider '{settings.fallback_provider}' not available. "
+                    f"Using '{fallback}' instead."
+                )
+            else:
+                logger.warning(
+                    f"No fallback provider available. Fallback strategy will use only '{primary}'."
+                )
+                fallback = primary
 
         strategy = FallbackStrategy(primary=primary, fallback=fallback)
         logger.info(f"✓ Fallback strategy: {primary} → {fallback}")
