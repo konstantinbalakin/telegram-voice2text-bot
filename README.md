@@ -159,6 +159,39 @@ telegram-voice2text-bot/
 
 ## 🧪 Разработка
 
+### Управление зависимостями
+
+Проект использует **Poetry** для управления зависимостями, но также поддерживает `requirements.txt` для Docker.
+
+#### Обновление requirements.txt после изменения зависимостей
+
+После изменения `pyproject.toml` всегда обновляйте requirements файлы:
+
+```bash
+./scripts/update-requirements.sh
+```
+
+Это создаст три файла:
+- `requirements.txt` - базовые зависимости
+- `requirements-docker.txt` - базовые + faster-whisper (для Docker)
+- `requirements-full.txt` - все провайдеры (для бенчмарков)
+
+#### Добавление новой зависимости
+
+```bash
+# 1. Добавить зависимость через Poetry
+poetry add <package>
+
+# 2. Обновить requirements.txt
+./scripts/update-requirements.sh
+
+# 3. Закоммитить изменения
+git add pyproject.toml poetry.lock requirements*.txt
+git commit -m "feat: add <package> dependency"
+```
+
+Подробнее: [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)
+
 ### Запуск тестов
 
 ```bash
