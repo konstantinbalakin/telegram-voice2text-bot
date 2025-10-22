@@ -59,46 +59,47 @@ class Settings(BaseSettings):
     benchmark_configs: list[dict] = Field(
         default_factory=lambda: [
             # FasterWhisper variants
-            {
-                "provider_name": "faster-whisper",
-                "model_size": "tiny",
-                "compute_type": "int8",
-                "beam_size": 5,
-            },
-            {
-                "provider_name": "faster-whisper",
-                "model_size": "base",
-                "compute_type": "int8",
-                "beam_size": 5,
-            },
-            {
-                "provider_name": "faster-whisper",
-                "model_size": "small",
-                "compute_type": "int8",
-                "beam_size": 5,
-            },
-            {
-                "provider_name": "faster-whisper",
-                "model_size": "medium",
-                "compute_type": "int8",
-                "beam_size": 5,
-            },
+            # tiny
+            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 1},
+            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 3},
+            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 5},
+            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 7},
+            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 10},
+
+            # base
+            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 1},
+            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 3},
+            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 5},
+            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 7},
+            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 10},
+
+            # small
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 1},
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 3},
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 5},
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 7},
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 10},
+
+            # medium
+            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 1},
+            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 3},
+            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 5},
+            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 7},
+            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 10},
+            
             # Quality variants
-            {
-                "provider_name": "faster-whisper",
-                "model_size": "small",
-                "compute_type": "float32",
-                "beam_size": 5,
-            },
-            {
-                "provider_name": "faster-whisper",
-                "model_size": "small",
-                "compute_type": "int8",
-                "beam_size": 10,
-            },
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 1},
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 3},
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 5},
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 7},
+            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 10},
+            
             # Original Whisper
+            {"provider_name": "whisper", "model_size": "tiny"},
             {"provider_name": "whisper", "model_size": "base"},
             {"provider_name": "whisper", "model_size": "small"},
+            {"provider_name": "whisper", "model_size": "medium"},
+            
             # OpenAI API (reference)
             {"provider_name": "openai"},
         ],
