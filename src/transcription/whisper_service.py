@@ -34,9 +34,9 @@ class WhisperService:
             compute_type: Compute type (int8, float16, float32)
             max_workers: Maximum number of concurrent transcription workers
         """
-        self.model_size = model_size or settings.whisper_model_size
-        self.device = device or settings.whisper_device
-        self.compute_type = compute_type or settings.whisper_compute_type
+        self.model_size = model_size or settings.faster_whisper_model_size
+        self.device = device or settings.faster_whisper_device
+        self.compute_type = compute_type or settings.faster_whisper_compute_type
         self.max_workers = max_workers
 
         self._model: Optional[WhisperModel] = None

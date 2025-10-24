@@ -199,7 +199,7 @@ class BotHandlers:
 
                 # Create transcription context
                 transcription_context = TranscriptionContext(
-                    user_id=str(user.id),
+                    user_id=user.id,
                     duration_seconds=duration_seconds,
                     file_size_bytes=voice.file_size or 0,
                     language="ru",  # Default to Russian
@@ -247,10 +247,14 @@ class BotHandlers:
                                 f"Транскрипция:\n{best_result.text}"
                             )
                         else:
-                            await processing_msg.edit_text("❌ Все модели не смогли обработать аудио")
+                            await processing_msg.edit_text(
+                                "❌ Все модели не смогли обработать аудио"
+                            )
 
                         # Send report in chunks
-                        chunks = [report_text[i:i+4096] for i in range(0, len(report_text), 4096)]
+                        chunks = [
+                            report_text[i : i + 4096] for i in range(0, len(report_text), 4096)
+                        ]
                         for chunk in chunks:
                             await update.message.reply_text(chunk, parse_mode="Markdown")
 
@@ -342,7 +346,7 @@ class BotHandlers:
 
                 # Create transcription context
                 transcription_context = TranscriptionContext(
-                    user_id=str(user.id),
+                    user_id=user.id,
                     duration_seconds=duration_seconds,
                     file_size_bytes=audio.file_size or 0,
                     language="ru",  # Default to Russian
@@ -390,10 +394,14 @@ class BotHandlers:
                                 f"Транскрипция:\n{best_result.text}"
                             )
                         else:
-                            await processing_msg.edit_text("❌ Все модели не смогли обработать аудио")
+                            await processing_msg.edit_text(
+                                "❌ Все модели не смогли обработать аудио"
+                            )
 
                         # Send report in chunks
-                        chunks = [report_text[i:i+4096] for i in range(0, len(report_text), 4096)]
+                        chunks = [
+                            report_text[i : i + 4096] for i in range(0, len(report_text), 4096)
+                        ]
                         for chunk in chunks:
                             await update.message.reply_text(chunk, parse_mode="Markdown")
 

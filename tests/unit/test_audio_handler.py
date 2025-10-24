@@ -1,4 +1,5 @@
 """Unit tests for AudioHandler."""
+
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
@@ -200,6 +201,7 @@ class TestAudioHandlerCleanup:
         # Modify old file's timestamp to be 25 hours ago
         old_time = time.time() - (25 * 3600)
         import os
+
         os.utime(old_file, (old_time, old_time))
 
         deleted_count = audio_handler.cleanup_old_files(max_age_hours=24)

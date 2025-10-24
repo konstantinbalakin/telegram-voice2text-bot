@@ -39,4 +39,4 @@
 - Validate new third-party integrations using the Docker sandbox before enabling in production.
 
 ## Additional Context Resources
-- Load supplementary project context from `memory-bank/!memory-bank.md` when initializing agents.
+- Load supplementary project context from @memory-bank/!memory-bank.md when initializing agents.

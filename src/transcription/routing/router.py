@@ -13,7 +13,6 @@ from src.transcription.models import (
 from src.transcription.providers.base import TranscriptionProvider
 from src.transcription.providers.faster_whisper_provider import FastWhisperProvider
 from src.transcription.providers.openai_provider import OpenAIProvider
-from src.transcription.providers.whisper_provider import WhisperProvider
 from src.transcription.routing.strategies import BenchmarkStrategy, RoutingStrategy
 
 logger = logging.getLogger(__name__)
@@ -212,11 +211,6 @@ class TranscriptionRouter:
                 model_size=config.model_size,
                 compute_type=config.compute_type,
                 beam_size=config.beam_size,
-                device=config.device or "cpu",
-            )
-        elif config.provider_name == "whisper":
-            provider = WhisperProvider(
-                model_size=config.model_size,
                 device=config.device or "cpu",
             )
         elif config.provider_name == "openai":

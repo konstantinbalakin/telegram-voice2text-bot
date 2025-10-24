@@ -10,11 +10,11 @@ Telegram Voice2Text Bot - A Telegram bot for working with voice messages. Curren
 
 ## Memory Bank System
 
-This project uses the Claude Code Memory Bank system located in `.claude/`. The Memory Bank maintains project context across sessions through structured documentation files.
+This project uses the Claude Code Memory Bank system located in `/memory-bank/`. The Memory Bank maintains project context across sessions through structured documentation files.
 
 ### Key Memory Bank Files
 
-Located in `.claude/memory-bank/`:
+Located in `/memory-bank/`:
 
 - `projectbrief.md` - Core requirements and project goals
 - `productContext.md` - Problem statement and user experience goals
@@ -93,4 +93,4 @@ gh pr create --title "feat: description" --body "..."
 **Entry Point**: ✅ Ready (src/main.py)
 
 ## Additional Instructions
-- @.claude/claude-memory-bank.md
+- @memory-bank/!memory-bank.md

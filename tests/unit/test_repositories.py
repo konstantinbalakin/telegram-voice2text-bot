@@ -1,6 +1,7 @@
 """
 Tests for database repositories
 """
+
 import pytest
 from datetime import date, datetime
 

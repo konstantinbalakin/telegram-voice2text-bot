@@ -8,7 +8,6 @@ from src.transcription.models import BenchmarkConfig
 from src.transcription.providers.base import TranscriptionProvider
 from src.transcription.providers.faster_whisper_provider import FastWhisperProvider
 from src.transcription.providers.openai_provider import OpenAIProvider
-from src.transcription.providers.whisper_provider import WhisperProvider
 from src.transcription.routing.router import TranscriptionRouter
 from src.transcription.routing.strategies import (
     BenchmarkStrategy,
@@ -62,13 +61,6 @@ def create_transcription_router() -> TranscriptionRouter:
                     timeout=settings.openai_timeout,
                 )
                 logger.info(f"✓ Configured provider: openai (model={settings.openai_model})")
-
-            elif provider_name == "whisper":
-                providers["whisper"] = WhisperProvider(
-                    model_size=settings.whisper_model_size,
-                    device=settings.whisper_device,
-                )
-                logger.info(f"✓ Configured provider: whisper (model={settings.whisper_model_size})")
 
             else:
                 logger.warning(f"Unknown provider: {provider_name}")

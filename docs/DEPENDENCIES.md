@@ -38,10 +38,9 @@ After modifying `pyproject.toml`, update the requirements files:
 ./scripts/update-requirements.sh
 ```
 
-This generates three files:
+This generates:
 - `requirements.txt` - Base dependencies only
 - `requirements-docker.txt` - Base + faster-whisper (recommended for Docker)
-- `requirements-full.txt` - All providers (OpenAI API, OpenAI Whisper, faster-whisper)
 
 ### Dockerfile Configuration
 
@@ -54,38 +53,26 @@ RUN pip install -r requirements.txt
 
 ## Available Provider Extras
 
-The project supports multiple transcription providers as optional extras:
+The project supports two transcription providers as optional extras:
 
-### faster-whisper (Recommended)
+### faster-whisper (Recommended - Production Default)
 ```bash
 poetry install --extras "faster-whisper"
 ```
 - Fast local transcription using CTranslate2
-- Low memory usage with quantization support
-- Best for production deployment
+- Low memory usage with quantization support (int8)
+- Production configuration: medium/int8/beam1 (RTF ~0.3x)
+- Best for production deployment on CPU
+- ~1.5GB model size for medium
 
 ### openai-api
 ```bash
 poetry install --extras "openai-api"
 ```
 - Uses OpenAI's Whisper API
-- Requires API key
-- Best quality but costs money
-
-### openai-whisper
-```bash
-poetry install --extras "openai-whisper"
-```
-- Original OpenAI Whisper model (local)
-- Requires PyTorch (large dependency)
-- Best quality for local processing
-
-### all-providers
-```bash
-poetry install --extras "all-providers"
-```
-- Installs all providers for benchmarking
-- Largest dependency footprint
+- Requires API key and internet connection
+- Best quality but costs $0.006 per minute
+- Useful as fallback or reference
 
 ## Package Versions
 
@@ -96,10 +83,8 @@ poetry install --extras "all-providers"
 - pydantic: ^2.10
 
 ### Transcription Providers
-- faster-whisper: ^1.2.0
-- openai: ^1.50.0
-- openai-whisper: ^20250625 (date-based versioning)
-- torch: ^2.0.0
+- faster-whisper: ^1.2.0 (production default)
+- openai: ^1.50.0 (optional)
 
 ## Common Tasks
 

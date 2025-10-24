@@ -1,6 +1,7 @@
 """
 Tests for database models
 """
+
 import pytest
 from datetime import date, datetime
 from sqlalchemy import select

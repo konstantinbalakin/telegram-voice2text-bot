@@ -44,16 +44,26 @@
 - ✅ CPU-optimized with CTranslate2
 - ✅ GPU support available
 
-**Model Choice for MVP**: `base` with `int8` compute type
-- Good balance of speed/quality
-- ~500MB RAM usage
-- Excellent Russian language support
+**Production Configuration** (finalized 2025-10-24): `medium / int8 / beam1`
+- **Performance**: RTF ~0.3x (3x faster than audio duration)
+  - 7s audio → ~2s, 30s audio → ~10s, 60s audio → ~20s
+- **Memory**: ~3.5GB RAM peak (requires 4GB+ VPS, 6GB+ recommended)
+- **Quality**: Excellent for Russian language, good for long informal speech
+- **Rationale**: Prioritized quality over speed after comprehensive benchmarking
 
-**Why NOT openai-whisper**:
-- ❌ Slower (1x baseline)
-- ❌ More memory (2-4GB for base model)
-- ❌ Requires ffmpeg installation
-- ❌ Less optimized for CPU
+**Alternative Configurations**:
+- `tiny/int8`: Fast but poor quality (22-78% similarity in tests)
+- `small/int8`: Faster (~2s for 7s audio) but lower accuracy
+- `medium/int8/beam5`: Better quality but 2x slower
+- OpenAI API: Best quality but costs $0.006/minute
+
+📄 Benchmark results: `memory-bank/benchmarks/final-decision.md`
+
+**Provider Architecture**:
+- **Active Providers**: faster-whisper (local), OpenAI API (optional)
+- **Removed**: openai-whisper (original Whisper) - larger, slower, removed 2025-10-24
+- **Routing**: Single provider, fallback, or benchmark mode
+- **Configuration**: ENV-driven for flexibility
 
 ## Complete Dependency Stack
 

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # Transcription Provider Configuration
     whisper_providers: list[str] = Field(
         default=["faster-whisper"],
-        description="Enabled providers: faster-whisper, openai, whisper",
+        description="Enabled providers: faster-whisper, openai",
     )
     whisper_routing_strategy: str = Field(
         default="single", description="Routing strategy: single, fallback, benchmark"
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     # FasterWhisper Configuration
     faster_whisper_model_size: str = Field(
-        default="base",
+        default="medium",
         description="FasterWhisper model size: tiny, base, small, medium, large-v2, large-v3",
     )
     faster_whisper_device: str = Field(default="cpu", description="Device: cpu or cuda")
@@ -37,17 +37,11 @@ class Settings(BaseSettings):
         default="int8", description="Compute type: int8, float16, float32"
     )
     faster_whisper_beam_size: int = Field(
-        default=5, description="Beam size: 1 (greedy), 5 (default), 10 (high quality)"
+        default=1, description="Beam size: 1 (greedy/fastest), 5 (default), 10 (high quality)"
     )
     faster_whisper_vad_filter: bool = Field(
         default=True, description="Enable voice activity detection filter"
     )
-
-    # Original Whisper Configuration
-    whisper_model_size: str = Field(
-        default="base", description="Original Whisper model size: tiny, base, small, medium, large"
-    )
-    whisper_device: str = Field(default="cpu", description="Device: cpu or cuda")
 
     # OpenAI API Configuration
     openai_api_key: str | None = Field(default=None, description="OpenAI API key")
@@ -59,49 +53,15 @@ class Settings(BaseSettings):
     benchmark_configs: list[dict] = Field(
         default_factory=lambda: [
             # FasterWhisper variants
-            # tiny
-            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 1},
-            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 3},
-            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 5},
-            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 7},
-            {"provider_name": "faster-whisper", "model_size": "tiny", "compute_type": "int8", "beam_size": 10},
-
-            # base
-            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 1},
-            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 3},
-            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 5},
-            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 7},
-            {"provider_name": "faster-whisper", "model_size": "base", "compute_type": "int8", "beam_size": 10},
-
-            # small
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 1},
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 3},
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 5},
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 7},
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "int8", "beam_size": 10},
-
-            # medium
-            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 1},
-            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 3},
-            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 5},
-            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 7},
-            {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 10},
-            
-            # Quality variants
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 1},
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 3},
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 5},
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 7},
-            {"provider_name": "faster-whisper", "model_size": "small", "compute_type": "float32", "beam_size": 10},
-            
-            # Original Whisper
-            {"provider_name": "whisper", "model_size": "tiny"},
-            {"provider_name": "whisper", "model_size": "base"},
-            {"provider_name": "whisper", "model_size": "small"},
-            {"provider_name": "whisper", "model_size": "medium"},
-            
+            # Production default
+            {
+                "provider_name": "faster-whisper",
+                "model_size": "medium",
+                "compute_type": "int8",
+                "beam_size": 1,
+            },
             # OpenAI API (reference)
-            {"provider_name": "openai"},
+            # {"provider_name": "openai"}
         ],
         description="Benchmark configurations to test",
     )
