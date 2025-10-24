@@ -1,60 +1,72 @@
-"""
-Whisper transcription service using faster-whisper
-"""
+"""FasterWhisper provider implementation."""
 
 import asyncio
 import logging
-from pathlib import Path
-from typing import Optional, Any
+import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any, Optional
 
+import psutil
 from faster_whisper import WhisperModel  # type: ignore[import-untyped]
 
 from src.config import settings
+from src.transcription.models import TranscriptionContext, TranscriptionResult
+from src.transcription.providers.base import TranscriptionProvider
 
 logger = logging.getLogger(__name__)
 
 
-class WhisperService:
-    """Service for audio transcription using faster-whisper."""
+class FastWhisperProvider(TranscriptionProvider):
+    """Transcription provider using faster-whisper."""
 
     def __init__(
         self,
         model_size: Optional[str] = None,
         device: Optional[str] = None,
         compute_type: Optional[str] = None,
+        beam_size: Optional[int] = None,
+        vad_filter: Optional[bool] = None,
         max_workers: int = 3,
     ):
         """
-        Initialize Whisper service.
+        Initialize FasterWhisper provider.
 
         Args:
-            model_size: Whisper model size (tiny, base, small, medium, large)
+            model_size: Whisper model size (tiny, base, small, medium, large-v2, large-v3)
             device: Device to use (cpu or cuda)
             compute_type: Compute type (int8, float16, float32)
+            beam_size: Beam size for decoding (1=greedy, 5=default, 10=high quality)
+            vad_filter: Enable voice activity detection filter
             max_workers: Maximum number of concurrent transcription workers
         """
         self.model_size = model_size or settings.faster_whisper_model_size
         self.device = device or settings.faster_whisper_device
         self.compute_type = compute_type or settings.faster_whisper_compute_type
+        self.beam_size = beam_size or settings.faster_whisper_beam_size
+        self.vad_filter = (
+            vad_filter if vad_filter is not None else settings.faster_whisper_vad_filter
+        )
         self.max_workers = max_workers
 
         self._model: Optional[WhisperModel] = None
         self._executor: Optional[ThreadPoolExecutor] = None
         self._initialized = False
+        self._process = psutil.Process()
 
         logger.info(
-            f"WhisperService configured: model={self.model_size}, "
-            f"device={self.device}, compute_type={self.compute_type}"
+            f"FastWhisperProvider configured: model={self.model_size}, "
+            f"device={self.device}, compute_type={self.compute_type}, "
+            f"beam_size={self.beam_size}, vad_filter={self.vad_filter}"
         )
 
     def initialize(self) -> None:
         """Initialize the Whisper model and thread pool executor."""
         if self._initialized:
-            logger.warning("WhisperService already initialized")
+            logger.warning("FastWhisperProvider already initialized")
             return
 
-        logger.info("Initializing WhisperModel...")
+        logger.info(f"Initializing FasterWhisper model: {self.model_size}...")
         try:
             self._model = WhisperModel(
                 self.model_size,
@@ -63,41 +75,45 @@ class WhisperService:
             )
             self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
             self._initialized = True
-            logger.info("WhisperModel initialized successfully")
+            logger.info("FasterWhisper model initialized successfully")
         except Exception as e:
-            logger.error(f"Failed to initialize WhisperModel: {e}")
+            logger.error(f"Failed to initialize FasterWhisper model: {e}")
             raise
 
     async def transcribe(
-        self,
-        audio_path: Path,
-        language: Optional[str] = "ru",
-        timeout: Optional[int] = None,
-    ) -> tuple[str, float]:
+        self, audio_path: Path, context: TranscriptionContext
+    ) -> TranscriptionResult:
         """
         Transcribe audio file to text.
 
         Args:
             audio_path: Path to audio file
-            language: Language code (ru, en, etc.) or None for auto-detect
-            timeout: Timeout in seconds (default from settings)
+            context: Context information for transcription
 
         Returns:
-            Tuple of (transcribed_text, processing_time_seconds)
+            TranscriptionResult with text and metrics
 
         Raises:
-            TimeoutError: If transcription exceeds timeout
-            RuntimeError: If service not initialized or transcription fails
+            RuntimeError: If provider not initialized
+            FileNotFoundError: If audio file doesn't exist
+            TimeoutError: If transcription times out
         """
         if not self._initialized or self._model is None or self._executor is None:
-            raise RuntimeError("WhisperService not initialized. Call initialize() first.")
+            raise RuntimeError("FastWhisperProvider not initialized. Call initialize() first.")
 
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-        timeout_seconds = timeout or settings.transcription_timeout
+        timeout_seconds = settings.transcription_timeout
 
-        logger.info(f"Starting transcription: {audio_path.name}, language={language}")
+        logger.info(
+            f"Starting transcription: {audio_path.name}, "
+            f"language={context.language}, model={self.model_size}"
+        )
+
+        # Track resource usage
+        start_memory = self._process.memory_info().rss / 1024 / 1024  # MB
+        start_time = time.time()
 
         try:
             # Run transcription in thread pool to avoid blocking event loop
@@ -107,7 +123,7 @@ class WhisperService:
                     self._executor,
                     self._transcribe_sync,
                     str(audio_path),
-                    language,
+                    context.language,
                 ),
                 timeout=timeout_seconds,
             )
@@ -115,14 +131,29 @@ class WhisperService:
             # Combine all segments into full text
             text = " ".join([segment.text.strip() for segment in segments])
 
-            processing_time = info.duration  # Actual audio duration processed
+            processing_time = time.time() - start_time
+            audio_duration = info.duration
+
+            # Measure peak memory
+            end_memory = self._process.memory_info().rss / 1024 / 1024  # MB
+            peak_memory = max(start_memory, end_memory)
 
             logger.info(
                 f"Transcription complete: {len(text)} chars, "
-                f"{processing_time:.2f}s audio, language={info.language}"
+                f"{audio_duration:.2f}s audio, {processing_time:.2f}s processing, "
+                f"language={info.language}, RTF={processing_time/audio_duration:.2f}x"
             )
 
-            return text, processing_time
+            return TranscriptionResult(
+                text=text,
+                language=info.language,
+                confidence=None,  # faster-whisper doesn't provide overall confidence
+                processing_time=processing_time,
+                audio_duration=audio_duration,
+                provider_used="faster-whisper",
+                model_name=self.model_size,
+                peak_memory_mb=peak_memory,
+            )
 
         except asyncio.TimeoutError:
             logger.error(f"Transcription timeout after {timeout_seconds}s")
@@ -145,12 +176,14 @@ class WhisperService:
         if self._model is None:
             raise RuntimeError("Model not initialized")
 
+        vad_parameters = dict(min_silence_duration_ms=500) if self.vad_filter else None
+
         segments, info = self._model.transcribe(
             audio_path,
             language=language,
-            beam_size=5,  # Balance between speed and accuracy
-            vad_filter=True,  # Voice activity detection filter
-            vad_parameters=dict(min_silence_duration_ms=500),  # Minimum silence to split
+            beam_size=self.beam_size,
+            vad_filter=self.vad_filter,
+            vad_parameters=vad_parameters,
         )
 
         # Convert generator to list to avoid issues with async
@@ -159,11 +192,11 @@ class WhisperService:
         return segments_list, info
 
     async def shutdown(self) -> None:
-        """Shutdown the service and cleanup resources."""
+        """Shutdown the provider and cleanup resources."""
         if not self._initialized:
             return
 
-        logger.info("Shutting down WhisperService...")
+        logger.info("Shutting down FastWhisperProvider...")
 
         if self._executor:
             self._executor.shutdown(wait=True)
@@ -172,21 +205,8 @@ class WhisperService:
         self._model = None
         self._initialized = False
 
-        logger.info("WhisperService shutdown complete")
+        logger.info("FastWhisperProvider shutdown complete")
 
     def is_initialized(self) -> bool:
-        """Check if service is initialized."""
+        """Check if provider is initialized."""
         return self._initialized
-
-
-# Global instance
-_whisper_service: Optional[WhisperService] = None
-
-
-def get_whisper_service() -> WhisperService:
-    """Get or create global WhisperService instance."""
-    global _whisper_service
-    if _whisper_service is None:
-        _whisper_service = WhisperService()
-        _whisper_service.initialize()
-    return _whisper_service

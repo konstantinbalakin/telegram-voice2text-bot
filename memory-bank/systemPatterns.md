@@ -106,12 +106,29 @@ This is a **transitional architecture** that balances MVP speed with future scal
 **Pattern**: Producer-Consumer with bounded queue
 
 #### 3. **Transcription Service** (`src/transcription/`)
-**Responsibility**: Voice-to-text conversion
+**Responsibility**: Voice-to-text conversion with flexible provider architecture
+
+**Provider Architecture** (implemented 2025-10-20, finalized 2025-10-24):
+- **factory.py**:
+  - Provider factory pattern
+  - ENV-driven provider initialization
+  - Supports multiple providers simultaneously
+  - Graceful handling of unavailable providers
+
+- **providers/**:
+  - `base.py`: Abstract base class for all providers
+  - `faster_whisper_provider.py`: Local faster-whisper integration (production default)
+  - `openai_provider.py`: OpenAI API integration (optional fallback)
+  - Provider lifecycle: initialize() → transcribe() → shutdown()
+
+- **routing/router.py**:
+  - Strategy-based provider selection
+  - Single provider, fallback, or benchmark mode
+  - Benchmark mode for empirical testing (used for model selection)
 
 - **whisper_service.py**:
-  - faster-whisper model management
-  - Transcription with timeout
-  - Thread pool execution
+  - Legacy service wrapper (maintained for backward compatibility)
+  - Thread pool execution for blocking operations
   - Model caching
 
 - **audio_handler.py**:
@@ -119,7 +136,9 @@ This is a **transitional architecture** that balances MVP speed with future scal
   - Format validation
   - Temporary file cleanup
 
-**Pattern**: Service layer with thread pool isolation
+**Pattern**: Strategy pattern + Factory pattern + Service layer with thread pool isolation
+
+**Key Design Decision (2025-10-24)**: Provider architecture designed for flexibility but simplified after benchmarking. Initially supported 3 providers; removed openai-whisper after proving faster-whisper medium was superior in both speed and quality. Architecture allows easy addition of new providers if needed (e.g., Azure, Google Cloud).
 
 #### 4. **Storage Layer** (`src/storage/`)
 **Responsibility**: Data persistence and retrieval
@@ -206,6 +225,9 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-10-12 | Semaphore (max 3 workers) | Limit memory usage, prevent OOM | 90% |
 | 2025-10-12 | SQLite → PostgreSQL path | Fast MVP start, clear upgrade path | 85% |
 | 2025-10-12 | Repository pattern | Abstracts DB access, testable | 80% |
+| 2025-10-20 | Provider architecture (Strategy pattern) | Enable flexible provider switching and benchmarking | 90% |
+| 2025-10-24 | Production model: medium/int8/beam1 | Comprehensive benchmarking showed best quality/speed balance | 95% |
+| 2025-10-24 | Remove openai-whisper provider | faster-whisper medium superior in all metrics, -2-3GB Docker image | 90% |
 
 ## Design Patterns in Use
 
@@ -239,6 +261,21 @@ This is a **transitional architecture** that balances MVP speed with future scal
 - **Why**: Centralized, validated configuration
 - **Benefit**: Type-safe, environment-aware
 
+### 7. **Strategy Pattern** (added 2025-10-20)
+- **Where**: Provider routing in `TranscriptionRouter`
+- **Why**: Enable switching between different transcription providers at runtime
+- **Benefit**: Support benchmark mode, fallback strategies, easy provider testing
+- **Implementation**:
+  - `SingleProviderStrategy`: Use one provider
+  - `FallbackStrategy`: Try primary, fall back to secondary
+  - `BenchmarkStrategy`: Test all providers, compare results
+
+### 8. **Factory Pattern** (added 2025-10-20)
+- **Where**: `ProviderFactory` in `factory.py`
+- **Why**: Centralized provider instantiation based on configuration
+- **Benefit**: Hide provider initialization complexity, graceful degradation if provider unavailable
+- **Usage**: ENV-driven provider selection (`WHISPER_PROVIDERS=["faster-whisper", "openai"]`)
+
 ## Component Relationships
 
 ```
@@ -265,6 +302,83 @@ quota_manager.py
 - All components depend on `config.py` (Settings)
 - Database layer is independent (no upward dependencies)
 - Bot layer doesn't know about Worker internals (queue abstraction)
+- Provider layer is pluggable (factory + strategy pattern)
+
+## Benchmark Methodology (implemented 2025-10-20, completed 2025-10-24)
+
+### Purpose
+Empirical testing framework to select optimal transcription configuration based on real-world performance metrics.
+
+### Architecture
+**Benchmark Mode**: Special routing strategy that processes same audio through multiple providers/configurations simultaneously for comparison.
+
+**Implementation**:
+```python
+# In config.py
+BENCHMARK_MODE=true
+BENCHMARK_CONFIGS=[
+  {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 1},
+  {"provider_name": "openai"}  # Reference quality
+]
+```
+
+**Workflow**:
+1. Bot receives voice message (when BENCHMARK_MODE=true)
+2. Router creates multiple provider instances on-demand (per config)
+3. Processes audio through all providers in parallel
+4. Collects results: transcribed text, processing time, memory usage
+5. Saves all results to separate files for manual analysis
+6. Returns OpenAI result to user (reference quality)
+
+### Testing Protocol (2025-10-22 to 2025-10-24)
+
+**Test Suite**:
+- 3 representative audio samples (7s short, 24s medium, 163s long)
+- Russian language, informal speech
+- Real Telegram voice messages
+
+**Configurations Tested**: 30+
+- faster-whisper: tiny/small/medium with various beam sizes (1, 3, 5, 7, 10)
+- Compute types: int8, float32
+- openai-whisper: tiny/base/small/medium (later removed)
+- OpenAI API: whisper-1 (reference)
+
+**Metrics Collected**:
+- **RTF (Real-Time Factor)**: processing_time / audio_duration
+- **Memory**: Peak RAM usage during transcription
+- **Quality**: Manual comparison against OpenAI API reference
+- **Similarity**: Automated text similarity percentage
+
+**Results Storage**: `docs/quality_compare/YYYY-MM-DD_*.md`
+
+### Key Findings
+
+**Performance vs Quality Trade-off**:
+- tiny/int8: RTF 0.05x (extremely fast), 22-78% quality (unacceptable)
+- small/int8/beam1: RTF 0.2x (fast), ~90% quality (acceptable)
+- medium/int8/beam1: RTF 0.3x (balanced), ~95-100% quality (excellent)
+- medium/int8/beam5: RTF 0.6x (slower), marginally better quality
+
+**Memory Characteristics**:
+- tiny: <1GB
+- small: ~2.4GB
+- medium: ~3.5GB peak
+- Memory scales with model size, not beam size
+
+**Decision**: medium/int8/beam1 selected as production default (quality prioritized, still 3x faster than audio).
+
+### Lessons Learned
+
+1. **Automated metrics insufficient**: Text similarity % missed nuances; manual transcript review essential
+2. **Beam size impact minimal for Russian**: beam1 (greedy) vs beam5 showed little quality difference, but 2x speed difference
+3. **Long audio challenges**: All local models showed quality degradation on 163s sample vs short clips
+4. **Provider comparison value**: Testing openai-whisper proved faster-whisper medium superior, enabled confident removal
+5. **Benchmark mode invaluable**: Parallel testing saved days of manual configuration switching
+
+**Artifacts**:
+- `memory-bank/benchmarks/fast-whisper.md`: Rollup summary
+- `memory-bank/benchmarks/final-decision.md`: Decision rationale
+- `docs/quality_compare/`: Raw benchmark results
 
 ## Critical Implementation Paths
 
@@ -467,16 +581,22 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
 ## Development Workflow
 
 ### Git Strategy
-**Workflow**: Feature Branch Workflow (documented in `.github/WORKFLOW.md`)
+**Workflow**: Feature Branch Workflow with Protected Main Branch (documented in `.github/WORKFLOW.md`)
+
+**Branch Protection** (implemented 2025-10-19):
+- Main branch is protected on GitHub
+- All changes must go through Pull Requests
+- CI checks must pass before merge allowed
+- Prevents accidental direct commits to main
 
 **Branch Structure**:
 ```
 main (protected, PR-only)
-  ├── feature/database-models
-  ├── feature/whisper-service
-  ├── feature/bot-handlers
-  ├── feature/queue-system
-  └── feature/integration-tests
+  ├── feature/database-models ✅ merged
+  ├── feature/whisper-service ✅ merged
+  ├── feature/bot-handlers ✅ merged
+  ├── feature/test-cicd ✅ merged
+  └── feature/your-next-feature
 ```
 
 **Commit Convention**: Conventional Commits format
@@ -546,3 +666,98 @@ git push
 - Documentation synchronized with code
 - Future developers see current state
 - Memory Bank ready for next Claude Code session
+
+### CI/CD Pipeline (implemented 2025-10-19)
+
+**Platform**: GitHub Actions
+
+**Architecture**: Two separate workflows for separation of concerns
+
+#### CI Workflow (`.github/workflows/ci.yml`)
+**Trigger**: On pull requests to `main` branch
+**Purpose**: Quality gates before code merge
+
+**Steps**:
+1. **Environment Setup**
+   - Ubuntu latest runner
+   - Python 3.11
+   - Poetry installation
+   - Dependency caching (.venv cached by poetry.lock hash)
+
+2. **Testing**
+   - `pytest` with coverage reporting
+   - Coverage uploaded to Codecov
+   - Dummy TELEGRAM_BOT_TOKEN for tests
+
+3. **Code Quality Checks** (all must pass):
+   - `mypy src/` - Type checking (strict mode)
+   - `ruff check src/` - Linting
+   - `black --check src/` - Formatting verification
+
+**Fail Fast**: If any check fails, PR cannot be merged
+
+#### Build & Deploy Workflow (`.github/workflows/build-and-deploy.yml`)
+**Trigger**: On push to `main` branch (after PR merge)
+**Purpose**: Automated build and deployment
+
+**Build Stage**:
+1. Export Poetry dependencies → requirements.txt
+2. Set up Docker Buildx
+3. Login to Docker Hub (secrets: DOCKER_USERNAME, DOCKER_PASSWORD)
+4. Build Docker image with cache
+5. Push with two tags:
+   - `{username}/telegram-voice2text-bot:latest` (stable)
+   - `{username}/telegram-voice2text-bot:{commit-sha}` (versioned)
+6. Use GitHub Actions cache for Docker layers
+
+**Deploy Stage** (ready, awaiting VPS):
+1. SSH to VPS server (secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY)
+2. Pull latest code (for docker-compose.yml updates)
+3. Create .env file with secrets from GitHub
+4. Pull new Docker image by commit SHA
+5. Tag as latest locally
+6. Rolling update: `docker compose up -d --no-deps bot`
+7. Health check verification (15s wait)
+8. Cleanup old images (keep last 3)
+
+**Zero Downtime Strategy**:
+- Use `--no-deps` flag for isolated bot service update
+- Health checks verify container is healthy before considering deployment successful
+- Automatic rollback if health check fails
+
+**Environment**: Uses GitHub "production" environment for secret management
+
+### CI/CD Patterns
+
+**Pattern 1: Fail Fast**
+- Tests run first, before code quality checks
+- Any failure stops the pipeline immediately
+- Prevents wasted time on bad builds
+
+**Pattern 2: Immutable Versioning**
+- Every commit gets unique SHA-tagged Docker image
+- Enables rollback to any previous version
+- `latest` tag always points to most recent successful build
+
+**Pattern 3: Secrets Management**
+- All sensitive data in GitHub Secrets
+- Never committed to repository
+- Injected at runtime via environment variables
+
+**Pattern 4: Caching Strategy**
+- Poetry dependencies cached by poetry.lock hash
+- Docker build layers cached in GitHub Actions
+- Significantly faster builds (minutes vs tens of minutes)
+
+**Pattern 5: Quality Gates**
+- Protected branch enforces PR workflow
+- CI checks must pass before merge
+- No manual merge to main possible
+
+### Deployment Automation Benefits
+
+1. **Consistency**: Same process every time, no manual steps
+2. **Speed**: Merge to main → production in ~10 minutes
+3. **Safety**: Health checks catch failures, automatic rollback
+4. **Traceability**: Every deployment tracked by commit SHA
+5. **Reliability**: Tested process, no human error
