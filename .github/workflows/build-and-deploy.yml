@@ -77,13 +77,36 @@ jobs:
             cat > .env <<EOF
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             BOT_MODE=polling
-            WHISPER_MODEL_SIZE=base
-            WHISPER_DEVICE=cpu
-            WHISPER_COMPUTE_TYPE=int8
+
+            # Transcription Provider Configuration
+            WHISPER_PROVIDERS=["faster-whisper"]
+            WHISPER_ROUTING_STRATEGY=single
+            PRIMARY_PROVIDER=faster-whisper
+
+            # FasterWhisper Production Configuration (medium/int8/beam1)
+            FASTER_WHISPER_MODEL_SIZE=medium
+            FASTER_WHISPER_DEVICE=cpu
+            FASTER_WHISPER_COMPUTE_TYPE=int8
+            FASTER_WHISPER_BEAM_SIZE=1
+            FASTER_WHISPER_VAD_FILTER=true
+
+            # Database
             DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
-            LOG_LEVEL=INFO
-            TRANSCRIPTION_TIMEOUT=120
+
+            # Processing
+            MAX_QUEUE_SIZE=100
             MAX_CONCURRENT_WORKERS=3
+            TRANSCRIPTION_TIMEOUT=120
+            MAX_VOICE_DURATION_SECONDS=300
+
+            # Quota
+            DEFAULT_DAILY_QUOTA_SECONDS=60
+
+            # Logging
+            LOG_LEVEL=WARNING
+
+            # Benchmark Mode
+            BENCHMARK_MODE=false
             EOF
 
             # Pull new Docker image

@@ -47,7 +47,7 @@
 **Production Configuration** (finalized 2025-10-24): `medium / int8 / beam1`
 - **Performance**: RTF ~0.3x (3x faster than audio duration)
   - 7s audio → ~2s, 30s audio → ~10s, 60s audio → ~20s
-- **Memory**: ~3.5GB RAM peak (requires 4GB+ VPS, 6GB+ recommended)
+- **Memory**: ~2GB RAM peak (tested in production, not ~3.5GB as initially estimated)
 - **Quality**: Excellent for Russian language, good for long informal speech
 - **Rationale**: Prioritized quality over speed after comprehensive benchmarking
 
