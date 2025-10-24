@@ -8,9 +8,9 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 
 **Primary Goal**: Build a production-ready Telegram bot that transcribes voice messages locally without relying on paid APIs.
 
-**Current Status**: Phase 1 Implementation - Project setup complete, moving to core feature implementation.
+**Current Status**: Phase 4.5 Complete (2025-10-24) - Production model finalized, codebase ready for VPS deployment.
 
-**Date**: Started 2025-10-12
+**Date**: Started 2025-10-12, Production-ready 2025-10-24
 
 ## Functionality Scope ✅ DECIDED
 
@@ -54,11 +54,17 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 - **Language**: Python 3.11+
 - **Bot Framework**: python-telegram-bot v22.5
 - **Transcription**: faster-whisper v1.2.0 (4x faster than openai-whisper)
+  - **Production Model**: medium/int8/beam1 (finalized 2025-10-24)
+  - **Performance**: RTF ~0.3x (3x faster than audio)
+  - **Memory**: ~3.5GB RAM peak
+  - **Provider Architecture**: faster-whisper (local), OpenAI API (optional fallback)
 - **Database**: SQLAlchemy + SQLite (MVP) → PostgreSQL (production)
 - **Architecture**: Hybrid Queue (monolith with asyncio queue)
 - **Deployment**: Docker + VPS with polling → webhook
 
 **Rationale**: Optimizes for local processing, zero API costs, excellent Russian language support, and clear scaling path.
+
+**Key Decision (2025-10-24)**: After comprehensive benchmarking (30+ configurations, 3 audio samples), selected medium/int8/beam1 as production default. Prioritized quality over speed based on manual transcript analysis. Removed openai-whisper provider to reduce Docker image size by ~2-3GB.
 
 ## Use Case ✅ DEFINED
 
@@ -70,7 +76,7 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 **Expected Scale**:
 - MVP: 10-50 concurrent users
 - Production: 100-500 users
-- Resource: 4GB RAM VPS sufficient for MVP
+- Resource: 6GB+ RAM VPS recommended (4GB minimum, 3.5GB peak usage observed in benchmarks)
 
 **Privacy**: All processing local, no data sent to external APIs
 
@@ -83,20 +89,25 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 
 ## Success Criteria
 
-### MVP Success (Phase 1) ✅
+### MVP Success (Phases 1-4) ✅ COMPLETE (2025-10-24)
 - ✅ Project structure initialized
 - ✅ Dependencies defined and documented
 - ✅ Configuration system implemented
-- 🔄 Voice transcription working end-to-end
-- 🔄 Quota system functional
-- 🔄 Docker deployment ready
-- 🔄 Test coverage >70%
+- ✅ Voice transcription working end-to-end
+- ✅ Quota system functional
+- ✅ Docker deployment ready
+- ✅ Test coverage >80% (45 unit tests passing)
+- ✅ CI/CD pipeline operational
+- ✅ Production model finalized (medium/int8/beam1)
+- ✅ Provider architecture flexible (faster-whisper + OpenAI API)
+- ✅ Quality checks automated (mypy, ruff, black, pytest)
 
-### Production Success (Phase 2-3)
-- VPS deployment with webhook mode
-- PostgreSQL database migration
-- CI/CD pipeline operational
-- Monitoring and logging in place
+### Production Success (Phase 5) 🔄 READY TO START
+- Purchase VPS server (6GB+ RAM recommended)
+- Deploy via automated CI/CD pipeline
+- Configure monitoring and logging
+- Validate real-world performance metrics
+- Establish baseline for memory/CPU usage
 
 ## Constraints
 
@@ -107,10 +118,11 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 - CPU-bound processing requires thread pool isolation
 
 ### Resource Constraints
-- MVP target: 4GB RAM VPS
-- Model size: ~500MB for base model
+- MVP target: 6GB+ RAM VPS (4GB minimum, observed 3.5GB peak)
+- Model size: ~1.5GB for medium model
 - Concurrent processing limit: 3 (memory constraint)
 - Queue size: 100 tasks maximum
+- Docker image: ~2GB (optimized, removed torch/openai-whisper)
 
 ### Business Constraints
 - Zero budget for external APIs
@@ -119,24 +131,31 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 
 ## Implementation Timeline
 
-**Phase 1 (MVP)**: 6 days estimated
-- Day 1: Project setup ✅ + Database models 🔄
-- Day 2: Whisper integration + Queue system
-- Day 3: Bot handlers
-- Day 4-5: Integration & testing
-- Day 6: Docker deployment
+**Phase 1-4 (MVP)**: ✅ Complete (2025-10-12 to 2025-10-24, 12 days)
+- Day 1-2: Project setup + Database models ✅
+- Day 3-4: Whisper integration + Queue system ✅
+- Day 5-6: Bot handlers + Integration ✅
+- Day 7-8: Testing + CI/CD pipeline ✅
+- Day 9-10: Provider architecture + Flexible routing ✅
+- Day 11-12: Benchmark analysis + Model finalization ✅
 
-**Phase 2**: VPS deployment + webhook (1 week)
-**Phase 3**: Text processing pipeline (2 weeks)
-**Phase 4**: Payment integration (2 weeks)
+**Phase 5 (Deployment)**: 🔄 Ready to start
+- VPS purchase and initial configuration
+- Automated deployment via CI/CD
+- Production validation and monitoring
+
+**Phase 6+ (Future)**: Text processing pipeline, payment integration
 
 ## Risk Assessment
 
 ### Key Risks Identified
-1. ✅ **Whisper Performance** - Mitigated by faster-whisper selection
-2. ✅ **Resource Consumption** - Mitigated by semaphore limits (3 workers)
+1. ✅ **Whisper Performance** - Mitigated by faster-whisper selection & medium model benchmarking
+2. ✅ **Resource Consumption** - Mitigated by semaphore limits (3 workers), measured 3.5GB peak
 3. ✅ **Audio Format** - Mitigated by faster-whisper handling OGG/Opus natively
-4. 🔄 **Scale Concerns** - Migration path to Redis queue documented
+4. ✅ **Model Quality** - Resolved via comprehensive benchmarking (30+ configs, manual analysis)
+5. ✅ **Docker Image Size** - Optimized by removing torch/openai-whisper (~2-3GB savings)
+6. 🔄 **Scale Concerns** - Migration path to Redis queue documented, VPS sizing validated
+7. 🔄 **VPS Memory** - 6GB+ recommended based on 3.5GB observed peak + buffer
 
 ## Notes
 
@@ -144,4 +163,8 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 
 **Architecture Philosophy**: Start simple (monolith) but structure for growth. Queue abstraction allows future migration to Redis for horizontal scaling.
 
-**Next Major Milestone**: Complete database models and Whisper service integration to achieve first end-to-end transcription.
+**Model Selection Breakthrough (2025-10-24)**: After extensive benchmarking (30+ configurations across 3 audio samples), chose medium/int8/beam1 as production default. Manual transcript analysis revealed that faster configurations (tiny, small) had unacceptable quality degradation (22-78% similarity in worst cases). The medium model with greedy decoding (beam1) provides excellent Russian transcription quality at RTF ~0.3x (3x faster than audio). This decision prioritizes user experience (quality) over raw speed, while still being fast enough for production use.
+
+**Provider Architecture Evolution**: Initially supported 3 providers (faster-whisper, openai-whisper, OpenAI API). After benchmarking showed that faster-whisper medium outperformed openai-whisper in both speed and quality, removed openai-whisper provider entirely. This reduced Docker image size by ~2-3GB and simplified the codebase. Current architecture: faster-whisper (default, local) + OpenAI API (optional, fallback for future use).
+
+**Next Major Milestone**: VPS deployment and production validation. Code is production-ready, awaiting infrastructure purchase.
