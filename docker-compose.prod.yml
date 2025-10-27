@@ -24,6 +24,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    # DNS configuration for model downloads
+    dns:
+      - 198.18.18.18  # VPS host DNS
+      - 8.8.8.8       # Google DNS (fallback)
+      - 8.8.4.4       # Google DNS (fallback)
     # Resource limits for production (1GB VPS)
     # Note: Limits tuned for 1 vCPU / 1GB RAM VPS
     deploy:
