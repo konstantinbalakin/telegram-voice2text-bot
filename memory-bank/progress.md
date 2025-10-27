@@ -26,7 +26,7 @@
 - **Comprehensive benchmarking**: 30+ configurations tested across 3 audio samples
 - **Production default finalized**: `faster-whisper / medium / int8 / beam1`
   - RTF ~0.3x (3x faster than audio)
-  - ~3.5GB RAM peak
+  - ~2GB RAM peak (actual production testing, not 3.5GB as initially measured)
   - Excellent quality for Russian language
 - **Provider cleanup completed**: Removed openai-whisper (original Whisper)
   - Docker image size reduced ~2-3GB
@@ -40,29 +40,28 @@
 
 ## Outstanding Work
 
-### Phase 5: VPS Deployment (Ready to Start)
-1. **VPS Purchase** 🎯 Next Action
-   - Start with Russian VPS (cheaper, ~$5-10/month)
-   - Requirements: 6GB+ RAM (4GB minimum, 6GB recommended for buffer)
-   - CPU: 2+ cores
-   - Storage: 20GB+ (Docker images + models)
+### Phase 5: VPS Deployment (Ready to Start → IN PROGRESS)
+1. **VPS Purchase** ✅ COMPLETE
+   - VPS purchased: 1GB RAM (experimental, may need upgrade to 2GB)
+   - Provider: Russian VPS (~$3-5/month)
+   - Status: Clean Ubuntu, awaiting SSH configuration
 
-2. **Deployment Configuration**
-   - Configure GitHub secrets: `VPS_HOST`, `VPS_USER`, `VPS_SSH_KEY`
-   - Set Telegram bot token on VPS
-   - Trigger CI/CD deployment
-   - Verify automated deployment works end-to-end
+2. **VPS Configuration** 🎯 IN PROGRESS
+   - Configure SSH access (key-based authentication)
+   - Install Docker and dependencies
+   - Create project directory structure
+   - Add GitHub secrets for CD activation
 
-3. **Production Validation**
-   - Monitor real-world metrics (latency, memory usage, RTF)
-   - Track user satisfaction / error rates
-   - Adjust configuration if needed (e.g., switch to small model if memory tight)
-   - Document actual VPS resource usage
+3. **CD Pipeline Activation** ⏳ READY
+   - Update deploy workflow .env generation (base → medium)
+   - Verify docker-compose.prod.yml exists
+   - Test automated deployment
 
-4. **Future Enhancement** (Post-Initial Deployment)
-   - Migrate to European VPS when OpenAI API access needed
-   - Implement hybrid strategy (local + API fallback)
-   - Cost optimization based on real usage patterns
+4. **Production Validation** ⏳ PENDING
+   - Monitor actual resource usage on 1GB VPS
+   - Validate transcription quality in production
+   - Upgrade RAM if OOM occurs (quick via VPS panel)
+   - Document real-world performance metrics
 
 ## Branch Status
 
