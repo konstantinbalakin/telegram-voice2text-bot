@@ -119,6 +119,9 @@ jobs:
             # Update IMAGE_NAME in .env for docker-compose
             echo "IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:latest" >> .env
 
+            # Create required directories (if not exist)
+            mkdir -p data logs
+
             # Rolling update with zero downtime
             docker compose -f docker-compose.prod.yml up -d --no-deps bot
 
