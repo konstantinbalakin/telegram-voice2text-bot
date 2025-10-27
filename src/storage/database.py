@@ -74,12 +74,16 @@ async def init_db() -> None:
     import re
 
     # Extract path from database URL
-    # Examples: sqlite+aiosqlite:////app/data/bot.db or sqlite+aiosqlite:///./data/bot.db
+    # Examples: sqlite+aiosqlite:////app/data/bot.db or
+    # sqlite+aiosqlite:///./data/bot.db
     db_url = settings.database_url
-    match = re.search(r'sqlite\+aiosqlite:///(.*)', db_url)
+    match = re.search(r"sqlite\+aiosqlite:///(.*)", db_url)
     if match:
-        db_path = match.group(1).lstrip('/')  # Remove leading / for absolute paths
-        db_file = Path(db_path) if db_path.startswith('/') else Path(db_path).resolve()
+        db_path = match.group(1).lstrip("/")  # Remove leading / for absolute paths
+        if db_path.startswith("/"):
+            db_file = Path(db_path)
+        else:
+            db_file = Path(db_path).resolve()
         db_file.parent.mkdir(parents=True, exist_ok=True)
 
     engine = get_engine()
