@@ -24,16 +24,16 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-    # Resource limits for production
-    # Note: Adjust based on actual VPS resources (1GB-2GB RAM for medium model)
+    # Resource limits for production (1GB VPS)
+    # Note: Limits tuned for 1 vCPU / 1GB RAM VPS
     deploy:
       resources:
         limits:
-          cpus: '2.0'
-          memory: 2G
+          cpus: '0.95'
+          memory: 900M
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.15'
+          memory: 200M
 
   # Optional: PostgreSQL for production
   # Uncomment if you want to use PostgreSQL instead of SQLite
