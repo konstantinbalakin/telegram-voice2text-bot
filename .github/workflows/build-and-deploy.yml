@@ -122,6 +122,9 @@ jobs:
             # Create required directories (if not exist)
             mkdir -p data logs
 
+            # Set permissions for appuser inside container (UID 1000)
+            chown -R 1000:1000 data logs
+
             # Rolling update with zero downtime
             docker compose -f docker-compose.prod.yml up -d --no-deps bot
 
