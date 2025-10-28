@@ -29,13 +29,13 @@ services:
       - 198.18.18.18  # VPS host DNS
       - 8.8.8.8       # Google DNS (fallback)
       - 8.8.4.4       # Google DNS (fallback)
-    # Resource limits for production (1GB VPS)
-    # Note: Limits tuned for 1 vCPU / 1GB RAM VPS
+    # Resource limits for production (2GB VPS)
+    # Note: Limits tuned for 2 vCPU / 2GB RAM VPS
     deploy:
       resources:
         limits:
-          cpus: '0.95'
-          memory: 900M
+          cpus: '1.95'
+          memory: 1900M
         reservations:
           cpus: '0.15'
           memory: 200M
