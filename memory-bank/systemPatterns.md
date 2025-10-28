@@ -228,6 +228,8 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-10-20 | Provider architecture (Strategy pattern) | Enable flexible provider switching and benchmarking | 90% |
 | 2025-10-24 | Production model: medium/int8/beam1 | Comprehensive benchmarking showed best quality/speed balance | 95% |
 | 2025-10-24 | Remove openai-whisper provider | faster-whisper medium superior in all metrics, -2-3GB Docker image | 90% |
+| 2025-10-28 | Documentation reorganization | Hierarchical docs/ structure improves navigation and scalability | 90% |
+| 2025-10-29 | CI/CD must include optional deps | Poetry optional dependencies require explicit --extras in export | 95% |
 
 ## Design Patterns in Use
 
@@ -755,6 +757,14 @@ git push
 **Environment**: Uses GitHub "production" environment for secret management
 
 ### CI/CD Patterns
+
+**Pattern 0: Optional Dependencies in CI/CD** (added 2025-10-29)
+- **Issue**: Poetry optional dependencies not automatically included in exports
+- **Symptom**: Docker images built without optional packages, causing runtime failures
+- **Solution**: Explicitly include extras in all CI/CD poetry export commands
+- **Example**: `poetry export -f requirements.txt -o requirements.txt --extras "faster-whisper"`
+- **Critical**: Local scripts and CI/CD must use identical export commands
+- **Detection**: Compare Docker image sizes - missing deps result in significantly smaller images
 
 **Pattern 1: Fail Fast**
 - Tests run first, before code quality checks

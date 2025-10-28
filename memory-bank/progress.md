@@ -5,8 +5,10 @@
 - Phase 1–4: ✅ Complete (project setup → CI/CD)
 - **Phase 4.5**: ✅ Complete (2025-10-24) - Model finalization & provider cleanup
 - **Phase 5**: ✅ Complete (2025-10-27) - VPS deployment & production validation
-- **Phase 5.1**: ✅ Complete (2025-10-28) - CI/CD optimization
-- Current focus (2025-10-28): Performance optimization experiments next
+- **Phase 5.1**: ✅ Complete (2025-10-28) - CI/CD optimization & documentation reorganization
+- **Phase 5.2**: ✅ Complete (2025-10-29) - Critical production bug fix
+- **Production Status**: ✅ FULLY OPERATIONAL - Bot healthy and transcribing messages
+- Current focus (2025-10-29): Performance optimization experiments next
 
 ## Delivered Milestones
 
@@ -71,28 +73,72 @@
      - Model: medium/int8 loaded successfully
    - **Known Issue**: Performance 10x slower than local (swap bottleneck)
 
-### Phase 5.1: CI/CD Path Filtering ✅ COMPLETE (2025-10-28)
+### Phase 5.1: CI/CD Optimization & Documentation Reorganization ✅ COMPLETE (2025-10-28)
+
+#### CI/CD Path Filtering (#15)
 **Goal**: Optimize CI/CD to skip operations for documentation-only changes
 
 **Problem**: `paths-ignore` prevented workflows from running, causing missing required status checks and blocking PR merges for docs-only changes.
 
-**Solution** (#15):
+**Solution**:
 - Replaced `paths-ignore` with `tj-actions/changed-files@v45`
 - Added conditional execution to all expensive steps
 - Workflows always run (creates status checks) but skip heavy operations when only docs change
 
-**Files Ignored**:
-- `memory-bank/**`
-- `*.md` files
-- `docs/**`
-- `.claude/**`
-- `CLAUDE.md`
+**Files Ignored**: `memory-bank/**`, `*.md`, `docs/**`, `.claude/**`, `CLAUDE.md`
 
 **Impact**:
 - ✅ Required status checks always created
 - ✅ CI minutes saved on docs-only changes
 - ✅ No manual status check overrides needed
 - ✅ Maintains quality gates for code changes
+
+#### Documentation Reorganization (#18)
+**Goal**: Restructure documentation for better navigation and maintainability
+
+**Changes**:
+- Created hierarchical `docs/` structure (getting-started, development, deployment, research)
+- Added `docs/README.md` as central navigation index
+- Moved 9 documentation files to organized locations
+- Created 7 new comprehensive documentation files
+- Simplified requirements: merged `requirements-docker.txt` into single `requirements.txt`
+- Reduced README.md from 461 to 229 lines
+
+**Impact**:
+- ✅ Clear documentation hierarchy
+- ✅ Easier navigation for contributors
+- ✅ Reduced root directory clutter
+- ✅ Scalable structure for future growth
+- ✅ Single source of truth for dependencies
+
+### Phase 5.2: Critical Production Bug Fix ✅ COMPLETE (2025-10-29)
+
+#### faster-whisper Missing from Docker Image (#19)
+**Problem**: Production bot crashing on startup with `ModuleNotFoundError: No module named 'faster_whisper'`
+
+**Root Cause**:
+- `faster-whisper` marked as optional dependency in `pyproject.toml`
+- CI/CD workflow was exporting requirements WITHOUT `--extras "faster-whisper"` flag
+- Docker images built without faster-whisper package
+- Container entered infinite restart loop
+
+**Solution**:
+- Added `--extras "faster-whisper"` to poetry export command in build workflow
+- Single-line fix in `.github/workflows/build-and-deploy.yml`
+
+**Verification**:
+- Docker image size: 614 MB → 1.03 GB (correct with dependencies)
+- Container status: `Restarting` → `healthy`
+- FasterWhisper model loads successfully
+- Bot fully operational and responding to messages
+
+**Impact**:
+- ✅ Production bot fully functional
+- ✅ All transcription features working
+- ✅ Container stability achieved
+- ✅ Alignment between local and CI/CD environments
+
+**Key Lesson**: When using Poetry optional dependencies, CI/CD must explicitly include extras in export. Local development scripts were correct, but CI/CD workflow had diverged.
 
 ### Phase 5.5: Performance Optimization ⏳ NEXT (2025-10-27)
 **Goal**: Achieve RTF ~0.3x (match local benchmark performance)
@@ -128,6 +174,12 @@
 - CI/CD: Fully automated
 - Monitoring: Active
 - Health checks: Passing
+
+**Production Status**: ✅ OPERATIONAL (100%)
+- Bot: Healthy and responding
+- Transcription: Working correctly
+- Container: Stable (no crashes)
+- Dependencies: All included correctly
 
 **Performance Status**: ⚠️ Needs Optimization (30%)
 - Current: RTF 3.04x (3x slower than audio)
