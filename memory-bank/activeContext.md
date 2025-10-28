@@ -2,12 +2,13 @@
 
 ## Current Status
 
-**Phase**: Phase 5 - VPS Deployment COMPLETE, CI/CD Optimization COMPLETE
-**Date**: 2025-10-28
-**Stage**: Bot deployed and stable on 1GB VPS, CI/CD optimized for docs-only changes
+**Phase**: Phase 5.2 - Production Bug Fix COMPLETE ✅
+**Date**: 2025-10-29
+**Stage**: Bot fully operational on VPS after critical CI/CD fix
 **Branch**: `main`
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering
-**Next Phase**: RAM/CPU optimization experiments to achieve target RTF ~0.3x
+**Production Status**: ✅ HEALTHY - Bot running, transcribing messages successfully
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix
+**Next Phase**: Performance optimization experiments (RAM/CPU) to achieve target RTF ~0.3x
 
 ## Production Configuration Finalized ✅
 
@@ -30,7 +31,68 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 
 ## Recent Changes
 
-### CI/CD Path Filtering Optimization ✅ NEW (2025-10-28)
+### CRITICAL BUG FIX: faster-whisper Missing from Docker Image ✅ (2025-10-29)
+**Impact**: Production bot was crashing on startup with `ModuleNotFoundError: No module named 'faster_whisper'`
+
+**Root Cause Analysis**:
+1. In `pyproject.toml`, `faster-whisper` marked as `optional = true` dependency
+2. Local `requirements.txt` was correct (generated with `--extras "faster-whisper"`)
+3. **CI/CD workflow (.github/workflows/build-and-deploy.yml:51) was exporting requirements.txt WITHOUT `--extras` flag before Docker build**
+4. Docker images built without `faster-whisper` package
+5. Container crashed on startup when importing `faster_whisper` module
+
+**Symptoms**:
+- Container status: `Restarting (1)` - infinite restart loop
+- Docker image size: 614 MB (vs normal ~1 GB)
+- Logs: `ModuleNotFoundError: No module named 'faster_whisper'`
+
+**Fix** (#19):
+```diff
+- poetry export --without dev -f requirements.txt -o requirements.txt
++ poetry export --without dev -f requirements.txt -o requirements.txt --extras "faster-whisper"
+```
+
+**Verification**:
+- ✅ Build succeeded with correct dependencies
+- ✅ Docker image: 614 MB → 1.03 GB (correct size)
+- ✅ Container status: `healthy`
+- ✅ FasterWhisper model initialized successfully
+- ✅ Bot responding to messages
+
+**Key Lesson**: When using optional dependencies in Poetry, CI/CD must explicitly include extras in export command. Local development scripts were correct, but CI/CD workflow diverged.
+
+**Files Modified**: `.github/workflows/build-and-deploy.yml`
+
+### Documentation Reorganization ✅ (2025-10-28)
+**Achievement**: Complete documentation restructuring for better navigation and reduced redundancy
+
+**Changes**:
+- **New Structure**: Hierarchical `docs/` organization
+  - `docs/getting-started/` - Installation, configuration, quick start (3 new files)
+  - `docs/development/` - Architecture, testing, git workflow, dependencies (4 files)
+  - `docs/deployment/` - Docker, VPS setup, CI/CD (3 files)
+  - `docs/research/benchmarks/` - Performance benchmarks (5 files moved)
+- **New Documentation**:
+  - `docs/README.md` - Central navigation index
+  - `docs/deployment/docker.md` - Docker deployment guide
+  - `docs/development/architecture.md` - System architecture documentation
+  - `docs/getting-started/*` - Installation, configuration, quick start guides
+- **Files Moved**: DEPLOYMENT.md, VPS_SETUP.md, TESTING.md, WORKFLOW.md, DEPENDENCIES.md, benchmarks
+- **README.md**: Reduced from 461 to 229 lines, focused on project overview
+- **Requirements Simplification**: Merged `requirements-docker.txt` into single `requirements.txt`
+- **Removed**: `run.sh` (replaced with documentation)
+
+**Benefits**:
+- Clear hierarchy organized by audience (getting started → development → deployment)
+- Eliminated content overlap and redundancy
+- Easier navigation with central index
+- Reduced root directory clutter
+- Single source of truth for requirements
+- Scalable structure for future growth
+
+**Implementation Plan**: `memory-bank/plans/2025-10-29-docs-reorganization-plan.md`
+
+### CI/CD Path Filtering Optimization ✅ (2025-10-28)
 **Achievement**: Workflows now intelligently skip operations for documentation-only changes
 
 **Problem Solved**: Previously used `paths-ignore` which prevented workflows from running entirely for docs-only PRs. This caused GitHub's required status checks to never be created, blocking PR merges even when no code was changed.
