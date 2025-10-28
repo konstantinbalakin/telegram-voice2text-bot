@@ -3,12 +3,6 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    paths-ignore:
-      - 'memory-bank/**'
-      - '*.md'
-      - 'docs/**'
-      - '.claude/**'
-      - 'CLAUDE.md'
 
 jobs:
   test:
@@ -20,51 +14,73 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for changed-files
+
+      - name: Check changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          files_ignore: |
+            memory-bank/**
+            *.md
+            docs/**
+            .claude/**
+            CLAUDE.md
 
       - name: Set up Python
+        if: steps.changed-files.outputs.any_changed == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
       - name: Install Poetry
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: |
           curl -sSL https://install.python-poetry.org | python3 -
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Configure Poetry
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: |
           poetry config virtualenvs.create true
           poetry config virtualenvs.in-project true
 
       - name: Cache Poetry dependencies
+        if: steps.changed-files.outputs.any_changed == 'true'
         uses: actions/cache@v3
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: poetry install --no-interaction --no-ansi --extras "faster-whisper openai-api"
 
       - name: Run tests with coverage
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: |
           poetry run pytest --cov=src --cov-report=term --cov-report=xml
 
       - name: Type check with mypy
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: |
           poetry run mypy src/
 
       - name: Lint with ruff
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: |
           poetry run ruff check src/
 
       - name: Format check with black
+        if: steps.changed-files.outputs.any_changed == 'true'
         run: |
           poetry run black --check src/
 
       - name: Upload coverage reports
+        if: steps.changed-files.outputs.any_changed == 'true' && success()
         uses: codecov/codecov-action@v3
-        if: success()
         with:
           file: ./coverage.xml
           flags: unittests
