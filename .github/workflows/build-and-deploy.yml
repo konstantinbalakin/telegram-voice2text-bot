@@ -3,6 +3,12 @@ name: Build and Deploy
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'memory-bank/**'
+      - '*.md'
+      - 'docs/**'
+      - '.claude/**'
+      - 'CLAUDE.md'
 
 jobs:
   build:
