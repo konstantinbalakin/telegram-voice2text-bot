@@ -667,7 +667,7 @@ git push
 - Future developers see current state
 - Memory Bank ready for next Claude Code session
 
-### CI/CD Pipeline (implemented 2025-10-19)
+### CI/CD Pipeline (implemented 2025-10-19, optimized 2025-10-28)
 
 **Platform**: GitHub Actions
 
@@ -677,40 +677,65 @@ git push
 **Trigger**: On pull requests to `main` branch
 **Purpose**: Quality gates before code merge
 
+**Optimization** (2025-10-28): Conditional execution for docs-only changes
+- Uses `tj-actions/changed-files@v45` to detect file changes
+- Ignores: `memory-bank/**`, `*.md`, `docs/**`, `.claude/**`, `CLAUDE.md`
+- Workflows always run (creates required status checks) but skip expensive steps when only docs changed
+- Prevents PR merge blocking while saving CI minutes
+
 **Steps**:
-1. **Environment Setup**
+1. **Change Detection** (always runs)
+   - Checkout code with full history
+   - Run `changed-files` action to detect non-docs changes
+   - Set output `any_changed` for conditional steps
+
+2. **Environment Setup** (conditional: `if any_changed == 'true'`)
    - Ubuntu latest runner
    - Python 3.11
    - Poetry installation
    - Dependency caching (.venv cached by poetry.lock hash)
 
-2. **Testing**
+3. **Testing** (conditional)
    - `pytest` with coverage reporting
    - Coverage uploaded to Codecov
    - Dummy TELEGRAM_BOT_TOKEN for tests
 
-3. **Code Quality Checks** (all must pass):
+4. **Code Quality Checks** (conditional, all must pass):
    - `mypy src/` - Type checking (strict mode)
    - `ruff check src/` - Linting
    - `black --check src/` - Formatting verification
 
 **Fail Fast**: If any check fails, PR cannot be merged
 
+**Smart Skipping**: Docs-only PRs complete successfully without running expensive operations
+
 #### Build & Deploy Workflow (`.github/workflows/build-and-deploy.yml`)
 **Trigger**: On push to `main` branch (after PR merge)
 **Purpose**: Automated build and deployment
 
-**Build Stage**:
-1. Export Poetry dependencies → requirements.txt
-2. Set up Docker Buildx
-3. Login to Docker Hub (secrets: DOCKER_USERNAME, DOCKER_PASSWORD)
-4. Build Docker image with cache
-5. Push with two tags:
-   - `{username}/telegram-voice2text-bot:latest` (stable)
-   - `{username}/telegram-voice2text-bot:{commit-sha}` (versioned)
-6. Use GitHub Actions cache for Docker layers
+**Optimization** (2025-10-28): Conditional execution for docs-only merges
+- Same `changed-files` detection as CI workflow
+- Build job runs always but skips expensive steps when only docs changed
+- Deploy job conditionally runs only if code changes detected
+- Saves Docker Hub bandwidth and VPS resources for docs-only merges
 
-**Deploy Stage** (ready, awaiting VPS):
+**Build Stage** (conditional steps):
+1. **Change Detection** (always runs)
+   - Checkout code with full history
+   - Run `changed-files` action
+   - Export `any_changed` output for deploy job
+
+2. **Build Steps** (conditional: `if any_changed == 'true'`)
+   - Export Poetry dependencies → requirements.txt
+   - Set up Docker Buildx
+   - Login to Docker Hub (secrets: DOCKER_USERNAME, DOCKER_PASSWORD)
+   - Build Docker image with cache
+   - Push with two tags:
+     - `{username}/telegram-voice2text-bot:latest` (stable)
+     - `{username}/telegram-voice2text-bot:{commit-sha}` (versioned)
+   - Use GitHub Actions cache for Docker layers
+
+**Deploy Stage** (conditional: `if needs.build.outputs.any_changed == 'true'`):
 1. SSH to VPS server (secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY)
 2. Pull latest code (for docker-compose.yml updates)
 3. Create .env file with secrets from GitHub
@@ -719,6 +744,8 @@ git push
 6. Rolling update: `docker compose up -d --no-deps bot`
 7. Health check verification (15s wait)
 8. Cleanup old images (keep last 3)
+
+**Skip Logic**: If only documentation changed, deploy stage doesn't run at all
 
 **Zero Downtime Strategy**:
 - Use `--no-deps` flag for isolated bot service update
@@ -753,6 +780,12 @@ git push
 - Protected branch enforces PR workflow
 - CI checks must pass before merge
 - No manual merge to main possible
+
+**Pattern 6: Conditional Execution** (added 2025-10-28)
+- Workflows always run to create required status checks
+- Expensive operations skip when only docs changed
+- Uses `tj-actions/changed-files` for smart detection
+- Saves CI minutes and resources while maintaining merge requirements
 
 ### Deployment Automation Benefits
 
