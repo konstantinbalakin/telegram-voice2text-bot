@@ -2,6 +2,8 @@
 
 Telegram бот для транскрибации голосовых сообщений с использованием локальной модели Whisper.
 
+**Status**: ✅ Deployed on VPS (RTF 3.04x, optimization in progress)
+
 ## ✨ Особенности
 
 - ✅ Локальная транскрибация через faster-whisper (без API, без затрат)
