@@ -2,12 +2,12 @@
 
 ## Current Status
 
-**Phase**: Phase 5 - VPS Deployment and Production Validation
-**Date**: 2025-10-24
-**Stage**: VPS purchased (1GB RAM), preparing for SSH configuration and CD activation
-**Branch**: `feat/activate-vps-deployment` (PR #7)
-**Active Plan**: `plans/2025-10-24-vps-deployment-activation.md`
-**Latest Activities**: Memory requirements corrected (6GB → 2GB actual), VPS setup in progress
+**Phase**: Phase 5 - VPS Deployment COMPLETE, Performance Optimization IN PROGRESS
+**Date**: 2025-10-27
+**Stage**: Bot deployed and working on 1GB VPS with swap, performance experiments planned
+**Branch**: `main`
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup
+**Next Phase**: RAM/CPU optimization experiments to achieve target RTF ~0.3x
 
 ## Production Configuration Finalized ✅
 
@@ -28,19 +28,46 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 
 📄 Full analysis: `memory-bank/benchmarks/final-decision.md`
 
-## Recent Changes (2025-10-24)
+## Recent Changes (2025-10-27)
 
-### Memory Requirements Correction ✅ NEW
-- **Discovered**: Initial benchmark memory measurements (~3.5GB) were incorrect
-- **Actual**: Production testing shows ~2GB RAM peak for medium/int8 model
-- **Impact**: 1GB VPS experiment now more realistic (still may need 2GB)
-- **Documentation**: Updating all files with correct memory requirements
+### VPS Deployment SUCCESS ✅ NEW
+**Achievement**: Bot successfully deployed and operational on 1GB VPS
 
-### VPS Deployment Started 🔄 NEW
-- **VPS Purchased**: 1GB RAM, Russian provider (~$3-5/month)
-- **Strategy**: Start minimal, validate actual usage, scale if needed
-- **Status**: Clean Ubuntu, SSH not configured yet
-- **Next**: SSH setup, Docker installation, CD pipeline activation
+**Issues Resolved**:
+1. **Database Directory Issue** (#11)
+   - Error: `sqlite3.OperationalError: unable to open database file`
+   - Fix: Added directory creation in `init_db()` (src/storage/database.py:72-87)
+   - Handles volume mount replacing container directories
+
+2. **DNS Resolution Failure** (#12)
+   - Error: `failed to lookup address information` for transfer.xethub.hf.co
+   - Fix: Added DNS servers in docker-compose.prod.yml (VPS host + Google DNS)
+   - Enables HuggingFace model downloads
+
+3. **OOM Killer (Exit Code 137)**
+   - Issue: Container killed during model loading (medium requires ~1.3GB peak)
+   - Fix: Created 1GB swap file on VPS
+   - Result: **Bot stable and healthy**
+
+**Production Metrics** (2025-10-27):
+- **Memory Usage**: 516 MB RAM + 755 MB swap = **1.27 GB total**
+- **Model**: medium/int8 successfully loaded
+- **Status**: Container healthy, bot responding
+- **Performance**: RTF **3.04x** (9s audio → 27s processing)
+  - 10x slower than local benchmark (0.3x)
+  - Bottleneck: 1 vCPU + heavy swap usage
+
+### Performance Gap Identified 🎯
+**Current**: RTF 3.04x (3x slower than audio)
+**Target**: RTF 0.3x (3x faster than audio, as measured locally)
+**Gap**: **10x performance difference** vs local machine
+
+**Root Causes**:
+1. **Swap bottleneck**: 755 MB active swap usage severely degrades I/O
+2. **Limited CPU**: 1 vCPU vs multi-core local machine
+3. **Resource contention**: System using swap for model data access
+
+**Next Steps**: Systematically test different VPS configurations
 
 ### Provider Architecture Cleanup ✅
 - **Removed**: openai-whisper provider (original Whisper)
@@ -69,32 +96,57 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 - ✅ black: Code formatted
 - ✅ pytest: 45/45 tests passing
 
-## Active Plan Execution
+## Performance Optimization Plan (NEXT)
 
-**Following**: `plans/2025-10-24-vps-deployment-activation.md`
+**Objective**: Achieve RTF ~0.3x (target performance from local benchmarks)
 
-**Current Phase**: VPS Configuration (Phase 6 from plan)
+**Hypothesis**: Swap usage is primary bottleneck, need sufficient RAM for model
+
+**Experimental Strategy**:
+1. **Test 2GB RAM** (eliminate swap)
+   - Expected: RTF 0.5-1.0x (significant improvement)
+   - Cost: Minimal increase (~$1-2/month)
+
+2. **Test 2 vCPU** (if RAM alone insufficient)
+   - Expected: RTF 0.3-0.5x (parallel processing)
+   - Cost: Moderate increase (~$2-3/month)
+
+3. **Test 2GB RAM + 2 vCPU** (optimal config)
+   - Expected: RTF ~0.3x (match local performance)
+   - Cost: Combined increase (~$3-5/month total)
+
+**Testing Protocol**:
+- Send same test audio (9s sample) to each configuration
+- Measure RTF via logs (LOG_LEVEL=INFO)
+- Record memory/swap/CPU metrics
+- Document in Memory Bank
+
+**VPS Advantage**: Daily billing allows cost-effective experimentation
 
 **Completed**:
-- ✅ Documentation updates (memory corrections)
-- ✅ Production configuration (docker-compose.prod.yml, deploy workflow)
-- ✅ VPS_SETUP.md guide created (450+ lines, 8 phases)
-- ✅ Plan documented (845 lines)
-- ✅ PR #7 created with all changes
+- ✅ VPS deployment automation (CI/CD)
+- ✅ Database directory creation
+- ✅ DNS configuration
+- ✅ Swap file creation (1GB)
+- ✅ Bot operational and stable
+- ✅ Baseline metrics captured (RTF 3.04x, 1.27GB total memory)
 
-**Next Actions** (from plan):
-1. **Review PR #7**: Verify all changes are correct (5 min)
-2. **VPS SSH Configuration**: Follow VPS_SETUP.md Phases 1-2 (30 min)
-3. **Docker Installation**: Follow VPS_SETUP.md Phase 3 (10 min)
-4. **Project Structure**: Follow VPS_SETUP.md Phase 4 (5 min)
-5. **GitHub Secrets**: Follow VPS_SETUP.md Phase 5 (10 min)
-6. **Merge PR #7**: Trigger automated deployment
-7. **Monitor & Test**: Follow VPS_SETUP.md Phases 6-7 (30 min)
+## Current Infrastructure
 
-## Active Risks / Considerations
+**VPS Configuration**:
+- Provider: Russian VPS (~$3-5/month)
+- RAM: 1GB + 1GB swap
+- CPU: 1 vCPU
+- OS: Ubuntu (clean)
+- Docker: Installed and operational
 
-- **1GB RAM Risk**: May hit OOM during transcription (actual ~2GB needed), but VPS can be scaled quickly
-- **Initial Benchmark Error**: Memory measurements in benchmarks were inflated (~3.5GB vs ~2GB actual)
-- **Cold Start**: First transcription will be slow (model loading ~1.5GB); subsequent calls fast
-- **Long Audio**: 2+ minute audio will take 30-40s; consider UX messaging ("processing long audio...")
-- **Fallback Strategy**: OpenAI provider available but not configured by default (cost concerns)
+**Deployment**:
+- Method: Automated via GitHub Actions
+- Trigger: Push to main branch
+- Process: Build → Push to Docker Hub → SSH deploy
+- Status: Fully operational
+
+**Monitoring**:
+- Container: `docker stats` for resources
+- Logs: `docker logs telegram-voice2text-bot`
+- Health: Container health checks passing
