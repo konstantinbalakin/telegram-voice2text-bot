@@ -39,15 +39,14 @@ After modifying `pyproject.toml`, update the requirements files:
 ```
 
 This generates:
-- `requirements.txt` - Base dependencies only
-- `requirements-docker.txt` - Base + faster-whisper (recommended for Docker)
+- `requirements.txt` - Base + faster-whisper (for Docker)
 
 ### Dockerfile Configuration
 
-Update `Dockerfile` to use the appropriate requirements file:
+Update `Dockerfile` to use requirements.txt:
 
 ```dockerfile
-COPY requirements-docker.txt requirements.txt
+COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 ```
 

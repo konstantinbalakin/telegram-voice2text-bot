@@ -41,9 +41,18 @@ Located in `/memory-bank/`:
 
 Use the `/workflow:update-memory` slash command to update the Memory Bank.
 
+## Documentation
+
+**Main documentation** is located in `/docs/` directory:
+- `/docs/README.md` - Documentation index and navigation
+- `/docs/getting-started/` - Installation, configuration, quick start
+- `/docs/development/` - Architecture, testing, git workflow, dependencies
+- `/docs/deployment/` - Docker, VPS setup, CI/CD pipeline
+- `/docs/research/` - Performance benchmarks
+
 ## Git Workflow
 
-This project uses **Feature Branch Workflow** with protected main branch. See `.github/WORKFLOW.md` for complete details.
+This project uses **Feature Branch Workflow** with protected main branch. See `docs/development/git-workflow.md` for complete details.
 
 ### Quick Reference
 
@@ -80,17 +89,22 @@ gh pr create --title "feat: description" --body "..."
 
 ## Development Status
 
-⚠️ **Current Phase**: Phase 1 Complete (Project Setup)
+✅ **Current Status**: Production-ready, deployed on VPS
 
-**Next Steps**:
-1. Install dependencies: `poetry install`
-2. Create feature branch for database work
-3. Begin Phase 2: Database Models & Whisper Service
+**Completed Phases**:
+- Phase 1: Project Setup ✅
+- Phase 2: Core Functionality (Database, Whisper, Bot) ✅
+- Phase 3: Docker & CI/CD ✅
+- Phase 4: VPS Deployment ✅
 
-**Project Structure**: ✅ Ready
-**Dependencies**: ✅ Configured (not yet installed)
-**Configuration**: ✅ Implemented (src/config.py)
-**Entry Point**: ✅ Ready (src/main.py)
+**Project Status**:
+- **Bot**: ✅ Live on Telegram, handling users
+- **Transcription**: ✅ faster-whisper medium/int8 (RTF ~0.3x)
+- **Database**: ✅ SQLite (ready for PostgreSQL migration)
+- **Docker**: ✅ Automated builds and deployments
+- **CI/CD**: ✅ GitHub Actions pipeline active
+
+**Next Phase**: Advanced features (quotas, billing, summarization)
 
 ## Additional Instructions
 - @memory-bank/!memory-bank.md
