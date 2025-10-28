@@ -126,7 +126,7 @@ jobs:
             DEFAULT_DAILY_QUOTA_SECONDS=60
 
             # Logging
-            LOG_LEVEL=WARNING
+            LOG_LEVEL=INFO
 
             # Benchmark Mode
             BENCHMARK_MODE=false
