@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Copy requirements for Docker (base + faster-whisper)
-COPY requirements-docker.txt requirements.txt
+COPY requirements.txt requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     pip install --no-cache-dir -r requirements.txt \
  && find /usr/local/lib/python3.11 -type d -name "__pycache__" -exec rm -rf {} + \
