@@ -4,8 +4,9 @@
 - Project kickoff: 2025-10-12
 - Phase 1–4: ✅ Complete (project setup → CI/CD)
 - **Phase 4.5**: ✅ Complete (2025-10-24) - Model finalization & provider cleanup
-- Phase 5: ⏳ Ready to start (VPS acquisition + deployment)
-- Current focus (2025-10-24): Code ready, awaiting VPS purchase
+- **Phase 5**: ✅ Complete (2025-10-27) - VPS deployment & production validation
+- **Phase 5.1**: ✅ Complete (2025-10-28) - CI/CD optimization
+- Current focus (2025-10-28): Performance optimization experiments next
 
 ## Delivered Milestones
 
@@ -69,6 +70,29 @@
      - Performance: RTF 3.04x (9s audio → 27s processing)
      - Model: medium/int8 loaded successfully
    - **Known Issue**: Performance 10x slower than local (swap bottleneck)
+
+### Phase 5.1: CI/CD Path Filtering ✅ COMPLETE (2025-10-28)
+**Goal**: Optimize CI/CD to skip operations for documentation-only changes
+
+**Problem**: `paths-ignore` prevented workflows from running, causing missing required status checks and blocking PR merges for docs-only changes.
+
+**Solution** (#15):
+- Replaced `paths-ignore` with `tj-actions/changed-files@v45`
+- Added conditional execution to all expensive steps
+- Workflows always run (creates status checks) but skip heavy operations when only docs change
+
+**Files Ignored**:
+- `memory-bank/**`
+- `*.md` files
+- `docs/**`
+- `.claude/**`
+- `CLAUDE.md`
+
+**Impact**:
+- ✅ Required status checks always created
+- ✅ CI minutes saved on docs-only changes
+- ✅ No manual status check overrides needed
+- ✅ Maintains quality gates for code changes
 
 ### Phase 5.5: Performance Optimization ⏳ NEXT (2025-10-27)
 **Goal**: Achieve RTF ~0.3x (match local benchmark performance)

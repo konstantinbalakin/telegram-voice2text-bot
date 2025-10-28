@@ -247,6 +247,75 @@ VPS provider uses daily billing, allowing:
 3. ⏳ Troubleshooting playbook
 4. ⏳ Performance tuning guide
 
+## CI/CD Optimization (2025-10-28)
+
+### Issue #4: CI/CD Path Filtering and Required Status Checks
+**PR**: #15
+
+**Initial Problem**:
+- Used `paths-ignore` in workflows to skip CI/CD for docs-only changes
+- GitHub's required status checks prevented PR merge when workflow didn't run
+- Error: "Required status check 'test' is expected"
+- Even docs-only PRs couldn't merge without manual override
+
+**Root Cause**:
+- `paths-ignore` prevents workflow from running entirely
+- No workflow run = no status check created
+- Protected branch requires status check = merge blocked
+- GitHub doesn't distinguish between "skipped by filter" and "failed"
+
+**Solution**:
+Replaced `paths-ignore` with conditional execution pattern:
+
+**`.github/workflows/ci.yml`**:
+```yaml
+# Always checkout and detect changes
+- name: Check changed files
+  id: changed-files
+  uses: tj-actions/changed-files@v45
+  with:
+    files_ignore: |
+      memory-bank/**
+      *.md
+      docs/**
+      .claude/**
+      CLAUDE.md
+
+# Conditionally run expensive steps
+- name: Set up Python
+  if: steps.changed-files.outputs.any_changed == 'true'
+  ...
+```
+
+**`.github/workflows/build-and-deploy.yml`**:
+```yaml
+# Build job always runs, exports change detection
+jobs:
+  build:
+    outputs:
+      any_changed: ${{ steps.changed-files.outputs.any_changed }}
+    steps:
+      - name: Check changed files
+        ...
+      - name: Build Docker
+        if: steps.changed-files.outputs.any_changed == 'true'
+        ...
+
+  # Deploy job conditionally runs
+  deploy:
+    needs: build
+    if: needs.build.outputs.any_changed == 'true'
+    ...
+```
+
+**Result**:
+- ✅ Workflows always run (status checks created)
+- ✅ Expensive steps skipped for docs-only changes
+- ✅ PRs merge without manual intervention
+- ✅ CI minutes saved (no tests/build/deploy for docs)
+
+**Lesson**: For protected branches with required status checks, workflows must always run to create checks. Use conditional steps, not path filtering.
+
 ## Next Session Checklist
 
 When returning to optimize performance:

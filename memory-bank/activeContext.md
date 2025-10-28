@@ -2,11 +2,11 @@
 
 ## Current Status
 
-**Phase**: Phase 5 - VPS Deployment COMPLETE, Performance Optimization IN PROGRESS
-**Date**: 2025-10-27
-**Stage**: Bot deployed and working on 1GB VPS with swap, performance experiments planned
+**Phase**: Phase 5 - VPS Deployment COMPLETE, CI/CD Optimization COMPLETE
+**Date**: 2025-10-28
+**Stage**: Bot deployed and stable on 1GB VPS, CI/CD optimized for docs-only changes
 **Branch**: `main`
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering
 **Next Phase**: RAM/CPU optimization experiments to achieve target RTF ~0.3x
 
 ## Production Configuration Finalized ✅
@@ -28,9 +28,31 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 
 📄 Full analysis: `memory-bank/benchmarks/final-decision.md`
 
-## Recent Changes (2025-10-27)
+## Recent Changes
 
-### VPS Deployment SUCCESS ✅ NEW
+### CI/CD Path Filtering Optimization ✅ NEW (2025-10-28)
+**Achievement**: Workflows now intelligently skip operations for documentation-only changes
+
+**Problem Solved**: Previously used `paths-ignore` which prevented workflows from running entirely for docs-only PRs. This caused GitHub's required status checks to never be created, blocking PR merges even when no code was changed.
+
+**Solution Implemented** (#15):
+- Replaced `paths-ignore` with `tj-actions/changed-files@v45` action
+- Added conditional steps (`if: steps.changed-files.outputs.any_changed == 'true'`) to expensive operations
+- Ensured workflows always run (status checks created) but skip heavy steps when only docs change
+
+**Files Modified**:
+- `.github/workflows/ci.yml`: Conditional test execution, linting, type checking
+- `.github/workflows/build-and-deploy.yml`: Conditional build and deploy jobs
+
+**Benefits**:
+- ✅ Required status checks always created (no merge blocks)
+- ✅ CI minutes saved on docs-only changes (skips tests, build, deploy)
+- ✅ Workflows complete successfully even when skipping steps
+- ✅ Maintains code quality gates for actual code changes
+
+**Pattern**: Conditional execution with always-run workflows for required status checks
+
+### VPS Deployment SUCCESS ✅ (2025-10-27)
 **Achievement**: Bot successfully deployed and operational on 1GB VPS
 
 **Issues Resolved**:
