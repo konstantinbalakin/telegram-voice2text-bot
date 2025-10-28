@@ -40,45 +40,73 @@
 
 ## Outstanding Work
 
-### Phase 5: VPS Deployment (Ready to Start → IN PROGRESS)
-1. **VPS Purchase** ✅ COMPLETE
-   - VPS purchased: 1GB RAM (experimental, may need upgrade to 2GB)
+### Phase 5: VPS Deployment ✅ COMPLETE (2025-10-27)
+1. **VPS Purchase** ✅
+   - VPS purchased: 1GB RAM, 1 vCPU
    - Provider: Russian VPS (~$3-5/month)
-   - Status: Clean Ubuntu, awaiting SSH configuration
+   - SSH configured, Docker installed
 
-2. **VPS Configuration** 🎯 IN PROGRESS
-   - Configure SSH access (key-based authentication)
-   - Install Docker and dependencies
-   - Create project directory structure
-   - Add GitHub secrets for CD activation
+2. **VPS Configuration** ✅
+   - SSH key-based authentication operational
+   - Docker and docker-compose installed
+   - Project directory: `/opt/telegram-voice2text-bot`
+   - GitHub secrets configured (VPS_HOST, VPS_USER, VPS_SSH_KEY)
 
-3. **CD Pipeline Activation** ⏳ READY
-   - Update deploy workflow .env generation (base → medium)
-   - Verify docker-compose.prod.yml exists
-   - Test automated deployment
+3. **CD Pipeline Activation** ✅
+   - Automated deployment via GitHub Actions working
+   - Two-stage workflow: Build → Deploy
+   - Health checks and zero-downtime updates
+   - Image cleanup automation
 
-4. **Production Validation** ⏳ PENDING
-   - Monitor actual resource usage on 1GB VPS
-   - Validate transcription quality in production
-   - Upgrade RAM if OOM occurs (quick via VPS panel)
-   - Document real-world performance metrics
+4. **Production Validation** ✅
+   - Bot operational and stable on 1GB VPS
+   - **Critical Issues Resolved**:
+     - Database directory creation (#11)
+     - DNS configuration for HuggingFace (#12)
+     - OOM prevention via 1GB swap
+   - **Baseline Metrics Captured**:
+     - Memory: 516 MB RAM + 755 MB swap = 1.27 GB total
+     - Performance: RTF 3.04x (9s audio → 27s processing)
+     - Model: medium/int8 loaded successfully
+   - **Known Issue**: Performance 10x slower than local (swap bottleneck)
+
+### Phase 5.5: Performance Optimization ⏳ NEXT (2025-10-27)
+**Goal**: Achieve RTF ~0.3x (match local benchmark performance)
+
+**Completed Baseline**:
+- 1GB RAM + 1 vCPU: RTF 3.04x (3x slower than audio)
+- Heavy swap usage (755 MB) identified as bottleneck
+
+**Planned Experiments**:
+1. **2GB RAM**: Eliminate swap, measure improvement
+2. **2 vCPU**: Test CPU parallelization impact
+3. **2GB + 2 vCPU**: Optimal configuration (if budget allows)
+
+**Method**: Systematic A/B testing with same audio sample, document all findings
 
 ## Branch Status
 
-**Current**: `feature/flexible-whisper-providers`
-- Ready for final commit + PR
-- All changes tested and documented
-- Waiting for commit message approval
+**Current**: `main`
+- All development merged
+- Production deployment operational
+- Bot live and responding to messages
 
 ## Success Metrics
 
 **Technical Readiness**: ✅ 100%
 - Code: Production-ready
-- Tests: All passing
-- Documentation: Up-to-date
-- Docker: Optimized
+- Tests: All 45 passing
+- Documentation: Current
+- Docker: Optimized and deployed
 
-**Deployment Readiness**: ⏳ 80%
-- Infrastructure: Pending VPS purchase
-- CI/CD: Configured, tested locally
-- Monitoring: Plan in place
+**Deployment Readiness**: ✅ 100%
+- Infrastructure: VPS operational
+- CI/CD: Fully automated
+- Monitoring: Active
+- Health checks: Passing
+
+**Performance Status**: ⚠️ Needs Optimization (30%)
+- Current: RTF 3.04x (3x slower than audio)
+- Target: RTF 0.3x (3x faster than audio)
+- Bottleneck: Swap usage (755 MB active)
+- Next: RAM/CPU experiments
