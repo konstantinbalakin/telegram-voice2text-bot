@@ -107,8 +107,7 @@ async def init_db() -> None:
 
         if not alembic_ini.exists():
             logger.warning(
-                f"⚠️  Alembic config not found at {alembic_ini}. "
-                "Cannot verify migration status."
+                f"⚠️  Alembic config not found at {alembic_ini}. " "Cannot verify migration status."
             )
             return
 
@@ -133,9 +132,7 @@ async def init_db() -> None:
                 "❌ Database not initialized! No migration applied.\n"
                 "   Run: alembic upgrade head"
             )
-            raise RuntimeError(
-                "Database not initialized. Run 'alembic upgrade head' first."
-            )
+            raise RuntimeError("Database not initialized. Run 'alembic upgrade head' first.")
         elif current_revision != head_revision:
             logger.error(
                 f"❌ Database schema is out of date!\n"
