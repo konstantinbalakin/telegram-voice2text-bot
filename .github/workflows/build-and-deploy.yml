@@ -197,26 +197,49 @@ jobs:
 
             # Check current migration status
             echo "📊 Current database revision:"
-            docker run --rm \
+            CURRENT_REV=$(docker run --rm \
               -v $(pwd)/data:/app/data \
               -v $(pwd)/alembic:/app/alembic \
               -v $(pwd)/alembic.ini:/app/alembic.ini \
               -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
               -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
               ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
-              alembic current || echo "No revision found (fresh database)"
+              alembic current 2>&1 || true)
+
+            echo "$CURRENT_REV"
+
+            # Check if database exists but has no alembic version
+            if [ -f "data/bot.db" ] && echo "$CURRENT_REV" | grep -q "Can't locate revision"; then
+              echo "⚠️  Existing database detected without migration history"
+              echo "🔖 Stamping database to initial revision 7751fc657749..."
+
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+                alembic stamp 7751fc657749
+
+              echo "✅ Database stamped to initial revision"
+              echo "⬆️  Now applying new migrations..."
+            fi
 
             # Run migrations
             echo "⬆️  Applying migrations..."
-            if docker run --rm \
+            MIGRATION_OUTPUT=$(docker run --rm \
               -v $(pwd)/data:/app/data \
               -v $(pwd)/alembic:/app/alembic \
               -v $(pwd)/alembic.ini:/app/alembic.ini \
               -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
               -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
               ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
-              alembic upgrade head; then
+              alembic upgrade head 2>&1) || MIGRATION_FAILED=1
 
+            echo "$MIGRATION_OUTPUT"
+
+            if [ -z "$MIGRATION_FAILED" ]; then
               # Success - show new revision
               echo "✅ Migration successful!"
               echo "📊 New database revision:"
@@ -229,9 +252,9 @@ jobs:
                 ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
                 alembic current
 
-            else
-              # Migration failed - attempt rollback
-              echo "❌ Migration failed! Attempting rollback..."
+            elif echo "$MIGRATION_OUTPUT" | grep -q "table .* already exists"; then
+              # Database has tables but no alembic version - stamp to initial revision
+              echo "⚠️  Tables already exist - stamping database to initial revision 7751fc657749..."
 
               docker run --rm \
                 -v $(pwd)/data:/app/data \
@@ -240,10 +263,23 @@ jobs:
                 -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
                 -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
                 ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
-                alembic downgrade -1
+                alembic stamp 7751fc657749
 
-              echo "⚠️  Rollback completed. Database reverted to previous state."
-              echo "📊 Current database revision:"
+              echo "✅ Database stamped to initial revision"
+              echo "⬆️  Now applying new migrations..."
+
+              # Try upgrade again
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+                alembic upgrade head
+
+              echo "✅ Migration successful!"
+              echo "📊 New database revision:"
               docker run --rm \
                 -v $(pwd)/data:/app/data \
                 -v $(pwd)/alembic:/app/alembic \
@@ -252,6 +288,21 @@ jobs:
                 -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
                 ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
                 alembic current
+
+            else
+              # Real migration failure - attempt rollback
+              echo "❌ Migration failed with unexpected error!"
+
+              # Try to rollback
+              echo "🔄 Attempting rollback..."
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+                alembic downgrade -1 2>&1 || echo "Rollback failed (may not be at any revision)"
 
               echo "❌ Deployment aborted due to migration failure"
               exit 1
