@@ -8,7 +8,7 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 
 **Primary Goal**: Build a production-ready Telegram bot that transcribes voice messages locally without relying on paid APIs.
 
-**Current Status**: Phase 5 Complete (2025-10-27) - Bot deployed and operational on VPS. Performance optimization experiments planned.
+**Current Status**: Phase 6.6 Complete (2025-10-29) - Bot deployed and operational on VPS with queue management, database migrations, and optimized limits. Production monitoring ongoing.
 
 **Date**: Started 2025-10-12, Production-ready 2025-10-24
 
@@ -28,10 +28,10 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
    - Usage tracking and history
 
 3. **Async Processing** - Performance
-   - Queue-based architecture (up to 100 tasks)
-   - Concurrent processing (3 simultaneous transcriptions)
-   - Status updates during processing
-   - Graceful backpressure handling
+   - Queue-based architecture (up to 10 tasks, optimized for 1GB VPS)
+   - Sequential processing (1 transcription at a time for stability)
+   - Live progress updates with visual progress bar (every 5 seconds)
+   - Graceful backpressure handling with queue position feedback
 
 ### Future Features (Post-MVP)
 1. **Text Processing Pipeline**
@@ -102,30 +102,35 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 - ✅ Provider architecture flexible (faster-whisper + OpenAI API)
 - ✅ Quality checks automated (mypy, ruff, black, pytest)
 
-### Production Success (Phase 5) ✅ COMPLETE (2025-10-27)
+### Production Success (Phase 5-6) ✅ COMPLETE (2025-10-27 to 2025-10-29)
 - ✅ VPS server deployed (1GB RAM + 1GB swap, 1 vCPU)
 - ✅ SSH and Docker operational
 - ✅ Automated CI/CD deployment working
 - ✅ Bot stable and responding to messages
-- ✅ Critical issues resolved: database, DNS, OOM
-- ⚠️ **Performance below target**: RTF 3.04x vs target 0.3x
-- **Next Phase**: Performance optimization experiments (RAM/CPU scaling)
+- ✅ Critical issues resolved: database, DNS, OOM, missing dependencies
+- ✅ Queue-based concurrency control deployed
+- ✅ Database migration system automated
+- ✅ Production limits optimized (queue=10, workers=1, duration=120s)
+- ✅ Live progress feedback operational
+- ⚠️ **Performance**: RTF 3.04x (acceptable with progress feedback)
+- **Next**: Production monitoring and optimization if needed
 
 ## Constraints
 
 ### Technical Constraints
 - Must work with Telegram Bot API (rate limits, file size limits)
 - Voice format: OGG/Opus (Telegram standard)
-- Max voice duration: 5 minutes (300 seconds)
+- Max voice duration: 2 minutes (120 seconds, enforced since 2025-10-29)
 - CPU-bound processing requires thread pool isolation
+- Database migrations automated via Alembic (since Phase 6.5)
 
 ### Resource Constraints
-- MVP target: 2-3GB RAM VPS (2GB minimum, observed ~2GB peak in production)
+- Production VPS: 1GB RAM + 1GB swap, 1 vCPU (operational since 2025-10-27)
 - Model size: ~1.5GB for medium model
-- Concurrent processing limit: 3 (memory constraint)
-- Queue size: 100 tasks maximum
-- Docker image: ~2GB (optimized, removed torch/openai-whisper)
-- Note: Initial benchmarks overestimated memory (3.5GB); actual production usage ~2GB
+- Sequential processing: 1 transcription at a time (prevents resource exhaustion)
+- Queue size: 10 tasks maximum (optimized for 1GB VPS, 2025-10-29)
+- Docker image: ~1GB (optimized, removed torch/openai-whisper)
+- Actual memory usage: 516 MB RAM + 755 MB swap = ~1.3GB total peak
 
 ### Business Constraints
 - Zero budget for external APIs
@@ -142,12 +147,15 @@ Create a Telegram bot for transcribing voice messages using local Whisper AI mod
 - Day 9-10: Provider architecture + Flexible routing ✅
 - Day 11-12: Benchmark analysis + Model finalization ✅
 
-**Phase 5 (Deployment)**: 🔄 Ready to start
-- VPS purchase and initial configuration
-- Automated deployment via CI/CD
-- Production validation and monitoring
+**Phase 5 (Deployment)**: ✅ Complete (2025-10-27 to 2025-10-29)
+- VPS purchase and initial configuration ✅
+- Automated deployment via CI/CD ✅
+- Production validation and monitoring ✅
+- Queue-based concurrency control ✅ (Phase 6)
+- Database migration system ✅ (Phase 6.5)
+- Production limit optimization ✅ (Phase 6.6)
 
-**Phase 6+ (Future)**: Text processing pipeline, payment integration
+**Phase 7+ (Future)**: Text processing pipeline, payment integration, performance optimization
 
 ## Risk Assessment
 

@@ -17,6 +17,7 @@ New to the project? Start here:
 For contributors and developers:
 
 - **[Architecture](development/architecture.md)** - System design and components
+- **[Database Migrations](development/database-migrations.md)** - Creating and testing migrations
 - **[Dependencies](development/dependencies.md)** - Managing Python packages
 - **[Testing](development/testing.md)** - Local testing and benchmarks
 - **[Git Workflow](development/git-workflow.md)** - Branching and PR process
@@ -28,6 +29,7 @@ Deploy to production:
 - **[Docker Guide](deployment/docker.md)** - Containerized deployment
 - **[VPS Setup](deployment/vps-setup.md)** - Deploy to VPS server
 - **[CI/CD Pipeline](deployment/cicd.md)** - Automated deployment with GitHub Actions
+- **[Migration Runbook](deployment/migration-runbook.md)** - Database migration operations
 
 ### 📊 Research
 
@@ -53,6 +55,7 @@ Performance and benchmarking:
 2. Read [Architecture](development/architecture.md) - Understand the system
 3. Follow [Git Workflow](development/git-workflow.md) - Make changes
 4. Run [Tests](development/testing.md) - Validate your changes
+5. [Create Migrations](development/database-migrations.md) - If changing database schema
 
 ### I'm deploying to Production
 
@@ -75,6 +78,7 @@ docs/
 │
 ├── development/                   # For developers
 │   ├── architecture.md            # System architecture
+│   ├── database-migrations.md     # Database migrations
 │   ├── dependencies.md            # Package management
 │   ├── testing.md                 # Testing guide
 │   └── git-workflow.md            # Git and PR workflow
@@ -82,7 +86,8 @@ docs/
 ├── deployment/                    # For operators
 │   ├── docker.md                  # Docker deployment
 │   ├── vps-setup.md               # VPS setup guide
-│   └── cicd.md                    # CI/CD pipeline
+│   ├── cicd.md                    # CI/CD pipeline
+│   └── migration-runbook.md       # Migration operations
 │
 └── research/                      # Performance data
     └── benchmarks/                # Model benchmarks

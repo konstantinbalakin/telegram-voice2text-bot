@@ -8,8 +8,10 @@
 - **Phase 5.1**: ✅ Complete (2025-10-28) - CI/CD optimization & documentation reorganization
 - **Phase 5.2**: ✅ Complete (2025-10-29) - Critical production bug fix
 - **Phase 6**: ✅ Complete (2025-10-29) - Queue-based concurrency control
-- **Production Status**: ⏳ PENDING - Queue system ready for testing
-- Current focus (2025-10-29): Local testing → Production deployment
+- **Phase 6.5**: ✅ Complete (2025-10-29) - Database migration system
+- **Phase 6.6**: ✅ Complete (2025-10-29) - Production limit optimization
+- **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
+- Current focus (2025-10-30): Production monitoring & documentation updates
 
 ## Delivered Milestones
 
@@ -186,7 +188,7 @@
 
 **Phase 5: Configuration**
 - `max_voice_duration_seconds`: 300 → **120** (2 minutes)
-- `max_queue_size`: 100 → **50**
+- `max_queue_size`: 100 → 50 → **10** (final, optimized Phase 6.6)
 - `max_concurrent_workers`: 3 → **1** (sequential processing)
 - Progress tracking: interval=5s, rtf=0.3
 
@@ -223,17 +225,19 @@
 - `src/config.py` - Queue and progress settings
 - `src/main.py` - QueueManager initialization
 
-**Testing Status**:
+**Testing & Deployment Status**:
 - ✅ Code compilation successful
 - ✅ Syntax validation passed
-- ⏳ Local testing pending
-- ⏳ Production deployment pending
+- ✅ Merged to main branch (PR #21)
+- ✅ Production deployment via CI/CD
+- ✅ Database migration applied successfully
+- ✅ Bot operational with queue system
 
-**Configuration Required**:
+**Production Configuration** (deployed):
 ```bash
-# Add to .env before deployment
+# Production .env values
 MAX_VOICE_DURATION_SECONDS=120
-MAX_QUEUE_SIZE=50
+MAX_QUEUE_SIZE=10  # Optimized from 50 → 10 in Phase 6.6
 MAX_CONCURRENT_WORKERS=1
 PROGRESS_UPDATE_INTERVAL=5
 PROGRESS_RTF=0.3
@@ -245,17 +249,153 @@ PROGRESS_RTF=0.3
 - ✅ Live progress improves UX dramatically
 - ✅ Queue ensures FIFO fairness
 - ✅ Privacy-friendly analytics
-- ✅ Sequential processing (max_concurrent=1) prevents resource exhaustion on 2 CPU / 2 GB RAM
+- ✅ Sequential processing (max_concurrent=1) prevents resource exhaustion on 1 GB RAM / 1 vCPU VPS
 
 **Key Pattern Established**: Queue-based request management with live progress feedback is essential for resource-constrained deployments. Sequential processing prevents crashes while maintaining acceptable UX through visual feedback.
 
-**Branch**: `claude/optimize-bot-performance-011CUbRo6dFSvNks9ZkKv7e7`
+**Branch**: `main` (merged)
 **Documentation**: `memory-bank/plans/2025-10-29-queue-based-concurrency-plan.md`
 
-### Phase 6.5: Performance Optimization ⏳ DEFERRED (2025-10-29)
+### Phase 6.5: Database Migration System ✅ COMPLETE (2025-10-29)
+**Achievement**: Seamless database migration deployment system
+
+**Problem Solved**: Manual migrations are error-prone and block deployments. Need automated, tested, reversible migrations in CI/CD.
+
+**Implementation** (commit 5c4cc5a, PR #21):
+
+**1. Automated Migration Testing in CI**
+- New `test-migrations` job in `.github/workflows/build-and-deploy.yml`
+- Tests fresh database migration (from scratch)
+- Tests upgrade/downgrade cycle for reversibility
+- Tests application startup after migration
+- Runs in parallel with build job
+
+**2. Production Migration Job**
+- New `migrate` job executes between build and deploy stages
+- SSH to VPS and applies migrations before code update
+- Automatic rollback on migration failure (`alembic downgrade -1`)
+- Stops deployment if migration fails
+- Shows migration status before/after
+
+**3. Health Check System**
+- New `src/health_check.py` script (190 lines)
+- Checks database connectivity
+- Verifies schema version matches HEAD
+- Used by docker-compose health check
+- Prevents unhealthy containers from running
+
+**4. Updated init_db() Function** (`src/storage/database.py`)
+- Removed `create_all()` (doesn't work with migrations)
+- Added migration version verification
+- Logs current schema revision on startup
+- Raises error if schema out of date
+- Prevents bot from starting with wrong schema
+
+**5. Comprehensive Documentation**
+- `docs/development/database-migrations.md` (363 lines) - Developer guide
+  - Creating and testing migrations
+  - Best practices for SQLite compatibility
+  - Troubleshooting common issues
+- `docs/deployment/migration-runbook.md` (421 lines) - Operations runbook
+  - Manual migration procedures
+  - Rollback procedures
+  - Emergency procedures
+  - Monitoring and verification
+- `docs/deployment/vps-setup.md` - Added Phase 6.5 section (161 lines total)
+
+**Deployment Flow**:
+```
+push to main
+  ↓
+test-migrations (parallel with build)
+  ↓
+build (Docker image)
+  ↓
+migrate (apply migrations on VPS via SSH)
+  ↓ (if success)
+deploy (restart bot with new code)
+  ↓
+health check (verify schema version)
+```
+
+**Rollback Strategy**:
+- Automatic: `alembic downgrade -1` if migration fails
+- Deployment stops, bot continues on old version
+- Manual: Follow migration-runbook.md procedures
+
+**Testing**:
+- ✅ Health check script tested locally
+- ✅ Migration test job validated in CI
+- ✅ Production migration applied successfully (a9f3b2c8d1e4)
+- ✅ Rollback logic verified
+
+**Files Created**:
+- `src/health_check.py`
+- `docs/development/database-migrations.md`
+- `docs/deployment/migration-runbook.md`
+
+**Files Modified**:
+- `.github/workflows/build-and-deploy.yml` - Added test-migrations and migrate jobs
+- `src/storage/database.py` - Updated init_db() with version verification
+- `docker-compose.prod.yml` - Use health_check.py
+- `docs/deployment/vps-setup.md` - Added Phase 6.5
+
+**Impact**:
+- ✅ Zero-downtime deployments with schema changes
+- ✅ Automatic migration testing prevents production failures
+- ✅ Rollback capability for failed migrations
+- ✅ Health checks ensure schema consistency
+- ✅ Developer and operator documentation complete
+
+**Key Pattern Established**: Automated migration testing and deployment with rollback support is essential for production database changes. Health checks prevent schema version mismatches.
+
+**Status**: ✅ Deployed and operational since 2025-10-29
+
+### Phase 6.6: Production Limit Optimization ✅ COMPLETE (2025-10-29)
+**Achievement**: Fine-tuned queue limits for 1GB VPS constraints
+
+**Problem**: Initial queue size of 50 may be too large for 1GB RAM VPS. Need to optimize for conservative resource usage.
+
+**Implementation** (PR #25):
+
+**Changes**:
+- `MAX_QUEUE_SIZE`: 100 (initial) → 50 (Phase 6) → **10** (final)
+- `MAX_CONCURRENT_WORKERS`: **1** (maintained, sequential processing)
+- `MAX_VOICE_DURATION_SECONDS`: **120** (maintained, 2 minutes)
+
+**Rationale**:
+- Conservative approach for 1GB RAM + 1 vCPU VPS
+- Prevents memory exhaustion with sequential processing
+- Queue size of 10 provides adequate buffering (10 × 2min = 20min max wait)
+- Reduces memory overhead from queued requests
+- Maintains acceptable UX through progress feedback
+
+**Deployment**:
+- Updated `.github/workflows/build-and-deploy.yml` environment variables
+- Automated via CI/CD pipeline
+- No code changes, configuration only
+
+**Testing**:
+- ⏳ Real-world usage monitoring ongoing
+- ⏳ Queue depth tracking via application logs
+
+**Files Modified**:
+- `.github/workflows/build-and-deploy.yml` (lines 355-357)
+
+**Impact**:
+- ✅ Reduced memory footprint for queued requests
+- ✅ More conservative resource management
+- ✅ Still provides adequate buffering for concurrent users
+- ✅ Easy to adjust based on monitoring data
+
+**Next**: Monitor queue depth metrics to validate if 10 is sufficient or if adjustment needed
+
+**Status**: ✅ Deployed and operational since 2025-10-29
+
+### Phase 6.7: Performance Optimization ⏳ DEFERRED
 **Goal**: Achieve RTF ~0.3x (match local benchmark performance)
 
-**Completed Baseline**:
+**Current Baseline**:
 - 1GB RAM + 1 vCPU: RTF 3.04x (3x slower than audio)
 - Heavy swap usage (755 MB) identified as bottleneck
 
@@ -265,6 +405,8 @@ PROGRESS_RTF=0.3
 3. **2GB + 2 vCPU**: Optimal configuration (if budget allows)
 
 **Method**: Systematic A/B testing with same audio sample, document all findings
+
+**Priority**: LOW - Current performance acceptable with progress feedback. Only pursue if user feedback indicates wait times are problematic.
 
 ## Branch Status
 
@@ -289,12 +431,25 @@ PROGRESS_RTF=0.3
 
 **Production Status**: ✅ OPERATIONAL (100%)
 - Bot: Healthy and responding
-- Transcription: Working correctly
-- Container: Stable (no crashes)
+- Transcription: Working correctly with queue management
+- Container: Stable with health checks
 - Dependencies: All included correctly
+- Database: Migrations automated and operational
+- Queue System: Sequential processing with progress feedback
+- Configuration: Optimized for 1GB RAM / 1 vCPU VPS
 
-**Performance Status**: ⚠️ Needs Optimization (30%)
-- Current: RTF 3.04x (3x slower than audio)
-- Target: RTF 0.3x (3x faster than audio)
-- Bottleneck: Swap usage (755 MB active)
-- Next: RAM/CPU experiments
+**Feature Status**: ✅ COMPLETE (100%)
+- Core transcription: ✅ Working
+- Queue management: ✅ Deployed (max 10 requests)
+- Progress tracking: ✅ Live updates every 5s
+- Duration limits: ✅ 120s max
+- Database migrations: ✅ Automated in CI/CD
+- Health checks: ✅ Schema version verification
+- CI/CD: ✅ Full automation with testing
+
+**Performance Status**: ⚠️ Acceptable with Progress Feedback (70%)
+- Current: RTF 3.04x (3x slower than audio, sequential processing)
+- Target: RTF 0.3x (3x faster than audio, aspirational)
+- Bottleneck: 1 vCPU + swap usage
+- User Experience: ✅ Acceptable with live progress bar
+- Next: Monitor real-world usage, optimize only if needed

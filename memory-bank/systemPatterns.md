@@ -230,10 +230,13 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-10-24 | Remove openai-whisper provider | faster-whisper medium superior in all metrics, -2-3GB Docker image | 90% |
 | 2025-10-28 | Documentation reorganization | Hierarchical docs/ structure improves navigation and scalability | 90% |
 | 2025-10-29 | CI/CD must include optional deps | Poetry optional dependencies require explicit --extras in export | 95% |
-| 2025-10-29 | Queue-based concurrency control | Prevent crashes on 2 CPU / 2 GB VPS, sequential processing with live progress | 95% |
+| 2025-10-29 | Queue-based concurrency control | Prevent crashes on 1 GB RAM / 1 vCPU VPS, sequential processing with live progress | 95% |
 | 2025-10-29 | Duration limit 120s (2 min) | Balance resource protection with user needs (solves 4-min crash) | 90% |
 | 2025-10-29 | Privacy: transcription_length only | Store analytics without sensitive text data | 85% |
 | 2025-10-29 | Sequential processing (max_concurrent=1) | Conservative approach for resource-constrained deployment | 90% |
+| 2025-10-29 | Automated database migrations | Test migrations in CI, apply before deploy, rollback on failure | 95% |
+| 2025-10-29 | Health check with schema verification | Prevent bot startup with outdated schema, docker health checks | 90% |
+| 2025-10-29 | Queue size optimization (10 max) | Conservative limit for 1GB VPS, adequate buffering with progress feedback | 85% |
 
 ## Design Patterns in Use
 
