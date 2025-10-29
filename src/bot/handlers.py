@@ -161,7 +161,7 @@ class BotHandlers:
     async def voice_message_handler(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Handle voice messages.
+        """Handle voice messages with queue management.
 
         Args:
             update: Telegram update object
@@ -175,18 +175,47 @@ class BotHandlers:
         if not voice:
             return
 
-        # Send processing message
-        processing_msg = await update.message.reply_text("Обрабатываю голосовое сообщение...")
+        # Convert duration to int early for validation
+        duration_seconds = 0
+        if voice.duration:
+            if isinstance(voice.duration, timedelta):
+                duration_seconds = int(voice.duration.total_seconds())
+            else:
+                duration_seconds = int(voice.duration)
+
+        # 1. VALIDATE DURATION
+        if duration_seconds > settings.max_voice_duration_seconds:
+            await update.message.reply_text(
+                f"⚠️ Максимальная длительность: {settings.max_voice_duration_seconds}с "
+                f"({settings.max_voice_duration_seconds // 60} мин)\n\n"
+                f"Ваш файл: {duration_seconds}с ({duration_seconds // 60} мин {duration_seconds % 60}с)"
+            )
+            logger.warning(
+                f"User {user.id} rejected: duration {duration_seconds}s > {settings.max_voice_duration_seconds}s"
+            )
+            return
+
+        # 2. CHECK QUEUE CAPACITY
+        queue_depth = self.queue_manager.get_queue_depth()
+        if queue_depth >= settings.max_queue_size:
+            await update.message.reply_text(
+                "⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.\n\n"
+                f"В очереди сейчас: {queue_depth} запросов"
+            )
+            logger.warning(f"User {user.id} rejected: queue full ({queue_depth}/{settings.max_queue_size})")
+            return
+
+        # Send initial status
+        status_msg = await update.message.reply_text("📥 Загружаю файл...")
 
         try:
             async with get_session() as session:
                 user_repo = UserRepository(session)
                 usage_repo = UsageRepository(session)
 
-                # Get user from database
+                # Get or create user
                 db_user = await user_repo.get_by_telegram_id(user.id)
                 if not db_user:
-                    # Create user if not exists
                     db_user = await user_repo.create(
                         telegram_id=user.id,
                         username=user.username,
@@ -194,30 +223,39 @@ class BotHandlers:
                         last_name=user.last_name,
                     )
 
-                # Download voice file
-                voice_file = await context.bot.get_file(voice.file_id)
-                file_path = await self.audio_handler.download_voice_message(
-                    voice_file, voice.file_id
+                # STAGE 1: Create usage record on download start
+                usage = await usage_repo.create(
+                    user_id=db_user.id,
+                    voice_file_id=voice.file_id,
                 )
+                logger.info(f"Usage record {usage.id} created for user {user.id}")
 
-                # Convert duration to int
-                duration_seconds = 0
-                if voice.duration:
-                    if isinstance(voice.duration, timedelta):
-                        duration_seconds = int(voice.duration.total_seconds())
-                    else:
-                        duration_seconds = int(voice.duration)
+            # Download voice file
+            voice_file = await context.bot.get_file(voice.file_id)
+            file_path = await self.audio_handler.download_voice_message(
+                voice_file, voice.file_id
+            )
+            logger.info(f"File downloaded: {file_path}")
 
-                # Create transcription context
-                transcription_context = TranscriptionContext(
-                    user_id=user.id,
-                    duration_seconds=duration_seconds,
-                    file_size_bytes=voice.file_size or 0,
-                    language="ru",  # Default to Russian
+            # STAGE 2: Update with duration after download
+            async with get_session() as session:
+                usage_repo = UsageRepository(session)
+                await usage_repo.update(
+                    usage_id=usage.id,
+                    voice_duration_seconds=duration_seconds,
                 )
+                logger.info(f"Usage record {usage.id} updated with duration {duration_seconds}s")
 
-                # Check if benchmark mode is enabled
-                if self.transcription_router.strategy.is_benchmark_mode():
+            # Create transcription context
+            transcription_context = TranscriptionContext(
+                user_id=user.id,
+                duration_seconds=duration_seconds,
+                file_size_bytes=voice.file_size or 0,
+                language="ru",
+            )
+
+            # Check if benchmark mode is enabled
+            if self.transcription_router.strategy.is_benchmark_mode():
                     # Run benchmark
                     logger.info("Running benchmark on voice message...")
                     report = await self.transcription_router.run_benchmark(
@@ -271,44 +309,60 @@ class BotHandlers:
 
                     logger.info(f"Benchmark completed for user {user.id}")
 
-                else:
-                    # Normal transcription mode
-                    result = await self.transcription_router.transcribe(
-                        file_path, transcription_context
-                    )
-
-                    # Save to database
-                    await usage_repo.create(
-                        user_id=db_user.id,
-                        voice_duration_seconds=duration_seconds,
-                        voice_file_id=voice.file_id,
-                        transcription_text=result.text,
-                        model_size=result.model_name,
-                        processing_time_seconds=result.processing_time,
-                    )
-
-                    # Clean up files
-                    self.audio_handler.cleanup_file(file_path)
-
-                    # Send transcription
-                    await processing_msg.edit_text(f"{result.text}")
-
-                logger.info(
-                    f"Successfully transcribed voice message for user {user.id}, "
-                    f"duration: {voice.duration}s"
+            else:
+                # Normal transcription mode with queue
+                # Create transcription request
+                request = TranscriptionRequest(
+                    id=str(uuid.uuid4()),
+                    user_id=user.id,
+                    file_path=file_path,
+                    duration_seconds=duration_seconds,
+                    context=transcription_context,
+                    status_message=status_msg,
+                    usage_id=usage.id,
                 )
 
+                # Enqueue request
+                try:
+                    position = await self.queue_manager.enqueue(request)
+
+                    # Show queue position
+                    if position > 1:
+                        estimated_wait = (position - 1) * duration_seconds * settings.progress_rtf
+                        await status_msg.edit_text(
+                            f"📋 В очереди: позиция {position}\n"
+                            f"⏱️ Примерное время ожидания: ~{int(estimated_wait)}с"
+                        )
+                        logger.info(f"Request {request.id} enqueued at position {position}")
+                    else:
+                        await status_msg.edit_text("⚙️ Начинаю обработку...")
+                        logger.info(f"Request {request.id} starting immediately")
+
+                except asyncio.QueueFull:
+                    # Queue full (shouldn't happen due to check above, but safety)
+                    await status_msg.edit_text(
+                        "⚠️ Очередь переполнена. Пожалуйста, попробуйте позже."
+                    )
+                    self.audio_handler.cleanup_file(file_path)
+                    return
+
+                # Note: Actual processing happens in _process_transcription callback
+                # which is called by queue worker. User gets updates via status_msg.
+
         except Exception as e:
-            logger.error(f"Error processing voice message: {e}", exc_info=True)
-            await processing_msg.edit_text(
-                "Произошла ошибка при обработке голосового сообщения. "
-                "Пожалуйста, попробуйте еще раз."
-            )
+            logger.error(f"Error handling voice message: {e}", exc_info=True)
+            try:
+                await status_msg.edit_text(
+                    "❌ Произошла ошибка при обработке голосового сообщения. "
+                    "Пожалуйста, попробуйте еще раз."
+                )
+            except Exception:
+                pass
 
     async def audio_message_handler(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Handle audio file messages.
+        """Handle audio file messages with queue management.
 
         Args:
             update: Telegram update object
@@ -322,18 +376,47 @@ class BotHandlers:
         if not audio:
             return
 
-        # Send processing message
-        processing_msg = await update.message.reply_text("Обрабатываю аудиофайл...")
+        # Convert duration to int early for validation
+        duration_seconds = 0
+        if audio.duration:
+            if isinstance(audio.duration, timedelta):
+                duration_seconds = int(audio.duration.total_seconds())
+            else:
+                duration_seconds = int(audio.duration)
+
+        # 1. VALIDATE DURATION
+        if duration_seconds > settings.max_voice_duration_seconds:
+            await update.message.reply_text(
+                f"⚠️ Максимальная длительность: {settings.max_voice_duration_seconds}с "
+                f"({settings.max_voice_duration_seconds // 60} мин)\n\n"
+                f"Ваш файл: {duration_seconds}с ({duration_seconds // 60} мин {duration_seconds % 60}с)"
+            )
+            logger.warning(
+                f"User {user.id} rejected: duration {duration_seconds}s > {settings.max_voice_duration_seconds}s"
+            )
+            return
+
+        # 2. CHECK QUEUE CAPACITY
+        queue_depth = self.queue_manager.get_queue_depth()
+        if queue_depth >= settings.max_queue_size:
+            await update.message.reply_text(
+                "⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.\n\n"
+                f"В очереди сейчас: {queue_depth} запросов"
+            )
+            logger.warning(f"User {user.id} rejected: queue full ({queue_depth}/{settings.max_queue_size})")
+            return
+
+        # Send initial status
+        status_msg = await update.message.reply_text("📥 Загружаю файл...")
 
         try:
             async with get_session() as session:
                 user_repo = UserRepository(session)
                 usage_repo = UsageRepository(session)
 
-                # Get user from database
+                # Get or create user
                 db_user = await user_repo.get_by_telegram_id(user.id)
                 if not db_user:
-                    # Create user if not exists
                     db_user = await user_repo.create(
                         telegram_id=user.id,
                         username=user.username,
@@ -341,30 +424,39 @@ class BotHandlers:
                         last_name=user.last_name,
                     )
 
-                # Download audio file
-                audio_file = await context.bot.get_file(audio.file_id)
-                file_path = await self.audio_handler.download_voice_message(
-                    audio_file, audio.file_id
+                # STAGE 1: Create usage record on download start
+                usage = await usage_repo.create(
+                    user_id=db_user.id,
+                    voice_file_id=audio.file_id,
                 )
+                logger.info(f"Usage record {usage.id} created for user {user.id}")
 
-                # Convert duration to int
-                duration_seconds = 0
-                if audio.duration:
-                    if isinstance(audio.duration, timedelta):
-                        duration_seconds = int(audio.duration.total_seconds())
-                    else:
-                        duration_seconds = int(audio.duration)
+            # Download audio file
+            audio_file = await context.bot.get_file(audio.file_id)
+            file_path = await self.audio_handler.download_voice_message(
+                audio_file, audio.file_id
+            )
+            logger.info(f"File downloaded: {file_path}")
 
-                # Create transcription context
-                transcription_context = TranscriptionContext(
-                    user_id=user.id,
-                    duration_seconds=duration_seconds,
-                    file_size_bytes=audio.file_size or 0,
-                    language="ru",  # Default to Russian
+            # STAGE 2: Update with duration after download
+            async with get_session() as session:
+                usage_repo = UsageRepository(session)
+                await usage_repo.update(
+                    usage_id=usage.id,
+                    voice_duration_seconds=duration_seconds,
                 )
+                logger.info(f"Usage record {usage.id} updated with duration {duration_seconds}s")
 
-                # Check if benchmark mode is enabled
-                if self.transcription_router.strategy.is_benchmark_mode():
+            # Create transcription context
+            transcription_context = TranscriptionContext(
+                user_id=user.id,
+                duration_seconds=duration_seconds,
+                file_size_bytes=audio.file_size or 0,
+                language="ru",
+            )
+
+            # Check if benchmark mode is enabled
+            if self.transcription_router.strategy.is_benchmark_mode():
                     # Run benchmark
                     logger.info("Running benchmark on audio file...")
                     report = await self.transcription_router.run_benchmark(
@@ -418,38 +510,55 @@ class BotHandlers:
 
                     logger.info(f"Benchmark completed for user {user.id}")
 
-                else:
-                    # Normal transcription mode
-                    result = await self.transcription_router.transcribe(
-                        file_path, transcription_context
-                    )
-
-                    # Save to database
-                    await usage_repo.create(
-                        user_id=db_user.id,
-                        voice_duration_seconds=duration_seconds,
-                        voice_file_id=audio.file_id,
-                        transcription_text=result.text,
-                        model_size=result.model_name,
-                        processing_time_seconds=result.processing_time,
-                    )
-
-                    # Clean up files
-                    self.audio_handler.cleanup_file(file_path)
-
-                    # Send transcription
-                    await processing_msg.edit_text(f"{result.text}")
-
-                logger.info(
-                    f"Successfully transcribed audio file for user {user.id}, "
-                    f"duration: {audio.duration}s"
+            else:
+                # Normal transcription mode with queue
+                # Create transcription request
+                request = TranscriptionRequest(
+                    id=str(uuid.uuid4()),
+                    user_id=user.id,
+                    file_path=file_path,
+                    duration_seconds=duration_seconds,
+                    context=transcription_context,
+                    status_message=status_msg,
+                    usage_id=usage.id,
                 )
 
+                # Enqueue request
+                try:
+                    position = await self.queue_manager.enqueue(request)
+
+                    # Show queue position
+                    if position > 1:
+                        estimated_wait = (position - 1) * duration_seconds * settings.progress_rtf
+                        await status_msg.edit_text(
+                            f"📋 В очереди: позиция {position}\n"
+                            f"⏱️ Примерное время ожидания: ~{int(estimated_wait)}с"
+                        )
+                        logger.info(f"Request {request.id} enqueued at position {position}")
+                    else:
+                        await status_msg.edit_text("⚙️ Начинаю обработку...")
+                        logger.info(f"Request {request.id} starting immediately")
+
+                except asyncio.QueueFull:
+                    # Queue full (shouldn't happen due to check above, but safety)
+                    await status_msg.edit_text(
+                        "⚠️ Очередь переполнена. Пожалуйста, попробуйте позже."
+                    )
+                    self.audio_handler.cleanup_file(file_path)
+                    return
+
+                # Note: Actual processing happens in _process_transcription callback
+                # which is called by queue worker. User gets updates via status_msg.
+
         except Exception as e:
-            logger.error(f"Error processing audio file: {e}", exc_info=True)
-            await processing_msg.edit_text(
-                "Произошла ошибка при обработке аудиофайла. " "Пожалуйста, попробуйте еще раз."
-            )
+            logger.error(f"Error handling audio file: {e}", exc_info=True)
+            try:
+                await status_msg.edit_text(
+                    "❌ Произошла ошибка при обработке аудиофайла. "
+                    "Пожалуйста, попробуйте еще раз."
+                )
+            except Exception:
+                pass
 
     async def _process_transcription(self, request: TranscriptionRequest):
         """Process transcription request (called by queue worker).
