@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from src.config import settings
-from src.storage.models import Base
 
 
 # Global engine instance

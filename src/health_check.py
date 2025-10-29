@@ -126,10 +126,10 @@ def check_migration_status() -> bool:
             return False
 
         if current != head:
-            print(f"❌ Database schema out of date:", file=sys.stderr)
+            print("❌ Database schema out of date:", file=sys.stderr)
             print(f"   Current: {current}", file=sys.stderr)
             print(f"   HEAD:    {head}", file=sys.stderr)
-            print(f"   Run 'alembic upgrade head' to update", file=sys.stderr)
+            print("   Run 'alembic upgrade head' to update", file=sys.stderr)
             return False
 
         print(f"✅ Database schema is up to date (revision: {current})")
