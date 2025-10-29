@@ -50,7 +50,9 @@ async def main() -> None:
         max_queue_size=settings.max_queue_size,
         max_concurrent=settings.max_concurrent_workers,
     )
-    logger.info(f"Queue manager initialized (max_queue={settings.max_queue_size}, max_concurrent={settings.max_concurrent_workers})")
+    logger.info(
+        f"Queue manager initialized (max_queue={settings.max_queue_size}, max_concurrent={settings.max_concurrent_workers})"
+    )
 
     # Create bot handlers
     bot_handlers = BotHandlers(

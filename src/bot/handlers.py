@@ -202,7 +202,9 @@ class BotHandlers:
                 "⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.\n\n"
                 f"В очереди сейчас: {queue_depth} запросов"
             )
-            logger.warning(f"User {user.id} rejected: queue full ({queue_depth}/{settings.max_queue_size})")
+            logger.warning(
+                f"User {user.id} rejected: queue full ({queue_depth}/{settings.max_queue_size})"
+            )
             return
 
         # Send initial status
@@ -232,9 +234,7 @@ class BotHandlers:
 
             # Download voice file
             voice_file = await context.bot.get_file(voice.file_id)
-            file_path = await self.audio_handler.download_voice_message(
-                voice_file, voice.file_id
-            )
+            file_path = await self.audio_handler.download_voice_message(voice_file, voice.file_id)
             logger.info(f"File downloaded: {file_path}")
 
             # STAGE 2: Update with duration after download
@@ -256,58 +256,54 @@ class BotHandlers:
 
             # Check if benchmark mode is enabled
             if self.transcription_router.strategy.is_benchmark_mode():
-                    # Run benchmark
-                    logger.info("Running benchmark on voice message...")
-                    report = await self.transcription_router.run_benchmark(
-                        file_path, transcription_context
+                # Run benchmark
+                logger.info("Running benchmark on voice message...")
+                report = await self.transcription_router.run_benchmark(
+                    file_path, transcription_context
+                )
+
+                # Save best result to database
+                successful_results = [r for r in report.results if r.error is None]
+                if successful_results:
+                    # Use fastest successful result
+                    best_result = report.get_sorted_by_speed()[0]
+                    await usage_repo.create(
+                        user_id=db_user.id,
+                        voice_duration_seconds=duration_seconds,
+                        voice_file_id=voice.file_id,
+                        transcription_length=len(best_result.text),
+                        model_size=best_result.model_name,
+                        processing_time_seconds=best_result.processing_time,
                     )
 
-                    # Save best result to database
-                    successful_results = [r for r in report.results if r.error is None]
+                # Clean up files
+                self.audio_handler.cleanup_file(file_path)
+
+                # Generate and send benchmark report
+                report_text = report.to_markdown()
+
+                # Telegram has 4096 character limit, split if needed
+                if len(report_text) <= 4096:
+                    await status_msg.edit_text(report_text, parse_mode="Markdown")
+                else:
+                    # Send message about successful results first
                     if successful_results:
-                        # Use fastest successful result
                         best_result = report.get_sorted_by_speed()[0]
-                        await usage_repo.create(
-                            user_id=db_user.id,
-                            voice_duration_seconds=duration_seconds,
-                            voice_file_id=voice.file_id,
-                            transcription_text=best_result.text,
-                            model_size=best_result.model_name,
-                            processing_time_seconds=best_result.processing_time,
+                        await status_msg.edit_text(
+                            f"✅ Benchmark завершен!\n\n"
+                            f"Лучший результат: {best_result.config.display_name if best_result.config else best_result.provider_used}\n"
+                            f"Скорость: {best_result.processing_time:.2f}s (RTF: {best_result.realtime_factor:.2f}x)\n\n"
+                            f"Транскрипция:\n{best_result.text}"
                         )
-
-                    # Clean up files
-                    self.audio_handler.cleanup_file(file_path)
-
-                    # Generate and send benchmark report
-                    report_text = report.to_markdown()
-
-                    # Telegram has 4096 character limit, split if needed
-                    if len(report_text) <= 4096:
-                        await processing_msg.edit_text(report_text, parse_mode="Markdown")
                     else:
-                        # Send message about successful results first
-                        if successful_results:
-                            best_result = report.get_sorted_by_speed()[0]
-                            await processing_msg.edit_text(
-                                f"✅ Benchmark завершен!\n\n"
-                                f"Лучший результат: {best_result.config.display_name if best_result.config else best_result.provider_used}\n"
-                                f"Скорость: {best_result.processing_time:.2f}s (RTF: {best_result.realtime_factor:.2f}x)\n\n"
-                                f"Транскрипция:\n{best_result.text}"
-                            )
-                        else:
-                            await processing_msg.edit_text(
-                                "❌ Все модели не смогли обработать аудио"
-                            )
+                        await status_msg.edit_text("❌ Все модели не смогли обработать аудио")
 
-                        # Send report in chunks
-                        chunks = [
-                            report_text[i : i + 4096] for i in range(0, len(report_text), 4096)
-                        ]
-                        for chunk in chunks:
-                            await update.message.reply_text(chunk, parse_mode="Markdown")
+                    # Send report in chunks
+                    chunks = [report_text[i : i + 4096] for i in range(0, len(report_text), 4096)]
+                    for chunk in chunks:
+                        await update.message.reply_text(chunk, parse_mode="Markdown")
 
-                    logger.info(f"Benchmark completed for user {user.id}")
+                logger.info(f"Benchmark completed for user {user.id}")
 
             else:
                 # Normal transcription mode with queue
@@ -403,7 +399,9 @@ class BotHandlers:
                 "⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.\n\n"
                 f"В очереди сейчас: {queue_depth} запросов"
             )
-            logger.warning(f"User {user.id} rejected: queue full ({queue_depth}/{settings.max_queue_size})")
+            logger.warning(
+                f"User {user.id} rejected: queue full ({queue_depth}/{settings.max_queue_size})"
+            )
             return
 
         # Send initial status
@@ -433,9 +431,7 @@ class BotHandlers:
 
             # Download audio file
             audio_file = await context.bot.get_file(audio.file_id)
-            file_path = await self.audio_handler.download_voice_message(
-                audio_file, audio.file_id
-            )
+            file_path = await self.audio_handler.download_voice_message(audio_file, audio.file_id)
             logger.info(f"File downloaded: {file_path}")
 
             # STAGE 2: Update with duration after download
@@ -457,58 +453,54 @@ class BotHandlers:
 
             # Check if benchmark mode is enabled
             if self.transcription_router.strategy.is_benchmark_mode():
-                    # Run benchmark
-                    logger.info("Running benchmark on audio file...")
-                    report = await self.transcription_router.run_benchmark(
-                        file_path, transcription_context
+                # Run benchmark
+                logger.info("Running benchmark on audio file...")
+                report = await self.transcription_router.run_benchmark(
+                    file_path, transcription_context
+                )
+
+                # Save best result to database
+                successful_results = [r for r in report.results if r.error is None]
+                if successful_results:
+                    # Use fastest successful result
+                    best_result = report.get_sorted_by_speed()[0]
+                    await usage_repo.create(
+                        user_id=db_user.id,
+                        voice_duration_seconds=duration_seconds,
+                        voice_file_id=audio.file_id,
+                        transcription_length=len(best_result.text),
+                        model_size=best_result.model_name,
+                        processing_time_seconds=best_result.processing_time,
                     )
 
-                    # Save best result to database
-                    successful_results = [r for r in report.results if r.error is None]
+                # Clean up files
+                self.audio_handler.cleanup_file(file_path)
+
+                # Generate and send benchmark report
+                report_text = report.to_markdown()
+
+                # Telegram has 4096 character limit, split if needed
+                if len(report_text) <= 4096:
+                    await status_msg.edit_text(report_text, parse_mode="Markdown")
+                else:
+                    # Send message about successful results first
                     if successful_results:
-                        # Use fastest successful result
                         best_result = report.get_sorted_by_speed()[0]
-                        await usage_repo.create(
-                            user_id=db_user.id,
-                            voice_duration_seconds=duration_seconds,
-                            voice_file_id=audio.file_id,
-                            transcription_text=best_result.text,
-                            model_size=best_result.model_name,
-                            processing_time_seconds=best_result.processing_time,
+                        await status_msg.edit_text(
+                            f"✅ Benchmark завершен!\n\n"
+                            f"Лучший результат: {best_result.config.display_name if best_result.config else best_result.provider_used}\n"
+                            f"Скорость: {best_result.processing_time:.2f}s (RTF: {best_result.realtime_factor:.2f}x)\n\n"
+                            f"Транскрипция:\n{best_result.text}"
                         )
-
-                    # Clean up files
-                    self.audio_handler.cleanup_file(file_path)
-
-                    # Generate and send benchmark report
-                    report_text = report.to_markdown()
-
-                    # Telegram has 4096 character limit, split if needed
-                    if len(report_text) <= 4096:
-                        await processing_msg.edit_text(report_text, parse_mode="Markdown")
                     else:
-                        # Send message about successful results first
-                        if successful_results:
-                            best_result = report.get_sorted_by_speed()[0]
-                            await processing_msg.edit_text(
-                                f"✅ Benchmark завершен!\n\n"
-                                f"Лучший результат: {best_result.config.display_name if best_result.config else best_result.provider_used}\n"
-                                f"Скорость: {best_result.processing_time:.2f}s (RTF: {best_result.realtime_factor:.2f}x)\n\n"
-                                f"Транскрипция:\n{best_result.text}"
-                            )
-                        else:
-                            await processing_msg.edit_text(
-                                "❌ Все модели не смогли обработать аудио"
-                            )
+                        await status_msg.edit_text("❌ Все модели не смогли обработать аудио")
 
-                        # Send report in chunks
-                        chunks = [
-                            report_text[i : i + 4096] for i in range(0, len(report_text), 4096)
-                        ]
-                        for chunk in chunks:
-                            await update.message.reply_text(chunk, parse_mode="Markdown")
+                    # Send report in chunks
+                    chunks = [report_text[i : i + 4096] for i in range(0, len(report_text), 4096)]
+                    for chunk in chunks:
+                        await update.message.reply_text(chunk, parse_mode="Markdown")
 
-                    logger.info(f"Benchmark completed for user {user.id}")
+                logger.info(f"Benchmark completed for user {user.id}")
 
             else:
                 # Normal transcription mode with queue

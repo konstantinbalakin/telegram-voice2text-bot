@@ -80,9 +80,7 @@ class Settings(BaseSettings):
     progress_update_interval: int = Field(
         default=5, description="Progress bar update interval (seconds)"
     )
-    progress_rtf: float = Field(
-        default=0.3, description="Estimated RTF for progress calculation"
-    )
+    progress_rtf: float = Field(default=0.3, description="Estimated RTF for progress calculation")
 
     # Quotas
     default_daily_quota_seconds: int = Field(

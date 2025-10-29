@@ -82,9 +82,7 @@ class TestFasterWhisperProviderTranscribe:
     async def test_transcribe_not_initialized(self, provider):
         """Test transcribe fails if provider not initialized."""
         audio_path = Path("/tmp/test.wav")
-        context = TranscriptionContext(
-            user_id=123, duration_seconds=5.0, file_size_bytes=1024
-        )
+        context = TranscriptionContext(user_id=123, duration_seconds=5.0, file_size_bytes=1024)
 
         with pytest.raises(RuntimeError, match="not initialized"):
             await provider.transcribe(audio_path, context)
@@ -93,9 +91,7 @@ class TestFasterWhisperProviderTranscribe:
     async def test_transcribe_file_not_found(self, initialized_provider):
         """Test transcribe fails if audio file doesn't exist."""
         audio_path = Path("/tmp/nonexistent.wav")
-        context = TranscriptionContext(
-            user_id=123, duration_seconds=5.0, file_size_bytes=1024
-        )
+        context = TranscriptionContext(user_id=123, duration_seconds=5.0, file_size_bytes=1024)
 
         with pytest.raises(FileNotFoundError):
             await initialized_provider.transcribe(audio_path, context)
