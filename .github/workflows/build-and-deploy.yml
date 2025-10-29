@@ -27,6 +27,8 @@ jobs:
           poetry install --with dev --extras "faster-whisper"
 
       - name: Test migrations on fresh database
+        env:
+          TELEGRAM_BOT_TOKEN: test_token_for_migration_testing
         run: |
           # Create test database directory
           mkdir -p data
@@ -48,6 +50,8 @@ jobs:
           fi
 
       - name: Test upgrade/downgrade cycle
+        env:
+          TELEGRAM_BOT_TOKEN: test_token_for_migration_testing
         run: |
           # Create another test database
           export DATABASE_URL="sqlite+aiosqlite:///./data/test_cycle.db"
