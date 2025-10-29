@@ -99,7 +99,7 @@ async def check_database_connectivity() -> bool:
         # Try to connect and execute simple query
         async with engine.connect() as conn:
             result = await conn.execute(text("SELECT 1"))
-            await result.fetchone()
+            result.fetchone()
 
         await engine.dispose()
         return True

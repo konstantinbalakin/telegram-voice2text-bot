@@ -27,7 +27,7 @@ class TranscriptionRequest:
     usage_id: int  # Database usage record ID for updates
     created_at: float = field(default_factory=lambda: asyncio.get_event_loop().time())
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure ID is set."""
         if not self.id:
             self.id = str(uuid.uuid4())

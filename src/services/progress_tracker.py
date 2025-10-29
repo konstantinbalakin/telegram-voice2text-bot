@@ -127,7 +127,9 @@ class ProgressTracker:
             # Telegram rate limit hit
             retry_after = e.retry_after
             logger.warning(f"Rate limited, retry after {retry_after}s")
-            await asyncio.sleep(retry_after)
+            # Convert to float (retry_after can be int or timedelta)
+            sleep_duration = float(retry_after.total_seconds() if hasattr(retry_after, 'total_seconds') else retry_after)
+            await asyncio.sleep(sleep_duration)
 
         except TimedOut:
             # Network timeout

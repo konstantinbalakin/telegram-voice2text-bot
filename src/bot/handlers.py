@@ -12,7 +12,7 @@ from src.storage.database import get_session
 from src.storage.repositories import UserRepository, UsageRepository
 from src.transcription.routing.router import TranscriptionRouter
 from src.transcription.audio_handler import AudioHandler
-from src.transcription.models import TranscriptionContext
+from src.transcription.models import TranscriptionContext, TranscriptionResult
 from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.progress_tracker import ProgressTracker
 
@@ -552,7 +552,7 @@ class BotHandlers:
             except Exception:
                 pass
 
-    async def _process_transcription(self, request: TranscriptionRequest):
+    async def _process_transcription(self, request: TranscriptionRequest) -> TranscriptionResult:
         """Process transcription request (called by queue worker).
 
         Args:
