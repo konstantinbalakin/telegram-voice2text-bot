@@ -1,35 +1,46 @@
 """Telegram bot handlers for voice message processing."""
 
+import asyncio
 import logging
-from datetime import timedelta
+import uuid
+from datetime import datetime, timedelta
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from src.config import settings
 from src.storage.database import get_session
 from src.storage.repositories import UserRepository, UsageRepository
 from src.transcription.routing.router import TranscriptionRouter
 from src.transcription.audio_handler import AudioHandler
 from src.transcription.models import TranscriptionContext
+from src.services.queue_manager import QueueManager, TranscriptionRequest
+from src.services.progress_tracker import ProgressTracker
 
 logger = logging.getLogger(__name__)
 
 
 class BotHandlers:
-    """Telegram bot handlers for processing voice messages."""
+    """Telegram bot handlers for processing voice messages with queue management."""
 
     def __init__(
         self,
         whisper_service: TranscriptionRouter,
         audio_handler: AudioHandler,
+        queue_manager: QueueManager,
     ):
         """Initialize bot handlers.
 
         Args:
             whisper_service: Transcription router for transcription
             audio_handler: Audio handler for file operations
+            queue_manager: Queue manager for request handling
         """
         self.transcription_router = whisper_service
         self.audio_handler = audio_handler
+        self.queue_manager = queue_manager
+
+        # Start queue worker
+        asyncio.create_task(self.queue_manager.start_worker(self._process_transcription))
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command.
@@ -439,6 +450,86 @@ class BotHandlers:
             await processing_msg.edit_text(
                 "Произошла ошибка при обработке аудиофайла. " "Пожалуйста, попробуйте еще раз."
             )
+
+    async def _process_transcription(self, request: TranscriptionRequest):
+        """Process transcription request (called by queue worker).
+
+        Args:
+            request: Transcription request from queue
+
+        Returns:
+            TranscriptionResult on success
+
+        Raises:
+            Exception on error
+        """
+        logger.info(f"Processing transcription request {request.id}")
+
+        # Update status message
+        try:
+            await request.status_message.edit_text("⚙️ Начинаю обработку...")
+        except Exception as e:
+            logger.warning(f"Failed to update status message: {e}")
+
+        # Start progress tracker
+        progress = ProgressTracker(
+            message=request.status_message,
+            duration_seconds=request.duration_seconds,
+            rtf=settings.progress_rtf,
+            update_interval=settings.progress_update_interval,
+        )
+        await progress.start()
+
+        try:
+            # Transcribe audio
+            result = await self.transcription_router.transcribe(
+                request.file_path,
+                request.context,
+            )
+
+            # Stop progress updates
+            await progress.stop()
+
+            # Update database (Stage 3: after transcription)
+            async with get_session() as session:
+                usage_repo = UsageRepository(session)
+                await usage_repo.update(
+                    usage_id=request.usage_id,
+                    model_size=result.model_name,
+                    processing_time_seconds=result.processing_time,
+                    transcription_length=len(result.text),
+                )
+
+            # Send final result
+            await request.status_message.edit_text(f"✅ Готово!\n\n{result.text}")
+
+            # Cleanup temporary file
+            self.audio_handler.cleanup_file(request.file_path)
+
+            logger.info(
+                f"Request {request.id} completed successfully "
+                f"(duration={request.duration_seconds}s, processing_time={result.processing_time:.2f}s)"
+            )
+
+            return result
+
+        except Exception as e:
+            # Stop progress on error
+            await progress.stop()
+
+            # Notify user of error
+            try:
+                await request.status_message.edit_text(
+                    "❌ Произошла ошибка при обработке. Пожалуйста, попробуйте еще раз."
+                )
+            except Exception:
+                pass
+
+            # Cleanup file
+            self.audio_handler.cleanup_file(request.file_path)
+
+            logger.error(f"Request {request.id} failed: {e}", exc_info=True)
+            raise
 
     async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle errors.
