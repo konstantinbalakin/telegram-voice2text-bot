@@ -21,36 +21,40 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     """Add updated_at and transcription_length, make columns nullable, drop transcription_text."""
 
-    # Add new columns
-    op.add_column('usage', sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.func.now()))
-    op.add_column('usage', sa.Column('transcription_length', sa.Integer(), nullable=True))
+    # Use batch mode for SQLite compatibility
+    with op.batch_alter_table('usage', schema=None) as batch_op:
+        # Add new columns
+        batch_op.add_column(sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.func.now()))
+        batch_op.add_column(sa.Column('transcription_length', sa.Integer(), nullable=True))
 
-    # Make existing columns nullable for staged writes
-    op.alter_column('usage', 'voice_duration_seconds',
-                    existing_type=sa.Integer(),
-                    nullable=True)
-    op.alter_column('usage', 'model_size',
-                    existing_type=sa.String(length=50),
-                    nullable=True)
+        # Make existing columns nullable for staged writes
+        batch_op.alter_column('voice_duration_seconds',
+                              existing_type=sa.Integer(),
+                              nullable=True)
+        batch_op.alter_column('model_size',
+                              existing_type=sa.String(length=50),
+                              nullable=True)
 
-    # Drop transcription_text column (privacy)
-    op.drop_column('usage', 'transcription_text')
+        # Drop transcription_text column (privacy)
+        batch_op.drop_column('transcription_text')
 
 
 def downgrade() -> None:
     """Revert changes."""
 
-    # Add back transcription_text
-    op.add_column('usage', sa.Column('transcription_text', sa.Text(), nullable=False, server_default=''))
+    # Use batch mode for SQLite compatibility
+    with op.batch_alter_table('usage', schema=None) as batch_op:
+        # Add back transcription_text
+        batch_op.add_column(sa.Column('transcription_text', sa.Text(), nullable=False, server_default=''))
 
-    # Make columns non-nullable again
-    op.alter_column('usage', 'model_size',
-                    existing_type=sa.String(length=50),
-                    nullable=False)
-    op.alter_column('usage', 'voice_duration_seconds',
-                    existing_type=sa.Integer(),
-                    nullable=False)
+        # Make columns non-nullable again
+        batch_op.alter_column('model_size',
+                              existing_type=sa.String(length=50),
+                              nullable=False)
+        batch_op.alter_column('voice_duration_seconds',
+                              existing_type=sa.Integer(),
+                              nullable=False)
 
-    # Drop new columns
-    op.drop_column('usage', 'transcription_length')
-    op.drop_column('usage', 'updated_at')
+        # Drop new columns
+        batch_op.drop_column('transcription_length')
+        batch_op.drop_column('updated_at')
