@@ -601,8 +601,8 @@ class BotHandlers:
                     transcription_length=len(result.text),
                 )
 
-            # Send final result
-            await request.status_message.edit_text(f"✅ Готово!\n\n{result.text}")
+            # Send final result (clean text for easy copying)
+            await request.status_message.edit_text(result.text)
 
             # Cleanup temporary file
             self.audio_handler.cleanup_file(request.file_path)
