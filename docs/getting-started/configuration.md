@@ -90,15 +90,29 @@ WHISPER_COMPUTE_TYPE=int8
 - `float16` - GPU only
 - `float32` - Highest quality, most memory
 
-### Performance
+### Performance & Queue Settings
 
 ```env
+# Processing Limits
 TRANSCRIPTION_TIMEOUT=120
 MAX_CONCURRENT_WORKERS=3
+MAX_QUEUE_SIZE=100
+MAX_VOICE_DURATION_SECONDS=300
+
+# Progress Tracking (Phase 6)
+PROGRESS_UPDATE_INTERVAL=5
+PROGRESS_RTF=0.3
 ```
 
+**Processing:**
 - `TRANSCRIPTION_TIMEOUT` - Max seconds for transcription (default: 120)
-- `MAX_CONCURRENT_WORKERS` - Concurrent transcriptions (default: 3)
+- `MAX_CONCURRENT_WORKERS` - Concurrent transcriptions (default: 3, production: 1)
+- `MAX_QUEUE_SIZE` - Max queued requests (default: 100, production: 10)
+- `MAX_VOICE_DURATION_SECONDS` - Max audio duration (default: 300, production: 120)
+
+**Progress Tracking:**
+- `PROGRESS_UPDATE_INTERVAL` - Progress bar update interval in seconds (default: 5)
+- `PROGRESS_RTF` - Real-Time Factor for time estimation (default: 0.3 for medium/int8)
 
 ## Logging
 
@@ -124,7 +138,11 @@ LOG_LEVEL=INFO
 | `DATABASE_URL` | `sqlite+aiosqlite:///./data/bot.db` | Database connection string |
 | `LOG_LEVEL` | `INFO` | Logging level |
 | `TRANSCRIPTION_TIMEOUT` | `120` | Max transcription time (seconds) |
-| `MAX_CONCURRENT_WORKERS` | `3` | Concurrent transcriptions |
+| `MAX_CONCURRENT_WORKERS` | `3` | Concurrent transcriptions (production: 1) |
+| `MAX_QUEUE_SIZE` | `100` | Max queued requests (production: 10) |
+| `MAX_VOICE_DURATION_SECONDS` | `300` | Max audio duration in seconds (production: 120) |
+| `PROGRESS_UPDATE_INTERVAL` | `5` | Progress bar update interval (seconds) |
+| `PROGRESS_RTF` | `0.3` | Real-Time Factor for time estimation |
 
 ## Example Configurations
 
@@ -139,7 +157,7 @@ WHISPER_COMPUTE_TYPE=int8
 LOG_LEVEL=DEBUG
 ```
 
-### Production (Quality)
+### Production (Quality) - VPS 1GB RAM
 
 ```env
 BOT_TOKEN=your_token_here
@@ -147,11 +165,17 @@ BOT_MODE=polling
 WHISPER_MODEL_SIZE=medium
 WHISPER_DEVICE=cpu
 WHISPER_COMPUTE_TYPE=int8
-DATABASE_URL=postgresql+asyncpg://botuser:password@postgres:5432/telegram_bot
-LOG_LEVEL=INFO
-TRANSCRIPTION_TIMEOUT=300
-MAX_CONCURRENT_WORKERS=2
+DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
+LOG_LEVEL=WARNING
+TRANSCRIPTION_TIMEOUT=120
+MAX_CONCURRENT_WORKERS=1
+MAX_QUEUE_SIZE=10
+MAX_VOICE_DURATION_SECONDS=120
+PROGRESS_UPDATE_INTERVAL=5
+PROGRESS_RTF=0.3
 ```
+
+**Note:** Sequential processing (workers=1) prevents crashes on limited VPS. Progress bar provides good UX.
 
 ### GPU Server
 

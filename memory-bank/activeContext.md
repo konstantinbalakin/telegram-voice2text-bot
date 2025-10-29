@@ -2,13 +2,13 @@
 
 ## Current Status
 
-**Phase**: Phase 6 - Queue-Based Concurrency Control COMPLETE ✅
-**Date**: 2025-10-29
-**Stage**: Ready for local testing before production deployment
-**Branch**: `claude/optimize-bot-performance-011CUbRo6dFSvNks9ZkKv7e7`
-**Production Status**: ⏳ PENDING - Queue system implemented, awaiting testing
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, **queue-based concurrency control**
-**Next Phase**: Local testing → Production deployment → Monitoring
+**Phase**: Phase 6 - Queue-Based Concurrency Control DEPLOYED ✅
+**Date**: 2025-10-30
+**Stage**: Production deployment with optimized limits
+**Branch**: `main`
+**Production Status**: ✅ OPERATIONAL - Queue system deployed with conservative limits
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, **database migration system**, **production limit optimization**
+**Next Phase**: Monitoring and optimization based on real-world usage
 
 ## Production Configuration Finalized ✅
 
@@ -73,7 +73,7 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 
 **Phase 5: Configuration Updates** (`src/config.py`)
 - `max_voice_duration_seconds`: 300 → **120** (2 minutes)
-- `max_queue_size`: 100 → **50**
+- `max_queue_size`: 100 → **10** (final production value, optimized 2025-10-29)
 - `max_concurrent_workers`: 3 → **1** (sequential processing)
 - `progress_update_interval`: **5** seconds
 - `progress_rtf`: **0.3** (for estimation)
@@ -128,29 +128,26 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 - `src/config.py` - New queue and progress settings
 - `src/main.py` - QueueManager initialization
 
-**Configuration Required** (before deployment):
+**Production Configuration** (deployed 2025-10-29):
 ```bash
-# Add to .env
+# Production .env values
 MAX_VOICE_DURATION_SECONDS=120
-MAX_QUEUE_SIZE=50
+MAX_QUEUE_SIZE=10  # Optimized from initial 50
 MAX_CONCURRENT_WORKERS=1
 PROGRESS_UPDATE_INTERVAL=5
 PROGRESS_RTF=0.3
 ```
 
-**Testing Required**:
-- ✅ Code compilation successful
-- ⏳ Local testing (pending):
-  - Single 60s file → normal processing
-  - Single 130s file → rejection with message
-  - 3 concurrent 30s files → queue ordering
-  - 5 concurrent 60s files → sequential processing
-- ⏳ Database migration on production
-- ⏳ Load testing on VPS
-- ⏳ Monitor queue depth, CPU, memory
+**Deployment Status**:
+- ✅ Code merged to main
+- ✅ Database migration applied (a9f3b2c8d1e4)
+- ✅ CI/CD pipeline deployed to production
+- ✅ Environment variables updated
+- ✅ Bot operational with queue system
+- ⏳ Real-world usage monitoring ongoing
 
-**Branch**: `claude/optimize-bot-performance-011CUbRo6dFSvNks9ZkKv7e7`
-**Status**: Ready for testing
+**Branch**: `main`
+**Status**: ✅ Deployed to production
 **Documentation**: `memory-bank/plans/2025-10-29-queue-based-concurrency-plan.md`
 
 **Key Pattern Established**: Queue-based request management with progress feedback is essential for resource-constrained deployments. Sequential processing (max_concurrent=1) prevents crashes while maintaining acceptable UX through live progress updates.
@@ -304,58 +301,113 @@ PROGRESS_RTF=0.3
 - ✅ black: Code formatted
 - ✅ pytest: 45/45 tests passing
 
-## Next Steps (Immediate Priority)
+### NEW: Database Migration System ✅ (2025-10-29)
+**Achievement**: Seamless database migration deployment system
 
-### 1. Local Testing (High Priority) ⏳
-**Before production deployment**, test queue system locally:
+**Implementation** (commit 5c4cc5a):
 
-**Test Cases**:
-```bash
-# 1. Normal operation
-- Send 60s audio → expect progress bar → success
+**1. Automated Migration Testing in CI**
+- New `test-migrations` job in GitHub Actions workflow
+- Tests fresh database migration (from scratch)
+- Tests upgrade/downgrade cycle for reversibility
+- Tests application startup after migration
+- Runs in parallel with build job
 
-# 2. Duration validation
-- Send 130s audio → expect rejection message
+**2. Production Migration Job**
+- New `migrate` job between build and deploy
+- SSH to VPS and applies migrations before code update
+- Automatic rollback on migration failure (downgrade -1)
+- Stops deployment if migration fails
+- Shows migration status before/after
 
-# 3. Queue behavior
-- Send 3x 30s audios quickly → expect queue positions
+**3. Health Check System**
+- New `src/health_check.py` script
+- Checks database connectivity
+- Verifies schema version matches HEAD
+- Used by docker-compose health check
+- Prevents unhealthy containers from running
 
-# 4. Progress updates
-- Verify progress bar updates every 5s
-- Check time estimates accuracy
+**4. Updated init_db() Function**
+- Removed `create_all()` (doesn't work with migrations)
+- Added migration version verification
+- Logs current schema revision on startup
+- Raises error if schema out of date
+- Prevents bot from starting with wrong schema
+
+**5. Comprehensive Documentation**
+- `docs/development/database-migrations.md` - Developer guide (creating and testing migrations)
+- `docs/deployment/migration-runbook.md` - Operations runbook (manual procedures, rollback, emergency)
+- Updated `docs/deployment/vps-setup.md` with Phase 6.5 (migration management)
+
+**Deployment Flow**:
+```
+push to main
+  ↓
+test-migrations (parallel with build)
+  ↓
+build (Docker image)
+  ↓
+migrate (apply migrations on VPS)
+  ↓ (if success)
+deploy (restart bot)
+  ↓
+health check (verify schema)
 ```
 
-**Expected Results**:
-- Duration validation working
-- Queue position displayed correctly
-- Progress bar updates smoothly
-- Transcription succeeds with staged DB writes
+**Rollback Strategy**: If migration fails → automatic `alembic downgrade -1` → deployment stops → bot continues on old version
 
-### 2. Production Deployment (After Testing) ⏳
+**Status**: ✅ Operational since 2025-10-29, tested with production migration a9f3b2c8d1e4
 
-**Prerequisites**:
+### PRODUCTION LIMIT OPTIMIZATION ✅ (2025-10-29)
+**Achievement**: Fine-tuned queue limits for 1GB VPS constraints (PR #25)
+
+**Changes**:
+- `MAX_QUEUE_SIZE`: 100 → 50 → **10** (final)
+- `MAX_CONCURRENT_WORKERS`: 3 → **1** (maintained)
+- `MAX_VOICE_DURATION_SECONDS`: 300 → **120** (maintained)
+
+**Rationale**:
+- Conservative approach for resource-constrained 1GB RAM + 1 vCPU VPS
+- Prevents memory exhaustion with sequential processing
+- Queue size of 10 provides adequate buffering without excessive memory overhead
+- Maintains acceptable UX through progress feedback
+
+**Deployment**: Automated via CI/CD, environment variables updated in GitHub Actions
+
+**Status**: ✅ Deployed and operational
+
+## Next Steps (Current Priority)
+
+### 1. Production Monitoring (High Priority) ⏳
+
+**Monitor These Metrics**:
+- Queue depth (should stay < 10)
+- CPU usage (should stay < 80%)
+- Memory usage (RAM + swap)
+- Processing times (RTF metrics)
+- Rejection rates (duration > 120s, queue full)
+- Progress bar functionality
+- Error rates
+
+**Actions**:
 ```bash
-# 1. Update .env on VPS
-MAX_VOICE_DURATION_SECONDS=120
-MAX_QUEUE_SIZE=50
-MAX_CONCURRENT_WORKERS=1
-PROGRESS_UPDATE_INTERVAL=5
-PROGRESS_RTF=0.3
+# Watch logs
+docker logs -f telegram-voice2text-bot
 
-# 2. Run database migration
-alembic upgrade head
+# Check resource usage
+docker stats telegram-voice2text-bot
 
-# 3. Deploy via CI/CD
-git merge claude/optimize-bot-performance-011CUbRo6dFSvNks9ZkKv7e7 → main
-git push origin main
+# Monitor queue depth (from application logs)
+grep "queue_depth" logs/bot.log
 ```
 
-**Post-Deployment Monitoring**:
-- Watch `docker logs -f telegram-voice2text-bot`
-- Monitor queue depth (should stay < 10)
-- Check CPU usage (should stay < 80%)
-- Track rejection rates (duration > 120s)
-- Verify progress bar functioning
+### 2. Documentation Maintenance (Current Task) 🔄
+
+**Update following based on deployment**:
+- ✅ Memory Bank activeContext.md (current file)
+- ⏳ Memory Bank progress.md (add Phase 6.5 completion)
+- ⏳ Memory Bank projectbrief.md (update constraints)
+- ⏳ docs/ folder (reflect new configuration values)
 
 ### 3. Future Performance Optimization (Low Priority)
 
