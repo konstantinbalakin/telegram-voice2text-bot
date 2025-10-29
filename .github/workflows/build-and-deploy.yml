@@ -202,6 +202,7 @@ jobs:
               -v $(pwd)/alembic:/app/alembic \
               -v $(pwd)/alembic.ini:/app/alembic.ini \
               -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+              -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
               ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
               alembic current || echo "No revision found (fresh database)"
 
@@ -212,6 +213,7 @@ jobs:
               -v $(pwd)/alembic:/app/alembic \
               -v $(pwd)/alembic.ini:/app/alembic.ini \
               -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+              -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
               ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
               alembic upgrade head; then
 
@@ -223,6 +225,7 @@ jobs:
                 -v $(pwd)/alembic:/app/alembic \
                 -v $(pwd)/alembic.ini:/app/alembic.ini \
                 -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
                 ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
                 alembic current
 
@@ -235,6 +238,7 @@ jobs:
                 -v $(pwd)/alembic:/app/alembic \
                 -v $(pwd)/alembic.ini:/app/alembic.ini \
                 -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
                 ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
                 alembic downgrade -1
 
@@ -245,6 +249,7 @@ jobs:
                 -v $(pwd)/alembic:/app/alembic \
                 -v $(pwd)/alembic.ini:/app/alembic.ini \
                 -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
                 ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
                 alembic current
 
