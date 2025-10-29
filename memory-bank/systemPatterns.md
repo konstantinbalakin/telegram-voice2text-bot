@@ -230,6 +230,10 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-10-24 | Remove openai-whisper provider | faster-whisper medium superior in all metrics, -2-3GB Docker image | 90% |
 | 2025-10-28 | Documentation reorganization | Hierarchical docs/ structure improves navigation and scalability | 90% |
 | 2025-10-29 | CI/CD must include optional deps | Poetry optional dependencies require explicit --extras in export | 95% |
+| 2025-10-29 | Queue-based concurrency control | Prevent crashes on 2 CPU / 2 GB VPS, sequential processing with live progress | 95% |
+| 2025-10-29 | Duration limit 120s (2 min) | Balance resource protection with user needs (solves 4-min crash) | 90% |
+| 2025-10-29 | Privacy: transcription_length only | Store analytics without sensitive text data | 85% |
+| 2025-10-29 | Sequential processing (max_concurrent=1) | Conservative approach for resource-constrained deployment | 90% |
 
 ## Design Patterns in Use
 
@@ -277,6 +281,60 @@ This is a **transitional architecture** that balances MVP speed with future scal
 - **Why**: Centralized provider instantiation based on configuration
 - **Benefit**: Hide provider initialization complexity, graceful degradation if provider unavailable
 - **Usage**: ENV-driven provider selection (`WHISPER_PROVIDERS=["faster-whisper", "openai"]`)
+
+### 9. **Queue-Based Request Management Pattern** (added 2025-10-29)
+- **Where**: `QueueManager` in `src/services/queue_manager.py`
+- **Why**: Prevent resource exhaustion under concurrent load, ensure FIFO processing
+- **Benefit**: Crash prevention, predictable processing order, backpressure handling
+- **Implementation**:
+  - `asyncio.Queue` for FIFO request storage (max 50 requests)
+  - `asyncio.Semaphore` for concurrency control (max_concurrent=1)
+  - Background worker with graceful error handling
+  - Request/response tracking with timeout support
+- **Usage**: Bot handlers enqueue `TranscriptionRequest`, worker processes sequentially
+- **Key Characteristic**: Sequential processing (max_concurrent=1) on resource-constrained VPS prevents crashes while maintaining acceptable UX
+
+### 10. **Progress Tracking Pattern** (added 2025-10-29)
+- **Where**: `ProgressTracker` in `src/services/progress_tracker.py`
+- **Why**: Provide live feedback during long-running operations (10-40s transcriptions)
+- **Benefit**: Improved UX, reduces perceived wait time, shows system is working
+- **Implementation**:
+  - Background asyncio task updates Telegram message every 5 seconds
+  - Visual progress bar: `🔄 [████████░░░░] 40%`
+  - RTF-based time estimation (processing_time = duration × 0.3)
+  - Telegram rate limit handling (RetryAfter, TimedOut)
+- **Usage**: Created at transcription start, updates automatically, stopped on completion
+- **Pattern**: Observer pattern - tracks progress without blocking main operation
+
+### 11. **Staged Database Writes Pattern** (added 2025-10-29)
+- **Where**: `UsageRepository` in `src/storage/repositories.py`
+- **Why**: Track request lifecycle for analytics, handle partial failures
+- **Benefit**: Detailed analytics, failure point identification, privacy-friendly data collection
+- **Implementation**:
+  - **Stage 1** (download start): Create record with `user_id`, `voice_file_id`, `created_at`
+  - **Stage 2** (download complete): Update with `voice_duration_seconds`, `updated_at`
+  - **Stage 3** (transcription complete): Update with `model_size`, `processing_time_seconds`, `transcription_length`, `updated_at`
+- **Privacy Feature**: Stores `transcription_length` (int) instead of `transcription_text` (string)
+- **Usage**: Enables tracking failed downloads, failed transcriptions, and full lifecycle timing
+- **Pattern**: State pattern - records progress through lifecycle stages
+
+### 12. **Graceful Degradation Pattern** (added 2025-10-29)
+- **Where**: Handler duration validation and queue capacity checks
+- **Why**: Provide clear feedback when system cannot process request
+- **Benefit**: Better UX than silent failures or crashes, guides users to acceptable behavior
+- **Implementation**:
+  - **Duration validation**: Reject files > 120s with clear message showing user's duration vs limit
+  - **Queue capacity**: Reject when queue full, show current queue depth
+  - **Clear error messages**: Use emoji and Russian language for user-friendly communication
+- **Examples**:
+  ```
+  ⚠️ Максимальная длительность: 120с (2 мин)
+  Ваш файл: 150с (2 мин 30с)
+
+  ⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.
+  В очереди сейчас: 50 запросов
+  ```
+- **Pattern**: Fail-fast with informative feedback
 
 ## Component Relationships
 

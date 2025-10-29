@@ -2,13 +2,13 @@
 
 ## Current Status
 
-**Phase**: Phase 5.2 - Production Bug Fix COMPLETE ✅
+**Phase**: Phase 6 - Queue-Based Concurrency Control COMPLETE ✅
 **Date**: 2025-10-29
-**Stage**: Bot fully operational on VPS after critical CI/CD fix
-**Branch**: `main`
-**Production Status**: ✅ HEALTHY - Bot running, transcribing messages successfully
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix
-**Next Phase**: Performance optimization experiments (RAM/CPU) to achieve target RTF ~0.3x
+**Stage**: Ready for local testing before production deployment
+**Branch**: `claude/optimize-bot-performance-011CUbRo6dFSvNks9ZkKv7e7`
+**Production Status**: ⏳ PENDING - Queue system implemented, awaiting testing
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, **queue-based concurrency control**
+**Next Phase**: Local testing → Production deployment → Monitoring
 
 ## Production Configuration Finalized ✅
 
@@ -30,6 +30,130 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 📄 Full analysis: `memory-bank/benchmarks/final-decision.md`
 
 ## Recent Changes
+
+### QUEUE-BASED CONCURRENCY CONTROL IMPLEMENTATION ✅ (2025-10-29)
+**Achievement**: Complete rewrite of request handling to prevent crashes and improve user experience
+
+**Problem Solved**:
+- Bot crashed when processing 4-minute audio file on 2 CPU / 2 GB RAM VPS
+- No concurrency controls → multiple simultaneous transcriptions exhausted resources
+- No user feedback during processing
+- No duration limits → resource exhaustion
+- No analytics on request lifecycle
+
+**Solution Implemented** (6 phases, commits: 8eea54f, f6e1d5c):
+
+**Phase 1: Database Migration**
+- Added `updated_at` column for lifecycle tracking
+- Added `transcription_length` (int) instead of `transcription_text` for privacy
+- Made `voice_duration_seconds` and `model_size` nullable for staged writes
+- Migration: `alembic/versions/a9f3b2c8d1e4_*.py`
+
+**Phase 2: Repository Updates**
+- Refactored `UsageRepository` with `create()` and `update()` methods
+- Three-stage lifecycle: download → processing → complete
+- Privacy-friendly: only store transcription length, not text
+
+**Phase 3: Queue Manager** (`src/services/queue_manager.py`)
+- FIFO queue with configurable size (default: 50)
+- Semaphore-based concurrency control (default: max_concurrent=1)
+- Background worker with graceful error handling
+- Request/response tracking with timeout support
+- Non-blocking enqueue operation
+
+**Phase 4: Progress Tracker** (`src/services/progress_tracker.py`)
+- Live progress bar updates every 5 seconds:
+  ```
+  🔄 Обработка [████████░░░░] 40%
+  ⏱️ Прошло: 8с | Осталось: ~12с
+  ```
+- RTF-based time estimation (default: 0.3x)
+- Telegram rate limit handling (RetryAfter, TimedOut)
+- Visual feedback during transcription
+
+**Phase 5: Configuration Updates** (`src/config.py`)
+- `max_voice_duration_seconds`: 300 → **120** (2 minutes)
+- `max_queue_size`: 100 → **50**
+- `max_concurrent_workers`: 3 → **1** (sequential processing)
+- `progress_update_interval`: **5** seconds
+- `progress_rtf`: **0.3** (for estimation)
+
+**Phase 6: Handler Integration** (`src/bot/handlers.py`)
+- Duration validation: reject files > 120 seconds
+- Queue capacity check: reject when queue full
+- Staged database writes:
+  - Stage 1: Create record on download
+  - Stage 2: Update with duration after download
+  - Stage 3: Update with results after transcription
+- Queue position feedback to users
+- Estimated wait time display
+- Graceful error handling
+
+**User Experience Improvements**:
+
+*Before*:
+- ❌ No feedback during processing
+- ❌ Crashes on long files or concurrent requests
+- ❌ No queue management
+
+*After*:
+- ✅ Live progress bar every 5 seconds
+- ✅ Duration limit: 120s with clear rejection message
+- ✅ Queue position: "📋 В очереди: позиция 3"
+- ✅ Estimated wait time: "⏱️ Примерное время ожидания: ~60с"
+- ✅ Sequential processing prevents crashes
+
+**New User Flow**:
+```
+1. 📥 Загружаю файл...
+2. 📋 В очереди: позиция 3 (if queued)
+   ⏱️ Примерное время ожидания: ~60с
+3. 🔄 Обработка [████████░░░░] 40%
+   ⏱️ Прошло: 8с | Осталось: ~12с
+4. ✅ Готово!
+   [transcription text]
+```
+
+**Files Created**:
+- `src/services/__init__.py`
+- `src/services/queue_manager.py`
+- `src/services/progress_tracker.py`
+- `alembic/versions/a9f3b2c8d1e4_add_updated_at_and_transcription_length.py`
+- `memory-bank/plans/2025-10-29-queue-based-concurrency-plan.md`
+
+**Files Modified**:
+- `src/storage/models.py` - Usage model with staged fields
+- `src/storage/repositories.py` - create/update methods
+- `src/bot/handlers.py` - Complete refactor with queue integration
+- `src/config.py` - New queue and progress settings
+- `src/main.py` - QueueManager initialization
+
+**Configuration Required** (before deployment):
+```bash
+# Add to .env
+MAX_VOICE_DURATION_SECONDS=120
+MAX_QUEUE_SIZE=50
+MAX_CONCURRENT_WORKERS=1
+PROGRESS_UPDATE_INTERVAL=5
+PROGRESS_RTF=0.3
+```
+
+**Testing Required**:
+- ✅ Code compilation successful
+- ⏳ Local testing (pending):
+  - Single 60s file → normal processing
+  - Single 130s file → rejection with message
+  - 3 concurrent 30s files → queue ordering
+  - 5 concurrent 60s files → sequential processing
+- ⏳ Database migration on production
+- ⏳ Load testing on VPS
+- ⏳ Monitor queue depth, CPU, memory
+
+**Branch**: `claude/optimize-bot-performance-011CUbRo6dFSvNks9ZkKv7e7`
+**Status**: Ready for testing
+**Documentation**: `memory-bank/plans/2025-10-29-queue-based-concurrency-plan.md`
+
+**Key Pattern Established**: Queue-based request management with progress feedback is essential for resource-constrained deployments. Sequential processing (max_concurrent=1) prevents crashes while maintaining acceptable UX through live progress updates.
 
 ### CRITICAL BUG FIX: faster-whisper Missing from Docker Image ✅ (2025-10-29)
 **Impact**: Production bot was crashing on startup with `ModuleNotFoundError: No module named 'faster_whisper'`
@@ -180,40 +304,77 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 - ✅ black: Code formatted
 - ✅ pytest: 45/45 tests passing
 
-## Performance Optimization Plan (NEXT)
+## Next Steps (Immediate Priority)
 
-**Objective**: Achieve RTF ~0.3x (target performance from local benchmarks)
+### 1. Local Testing (High Priority) ⏳
+**Before production deployment**, test queue system locally:
 
-**Hypothesis**: Swap usage is primary bottleneck, need sufficient RAM for model
+**Test Cases**:
+```bash
+# 1. Normal operation
+- Send 60s audio → expect progress bar → success
 
-**Experimental Strategy**:
-1. **Test 2GB RAM** (eliminate swap)
-   - Expected: RTF 0.5-1.0x (significant improvement)
-   - Cost: Minimal increase (~$1-2/month)
+# 2. Duration validation
+- Send 130s audio → expect rejection message
 
-2. **Test 2 vCPU** (if RAM alone insufficient)
-   - Expected: RTF 0.3-0.5x (parallel processing)
-   - Cost: Moderate increase (~$2-3/month)
+# 3. Queue behavior
+- Send 3x 30s audios quickly → expect queue positions
 
-3. **Test 2GB RAM + 2 vCPU** (optimal config)
-   - Expected: RTF ~0.3x (match local performance)
-   - Cost: Combined increase (~$3-5/month total)
+# 4. Progress updates
+- Verify progress bar updates every 5s
+- Check time estimates accuracy
+```
 
-**Testing Protocol**:
-- Send same test audio (9s sample) to each configuration
-- Measure RTF via logs (LOG_LEVEL=INFO)
-- Record memory/swap/CPU metrics
-- Document in Memory Bank
+**Expected Results**:
+- Duration validation working
+- Queue position displayed correctly
+- Progress bar updates smoothly
+- Transcription succeeds with staged DB writes
 
-**VPS Advantage**: Daily billing allows cost-effective experimentation
+### 2. Production Deployment (After Testing) ⏳
 
-**Completed**:
-- ✅ VPS deployment automation (CI/CD)
-- ✅ Database directory creation
-- ✅ DNS configuration
-- ✅ Swap file creation (1GB)
-- ✅ Bot operational and stable
-- ✅ Baseline metrics captured (RTF 3.04x, 1.27GB total memory)
+**Prerequisites**:
+```bash
+# 1. Update .env on VPS
+MAX_VOICE_DURATION_SECONDS=120
+MAX_QUEUE_SIZE=50
+MAX_CONCURRENT_WORKERS=1
+PROGRESS_UPDATE_INTERVAL=5
+PROGRESS_RTF=0.3
+
+# 2. Run database migration
+alembic upgrade head
+
+# 3. Deploy via CI/CD
+git merge claude/optimize-bot-performance-011CUbRo6dFSvNks9ZkKv7e7 → main
+git push origin main
+```
+
+**Post-Deployment Monitoring**:
+- Watch `docker logs -f telegram-voice2text-bot`
+- Monitor queue depth (should stay < 10)
+- Check CPU usage (should stay < 80%)
+- Track rejection rates (duration > 120s)
+- Verify progress bar functioning
+
+### 3. Future Performance Optimization (Low Priority)
+
+**Only if needed** (after queue system proves stable):
+
+1. **Test 3 CPU** (if concurrent load increases)
+   - Update `MAX_CONCURRENT_WORKERS=2`
+   - Monitor CPU usage
+   - Cost: ~$1-2/month increase
+
+2. **Add Metrics Dashboard** (optional)
+   - Prometheus + Grafana
+   - Track: queue depth, processing times, rejection rate
+
+3. **Optimize RTF** (if users complain about wait times)
+   - Current: RTF ~0.3x with sequential processing
+   - Could experiment with smaller models for short files
+
+**Current Approach**: Start conservative (sequential, 120s limit), scale up only if needed based on actual usage patterns.
 
 ## Current Infrastructure
 

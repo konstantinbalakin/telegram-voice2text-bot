@@ -98,6 +98,115 @@ ruff = "^0.8"                        # Linter/formatter
 mypy = "^1.13"                       # Type checking
 ```
 
+## Project Structure (Updated 2025-10-29)
+
+### Services Layer (NEW)
+
+**Location**: `src/services/`
+
+**Purpose**: Business logic components for request management and user experience
+
+**Modules**:
+
+1. **queue_manager.py** (296 lines)
+   - `QueueManager`: FIFO queue with concurrency control
+   - `TranscriptionRequest`: Request data structure
+   - `TranscriptionResponse`: Response data structure
+   - **Features**:
+     - `asyncio.Queue` for FIFO request storage (max 50)
+     - `asyncio.Semaphore` for concurrency limiting (max_concurrent=1)
+     - Background worker with graceful error handling
+     - Request/response tracking with timeout support
+   - **Pattern**: Producer-Consumer with bounded queue
+
+2. **progress_tracker.py** (201 lines)
+   - `ProgressTracker`: Live progress updates for long-running operations
+   - **Features**:
+     - Background asyncio task updates Telegram message every 5s
+     - Visual progress bar: `🔄 [████████░░░░] 40%`
+     - RTF-based time estimation (processing_time = duration × 0.3)
+     - Telegram rate limit handling (RetryAfter, TimedOut)
+   - **Pattern**: Observer pattern - tracks progress without blocking
+
+3. **__init__.py**
+   - Module exports: `QueueManager`, `TranscriptionRequest`, `TranscriptionResponse`, `ProgressTracker`
+
+**Usage**:
+```python
+# In main.py
+queue_manager = QueueManager(
+    max_queue_size=settings.max_queue_size,
+    max_concurrent=settings.max_concurrent_workers,
+)
+
+# In handlers.py
+request = TranscriptionRequest(
+    id=str(uuid.uuid4()),
+    user_id=user.id,
+    file_path=file_path,
+    duration_seconds=duration_seconds,
+    context=transcription_context,
+    status_message=status_msg,
+    usage_id=usage.id,
+)
+position = await self.queue_manager.enqueue(request)
+
+# Progress tracking
+progress = ProgressTracker(
+    message=request.status_message,
+    duration_seconds=request.duration_seconds,
+    rtf=settings.progress_rtf,
+    update_interval=settings.progress_update_interval,
+)
+await progress.start()
+# ... transcription ...
+await progress.stop()
+```
+
+**Added**: 2025-10-29 (Phase 6: Queue-Based Concurrency Control)
+
+### Storage Layer Updates (2025-10-29)
+
+**Enhanced Repository Pattern**:
+- `UsageRepository.create()`: Minimal create for staged writes (Stage 1)
+- `UsageRepository.update()`: Update method for lifecycle stages (Stage 2, 3)
+- `UsageRepository.get_by_id()`: Retrieve usage record by ID
+
+**Database Model Changes**:
+- `Usage.updated_at`: Added for lifecycle tracking
+- `Usage.transcription_length`: Added (int) for privacy-friendly analytics
+- `Usage.transcription_text`: Removed (privacy improvement)
+- `Usage.voice_duration_seconds`: Now nullable for staged writes
+- `Usage.model_size`: Now nullable for staged writes
+
+**Migration**: `alembic/versions/a9f3b2c8d1e4_add_updated_at_and_transcription_length.py`
+
+### Configuration Updates (2025-10-29)
+
+**New Settings** (`src/config.py`):
+```python
+# Queue Configuration
+max_queue_size: int = 50  # Changed from 100
+max_concurrent_workers: int = 1  # Changed from 3
+transcription_timeout: int = 120
+
+# Progress Tracking
+progress_update_interval: int = 5  # NEW
+progress_rtf: float = 0.3  # NEW
+
+# Quotas
+max_voice_duration_seconds: int = 120  # Changed from 300 (2 minutes)
+```
+
+**Environment Variables Required**:
+```bash
+MAX_VOICE_DURATION_SECONDS=120
+MAX_QUEUE_SIZE=50
+MAX_CONCURRENT_WORKERS=1
+PROGRESS_UPDATE_INTERVAL=5
+PROGRESS_RTF=0.3
+```
+
 ## Development Environment
 
 ### Setup Requirements
