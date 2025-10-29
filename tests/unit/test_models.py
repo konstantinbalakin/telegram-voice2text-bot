@@ -60,7 +60,7 @@ async def test_usage_model_creation(async_session):
         user_id=user.id,
         voice_duration_seconds=30,
         voice_file_id="file_123",
-        transcription_text="Test transcription",
+        transcription_length=18,  # Length of "Test transcription"
         processing_time_seconds=5.5,
         model_size="base",
         language="ru",
@@ -73,7 +73,7 @@ async def test_usage_model_creation(async_session):
     assert usage.id is not None
     assert usage.user_id == user.id
     assert usage.voice_duration_seconds == 30
-    assert usage.transcription_text == "Test transcription"
+    assert usage.transcription_length == 18
     assert usage.model_size == "base"
 
 
@@ -141,7 +141,7 @@ async def test_user_usage_relationship(async_session):
             user_id=user.id,
             voice_duration_seconds=10 * (i + 1),
             voice_file_id=f"file_{i}",
-            transcription_text=f"Test {i}",
+            transcription_length=6 + i,  # Length of text (varies)
             model_size="base",
             created_at=datetime.utcnow(),
         )

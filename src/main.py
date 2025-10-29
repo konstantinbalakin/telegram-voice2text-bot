@@ -13,6 +13,7 @@ from src.config import settings
 from src.storage.database import init_db, close_db
 from src.transcription import get_transcription_router, shutdown_transcription_router, AudioHandler
 from src.bot.handlers import BotHandlers
+from src.services.queue_manager import QueueManager
 
 # Configure logging
 logging.basicConfig(
@@ -44,10 +45,20 @@ async def main() -> None:
     audio_handler = AudioHandler()
     logger.info("Audio handler initialized")
 
+    # Initialize queue manager
+    queue_manager = QueueManager(
+        max_queue_size=settings.max_queue_size,
+        max_concurrent=settings.max_concurrent_workers,
+    )
+    logger.info(
+        f"Queue manager initialized (max_queue={settings.max_queue_size}, max_concurrent={settings.max_concurrent_workers})"
+    )
+
     # Create bot handlers
     bot_handlers = BotHandlers(
         whisper_service=transcription_router,
         audio_handler=audio_handler,
+        queue_manager=queue_manager,
     )
 
     # Build telegram bot application
@@ -95,6 +106,9 @@ async def main() -> None:
         if application.running:
             await application.stop()
             await application.shutdown()
+
+        # Stop queue worker
+        await queue_manager.stop_worker()
 
         await shutdown_transcription_router()
         await close_db()

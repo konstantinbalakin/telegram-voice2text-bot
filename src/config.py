@@ -71,17 +71,23 @@ class Settings(BaseSettings):
         default="sqlite+aiosqlite:///./data/bot.db", description="Database URL"
     )
 
-    # Processing
-    max_queue_size: int = Field(default=100, description="Maximum queue size")
-    max_concurrent_workers: int = Field(default=3, description="Max concurrent workers")
+    # Queue Configuration
+    max_queue_size: int = Field(default=50, description="Maximum queue size")
+    max_concurrent_workers: int = Field(default=1, description="Max concurrent transcriptions")
     transcription_timeout: int = Field(default=120, description="Transcription timeout (seconds)")
+
+    # Progress Tracking
+    progress_update_interval: int = Field(
+        default=5, description="Progress bar update interval (seconds)"
+    )
+    progress_rtf: float = Field(default=0.3, description="Estimated RTF for progress calculation")
 
     # Quotas
     default_daily_quota_seconds: int = Field(
         default=60, description="Default daily quota in seconds"
     )
     max_voice_duration_seconds: int = Field(
-        default=300, description="Maximum voice message duration"
+        default=120, description="Maximum voice message duration (2 minutes)"
     )
 
     # Logging

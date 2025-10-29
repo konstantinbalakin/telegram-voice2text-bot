@@ -85,7 +85,13 @@ class UserRepository:
 
 
 class UsageRepository:
-    """Repository for Usage model operations."""
+    """Repository for Usage model operations with staged writes.
+
+    Lifecycle stages:
+    1. create() - Stage 1: Create record on file download
+    2. update() - Stage 2: Update with duration after download
+    3. update() - Stage 3: Update with transcription results
+    """
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -93,26 +99,70 @@ class UsageRepository:
     async def create(
         self,
         user_id: int,
-        voice_duration_seconds: int,
         voice_file_id: str,
-        transcription_text: str,
-        model_size: str,
+        voice_duration_seconds: Optional[int] = None,
+        model_size: Optional[str] = None,
         processing_time_seconds: Optional[float] = None,
+        transcription_length: Optional[int] = None,
         language: Optional[str] = None,
     ) -> Usage:
-        """Create a new usage record."""
+        """Create a new usage record (Stage 1: on file download).
+
+        Minimal required fields: user_id, voice_file_id
+        Other fields can be updated later via update()
+        """
         usage = Usage(
             user_id=user_id,
-            voice_duration_seconds=voice_duration_seconds,
             voice_file_id=voice_file_id,
-            transcription_text=transcription_text,
-            processing_time_seconds=processing_time_seconds,
+            voice_duration_seconds=voice_duration_seconds,
             model_size=model_size,
+            processing_time_seconds=processing_time_seconds,
+            transcription_length=transcription_length,
             language=language,
             created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
         )
         self.session.add(usage)
         await self.session.flush()
+        await self.session.refresh(usage)  # Ensure all defaults are loaded
+        return usage
+
+    async def get_by_id(self, usage_id: int) -> Optional[Usage]:
+        """Get usage record by ID."""
+        result = await self.session.execute(select(Usage).where(Usage.id == usage_id))
+        return result.scalar_one_or_none()
+
+    async def update(
+        self,
+        usage_id: int,
+        voice_duration_seconds: Optional[int] = None,
+        model_size: Optional[str] = None,
+        processing_time_seconds: Optional[float] = None,
+        transcription_length: Optional[int] = None,
+        language: Optional[str] = None,
+    ) -> Usage:
+        """Update usage record with new data (Stage 2 or 3).
+
+        Only updates provided fields. Returns updated usage record.
+        """
+        usage = await self.get_by_id(usage_id)
+        if not usage:
+            raise ValueError(f"Usage record {usage_id} not found")
+
+        if voice_duration_seconds is not None:
+            usage.voice_duration_seconds = voice_duration_seconds
+        if model_size is not None:
+            usage.model_size = model_size
+        if processing_time_seconds is not None:
+            usage.processing_time_seconds = processing_time_seconds
+        if transcription_length is not None:
+            usage.transcription_length = transcription_length
+        if language is not None:
+            usage.language = language
+
+        usage.updated_at = datetime.utcnow()
+        await self.session.flush()
+        await self.session.refresh(usage)
         return usage
 
     async def get_by_user_id(self, user_id: int, limit: int = 10) -> list[Usage]:
@@ -126,10 +176,10 @@ class UsageRepository:
         return list(result.scalars().all())
 
     async def get_user_total_duration(self, user_id: int) -> int:
-        """Get total duration of all usage for a user."""
+        """Get total duration of all usage for a user (only completed records)."""
         result = await self.session.execute(select(Usage).where(Usage.user_id == user_id))
         usages = result.scalars().all()
-        return sum(u.voice_duration_seconds for u in usages)
+        return sum(u.voice_duration_seconds or 0 for u in usages)
 
 
 class TransactionRepository:

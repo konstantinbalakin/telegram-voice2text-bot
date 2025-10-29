@@ -104,7 +104,7 @@ async def test_usage_repository_create(async_session):
         user_id=user.id,
         voice_duration_seconds=45,
         voice_file_id="test_file_123",
-        transcription_text="This is a test transcription",
+        transcription_length=29,  # Length of "This is a test transcription"
         model_size="base",
         processing_time_seconds=8.5,
         language="ru",
@@ -114,7 +114,7 @@ async def test_usage_repository_create(async_session):
     assert usage.id is not None
     assert usage.user_id == user.id
     assert usage.voice_duration_seconds == 45
-    assert usage.transcription_text == "This is a test transcription"
+    assert usage.transcription_length == 29
 
 
 @pytest.mark.asyncio
@@ -133,7 +133,7 @@ async def test_usage_repository_get_by_user_id(async_session):
             user_id=user.id,
             voice_duration_seconds=10 * (i + 1),
             voice_file_id=f"file_{i}",
-            transcription_text=f"Text {i}",
+            transcription_length=6 + i,  # Length varies
             model_size="base",
         )
     await async_session.commit()

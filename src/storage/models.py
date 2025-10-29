@@ -5,7 +5,7 @@ Database models for Telegram Voice2Text Bot
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Date, Text, ForeignKey
+from sqlalchemy import String, Integer, Boolean, DateTime, Date, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -57,7 +57,13 @@ class User(Base):
 
 
 class Usage(Base):
-    """Usage model - represents a single transcription request."""
+    """Usage model - represents a single transcription request.
+
+    Lifecycle stages:
+    1. Created on file download: user_id, voice_file_id, created_at
+    2. Updated after download: voice_duration_seconds, updated_at
+    3. Updated after transcription: model_size, processing_time_seconds, transcription_length, updated_at
+    """
 
     __tablename__ = "usage"
 
@@ -70,19 +76,24 @@ class Usage(Base):
     )
 
     # Voice message data
-    voice_duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
-    voice_file_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    voice_duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Stage 2
+    voice_file_id: Mapped[str] = mapped_column(String(255), nullable=False)  # Stage 1
 
-    # Transcription data
-    transcription_text: Mapped[str] = mapped_column(Text, nullable=False)
-    processing_time_seconds: Mapped[Optional[float]] = mapped_column(nullable=True)
+    # Transcription data (privacy: only store length, not text)
+    transcription_length: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Stage 3
+    processing_time_seconds: Mapped[Optional[float]] = mapped_column(nullable=True)  # Stage 3
 
     # Whisper settings used
-    model_size: Mapped[str] = mapped_column(String(50), nullable=False)
+    model_size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Stage 3
     language: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
 
-    # Timestamp
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )  # Stage 1
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )  # Stage 2, 3
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="usage_records")
