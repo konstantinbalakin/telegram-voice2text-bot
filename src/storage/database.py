@@ -68,9 +68,18 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
-    """Initialize database - create all tables."""
-    # Ensure database directory exists
+    """
+    Initialize database - verify migration status.
+
+    This function checks that database schema is up-to-date with migrations.
+    It does NOT create tables directly (use alembic for that).
+    """
+    import logging
     from pathlib import Path
+
+    logger = logging.getLogger(__name__)
+
+    # Ensure database directory exists
     import re
 
     # Extract path from database URL
@@ -86,9 +95,65 @@ async def init_db() -> None:
             db_file = Path(db_path).resolve()
         db_file.parent.mkdir(parents=True, exist_ok=True)
 
-    engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # Check database migration status
+    try:
+        from alembic.config import Config
+        from alembic.script import ScriptDirectory
+        from alembic.runtime.migration import MigrationContext
+        from sqlalchemy import create_engine
+
+        # Get alembic config
+        project_root = Path(__file__).parent.parent.parent
+        alembic_ini = project_root / "alembic.ini"
+
+        if not alembic_ini.exists():
+            logger.warning(
+                f"⚠️  Alembic config not found at {alembic_ini}. "
+                "Cannot verify migration status."
+            )
+            return
+
+        config = Config(str(alembic_ini))
+        script = ScriptDirectory.from_config(config)
+        head_revision = script.get_current_head()
+
+        # Get current database revision (using sync engine for alembic)
+        db_url_sync = db_url.replace("+aiosqlite", "")
+        engine = create_engine(db_url_sync)
+
+        try:
+            with engine.connect() as conn:
+                context = MigrationContext.configure(conn)
+                current_revision = context.get_current_revision()
+        finally:
+            engine.dispose()
+
+        # Log migration status
+        if current_revision is None:
+            logger.error(
+                "❌ Database not initialized! No migration applied.\n"
+                "   Run: alembic upgrade head"
+            )
+            raise RuntimeError(
+                "Database not initialized. Run 'alembic upgrade head' first."
+            )
+        elif current_revision != head_revision:
+            logger.error(
+                f"❌ Database schema is out of date!\n"
+                f"   Current: {current_revision}\n"
+                f"   HEAD:    {head_revision}\n"
+                f"   Run: alembic upgrade head"
+            )
+            raise RuntimeError(
+                f"Database schema mismatch. Current: {current_revision}, "
+                f"HEAD: {head_revision}. Run 'alembic upgrade head'."
+            )
+        else:
+            logger.info(f"✅ Database schema is up to date (revision: {current_revision})")
+
+    except Exception as e:
+        logger.error(f"Failed to verify database migration status: {e}")
+        raise
 
 
 async def close_db() -> None:

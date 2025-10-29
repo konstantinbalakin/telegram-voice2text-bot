@@ -19,7 +19,7 @@ services:
       # Cache Whisper models to avoid re-downloading
       - whisper-models:/home/appuser/.cache/huggingface
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "python", "-m", "src.health_check"]
       interval: 30s
       timeout: 10s
       retries: 3

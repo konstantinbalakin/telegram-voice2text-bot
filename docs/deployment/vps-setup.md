@@ -358,6 +358,167 @@ docker compose -f docker-compose.prod.yml logs -f bot
 
 ---
 
+## Фаза 6.5: Работа с миграциями базы данных (5-10 минут)
+
+### Что такое миграции?
+
+Миграции — это версионируемые изменения схемы базы данных. Проект использует **Alembic** для управления миграциями.
+
+**Важно**: Миграции применяются **автоматически** при каждом деплое через GitHub Actions.
+
+### Автоматическое применение миграций
+
+При каждом деплое на main ветку происходит:
+
+1. **test-migrations job**: Тестирует миграции в CI
+2. **build job**: Собирает Docker image
+3. **migrate job**: Применяет миграции на VPS **перед** запуском нового кода
+4. **deploy job**: Обновляет и перезапускает бот
+
+**Если миграция падает**:
+- Автоматический откат к предыдущей версии схемы
+- Деплой останавливается
+- Бот продолжает работать на старой версии
+
+### Проверка статуса миграций на VPS
+
+**Проверить текущую версию схемы БД**:
+
+```bash
+# На VPS
+cd /opt/telegram-voice2text-bot
+
+# Показать текущую ревизию миграции
+docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/alembic:/app/alembic \
+  -v $(pwd)/alembic.ini:/app/alembic.ini \
+  -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+  konstantinbalakin/telegram-voice2text-bot:latest \
+  alembic current
+
+# Вывод: a9f3b2c8d1e4 (head)
+```
+
+**Посмотреть историю миграций**:
+
+```bash
+docker run --rm \
+  -v $(pwd)/alembic:/app/alembic \
+  -v $(pwd)/alembic.ini:/app/alembic.ini \
+  konstantinbalakin/telegram-voice2text-bot:latest \
+  alembic history
+```
+
+### Ручное применение миграций (если нужно)
+
+**Сценарий**: CI/CD недоступен, нужно применить миграции вручную.
+
+```bash
+# На VPS
+cd /opt/telegram-voice2text-bot
+
+# 1. Обязательно сделать backup БД перед миграцией
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+cp data/bot.db data/bot.db.backup_${TIMESTAMP}
+ls -lh data/bot.db*  # Проверить что backup создан
+
+# 2. Pull latest code (содержит новые миграции)
+git pull origin main
+
+# 3. Pull latest Docker image
+docker pull konstantinbalakin/telegram-voice2text-bot:latest
+
+# 4. Применить миграции
+docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/alembic:/app/alembic \
+  -v $(pwd)/alembic.ini:/app/alembic.ini \
+  -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+  konstantinbalakin/telegram-voice2text-bot:latest \
+  alembic upgrade head
+
+# 5. Перезапустить бота с новой версией
+docker compose -f docker-compose.prod.yml restart bot
+
+# 6. Проверить логи
+docker compose -f docker-compose.prod.yml logs --tail=50 bot
+```
+
+### Откат миграции (Rollback)
+
+**Сценарий**: Миграция применилась, но вызвала проблемы.
+
+```bash
+# На VPS
+cd /opt/telegram-voice2text-bot
+
+# 1. Остановить бота (важно!)
+docker compose -f docker-compose.prod.yml stop bot
+
+# 2. Откатить последнюю миграцию
+docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/alembic:/app/alembic \
+  -v $(pwd)/alembic.ini:/app/alembic.ini \
+  -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+  konstantinbalakin/telegram-voice2text-bot:latest \
+  alembic downgrade -1
+
+# 3. Проверить текущую ревизию
+docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/alembic:/app/alembic \
+  -v $(pwd)/alembic.ini:/app/alembic.ini \
+  konstantinbalakin/telegram-voice2text-bot:latest \
+  alembic current
+
+# 4. Откатить Docker image к предыдущей версии
+# (найти SHA предыдущего коммита в GitHub)
+docker pull konstantinbalakin/telegram-voice2text-bot:<previous-sha>
+docker tag konstantinbalakin/telegram-voice2text-bot:<previous-sha> \
+           konstantinbalakin/telegram-voice2text-bot:latest
+
+# 5. Запустить бота с откаченной версией
+docker compose -f docker-compose.prod.yml up -d bot
+
+# 6. Проверить что все работает
+docker compose -f docker-compose.prod.yml logs --tail=50 bot
+```
+
+### Health Check и миграции
+
+После обновления health check теперь проверяет:
+- ✅ Подключение к базе данных
+- ✅ Версия схемы (должна быть HEAD)
+
+**Если health check fails с ошибкой схемы**:
+
+```bash
+# Посмотреть логи
+docker compose -f docker-compose.prod.yml logs bot | grep -i schema
+
+# Обычно означает: нужно применить миграции
+docker run --rm \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/alembic:/app/alembic \
+  -v $(pwd)/alembic.ini:/app/alembic.ini \
+  -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+  konstantinbalakin/telegram-voice2text-bot:latest \
+  alembic upgrade head
+
+# Перезапустить
+docker compose -f docker-compose.prod.yml restart bot
+```
+
+### Документация по миграциям
+
+Подробные руководства:
+- **Разработка**: `/docs/development/database-migrations.md` - создание миграций
+- **Операции**: `/docs/deployment/migration-runbook.md` - production процедуры
+
+---
+
 ## Фаза 7: Мониторинг ресурсов (10 минут)
 
 ### Шаг 7.1: Проверить использование памяти

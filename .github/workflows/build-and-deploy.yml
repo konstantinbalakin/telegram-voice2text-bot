@@ -5,7 +5,101 @@ on:
     branches: [main]
 
 jobs:
+  test-migrations:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          poetry install --with dev --extras "faster-whisper"
+
+      - name: Test migrations on fresh database
+        run: |
+          # Create test database directory
+          mkdir -p data
+          export DATABASE_URL="sqlite+aiosqlite:///./data/test_fresh.db"
+
+          # Apply all migrations from scratch
+          poetry run alembic upgrade head
+
+          # Verify we're at HEAD
+          CURRENT=$(poetry run alembic current)
+          echo "Current revision: $CURRENT"
+
+          # Check that migration succeeded
+          if [ -f "data/test_fresh.db" ]; then
+            echo "✅ Fresh database migration successful"
+          else
+            echo "❌ Fresh database migration failed"
+            exit 1
+          fi
+
+      - name: Test upgrade/downgrade cycle
+        run: |
+          # Create another test database
+          export DATABASE_URL="sqlite+aiosqlite:///./data/test_cycle.db"
+
+          # Apply all migrations
+          poetry run alembic upgrade head
+          HEAD_REV=$(poetry run alembic current | awk '{print $1}')
+          echo "HEAD revision: $HEAD_REV"
+
+          # Downgrade one step
+          poetry run alembic downgrade -1
+          PREV_REV=$(poetry run alembic current | awk '{print $1}')
+          echo "After downgrade: $PREV_REV"
+
+          # Upgrade back to head
+          poetry run alembic upgrade head
+          FINAL_REV=$(poetry run alembic current | awk '{print $1}')
+          echo "After upgrade: $FINAL_REV"
+
+          # Verify we're back at HEAD
+          if [ "$FINAL_REV" = "$HEAD_REV" ]; then
+            echo "✅ Upgrade/downgrade cycle successful"
+          else
+            echo "❌ Upgrade/downgrade cycle failed"
+            exit 1
+          fi
+
+      - name: Test application startup after migration
+        run: |
+          # Use fresh database
+          export DATABASE_URL="sqlite+aiosqlite:///./data/test_fresh.db"
+          export TELEGRAM_BOT_TOKEN="test:token"
+
+          # Try to import main module (this will init db)
+          poetry run python -c "
+          import asyncio
+          from src.storage.database import get_engine
+          from sqlalchemy import text
+
+          async def test_connection():
+              engine = get_engine()
+              async with engine.connect() as conn:
+                  result = await conn.execute(text('SELECT 1'))
+                  assert result.fetchone()[0] == 1
+              await engine.dispose()
+              print('✅ Database connection successful')
+
+          asyncio.run(test_connection())
+          "
+
   build:
+    needs: test-migrations
     runs-on: ubuntu-latest
     environment: production
     outputs:
@@ -73,8 +167,89 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  deploy:
+  migrate:
     needs: build
+    if: needs.build.outputs.any_changed == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Run database migrations on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e  # Exit on error
+
+            echo "🔄 Starting database migration process..."
+
+            # Navigate to project directory
+            cd /opt/telegram-voice2text-bot || exit 1
+
+            # Pull latest code (for migration files)
+            git pull origin main
+
+            # Check current migration status
+            echo "📊 Current database revision:"
+            docker run --rm \
+              -v $(pwd)/data:/app/data \
+              -v $(pwd)/alembic:/app/alembic \
+              -v $(pwd)/alembic.ini:/app/alembic.ini \
+              -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+              ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+              alembic current || echo "No revision found (fresh database)"
+
+            # Run migrations
+            echo "⬆️  Applying migrations..."
+            if docker run --rm \
+              -v $(pwd)/data:/app/data \
+              -v $(pwd)/alembic:/app/alembic \
+              -v $(pwd)/alembic.ini:/app/alembic.ini \
+              -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+              ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+              alembic upgrade head; then
+
+              # Success - show new revision
+              echo "✅ Migration successful!"
+              echo "📊 New database revision:"
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+                alembic current
+
+            else
+              # Migration failed - attempt rollback
+              echo "❌ Migration failed! Attempting rollback..."
+
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+                alembic downgrade -1
+
+              echo "⚠️  Rollback completed. Database reverted to previous state."
+              echo "📊 Current database revision:"
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }} \
+                alembic current
+
+              echo "❌ Deployment aborted due to migration failure"
+              exit 1
+            fi
+
+  deploy:
+    needs: [build, migrate]
     if: needs.build.outputs.any_changed == 'true'
     runs-on: ubuntu-latest
     environment: production
