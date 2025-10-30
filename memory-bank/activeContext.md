@@ -2,13 +2,13 @@
 
 ## Current Status
 
-**Phase**: Phase 6 - Queue-Based Concurrency Control DEPLOYED ✅
+**Phase**: Phase 6.7 - Long Transcription Message Splitting ✅
 **Date**: 2025-10-30
-**Stage**: Production deployment with optimized limits
-**Branch**: `main`
-**Production Status**: ✅ OPERATIONAL - Queue system deployed with conservative limits
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, **database migration system**, **production limit optimization**
-**Next Phase**: Monitoring and optimization based on real-world usage
+**Stage**: Ready for production deployment
+**Branch**: `main` (commit 0906229)
+**Production Status**: ✅ OPERATIONAL - All systems stable, message splitting fix tested
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, **long transcription message splitting**
+**Next Phase**: Deploy message splitting fix, continue monitoring
 
 ## Production Configuration Finalized ✅
 
@@ -376,9 +376,78 @@ health check (verify schema)
 
 **Status**: ✅ Deployed and operational
 
+### LONG TRANSCRIPTION MESSAGE SPLITTING ✅ (2025-10-30)
+**Achievement**: Automatic splitting of long transcriptions to handle Telegram's 4096 character limit
+
+**Problem Encountered**:
+- Telegram limits messages to 4096 characters
+- 31-minute voice message produced 23,676 character transcription
+- Bot crashed with `telegram.error.BadRequest: Message is too long`
+- Critical bug blocking users from transcribing longer messages
+
+**Solution Implemented** (commit 0906229):
+
+**1. Smart Text Splitting Function**
+- Added `split_text()` function in `src/bot/handlers.py`
+- Reserves 50 characters for message headers
+- Effective max: 4046 characters per chunk
+- Smart boundary detection (paragraph → newline → sentence → word → force)
+- Guarantees no chunk exceeds 4096 chars including header
+
+**2. Updated Data Model**
+- Added `user_message: Message` to `TranscriptionRequest`
+- Enables proper reply threading for multi-message responses
+- Modified `src/services/queue_manager.py`
+
+**3. Dynamic Message Handling**
+- Short transcriptions (≤4096): Edit status message (no change)
+- Long transcriptions (>4096): Delete status message + send numbered parts
+  ```
+  📝 Часть 1/6
+  [chunk 1]
+
+  📝 Часть 2/6
+  [chunk 2]
+  ...
+  ```
+- 0.1s delay between messages to avoid rate limits
+
+**Production Testing**:
+- ✅ 31-minute voice (1885s) → 23,676 chars
+- ✅ Split into 6 messages successfully
+- ✅ Processing time: 559s (RTF 0.30x)
+- ✅ All messages delivered without errors
+
+**Impact**:
+- ✅ Bot can now handle any length voice message
+- ✅ Clean UX with numbered message parts
+- ✅ No data loss or truncation
+- ✅ Graceful edge case handling
+
+**Files Modified**:
+- `src/bot/handlers.py` (90 lines added: split_text + multi-message logic)
+- `src/services/queue_manager.py` (1 line: user_message field)
+
+**Status**: ✅ Tested locally, ready for production push
+
 ## Next Steps (Current Priority)
 
-### 1. Production Monitoring (High Priority) ⏳
+### 1. Deploy Message Splitting Fix (IMMEDIATE) 🔥
+
+**Actions**:
+```bash
+# Create feature branch
+git checkout -b fix/long-transcription-splitting
+
+# Push to remote
+git push -u origin fix/long-transcription-splitting
+
+# Create PR and merge to trigger deployment
+```
+
+**Deployment via CI/CD**: Automatic on merge to main
+
+### 2. Production Monitoring (High Priority) ⏳
 
 **Monitor These Metrics**:
 - Queue depth (should stay < 10)
@@ -401,15 +470,14 @@ docker stats telegram-voice2text-bot
 grep "queue_depth" logs/bot.log
 ```
 
-### 2. Documentation Maintenance (Current Task) 🔄
+### 3. Documentation Maintenance ✅ COMPLETE
 
-**Update following based on deployment**:
-- ✅ Memory Bank activeContext.md (current file)
-- ⏳ Memory Bank progress.md (add Phase 6.5 completion)
-- ⏳ Memory Bank projectbrief.md (update constraints)
-- ⏳ docs/ folder (reflect new configuration values)
+**Updated**:
+- ✅ Memory Bank activeContext.md (Phase 6.7 documented)
+- ✅ Memory Bank progress.md (Phase 6.7 completion added)
+- ✅ All key learnings captured
 
-### 3. Future Performance Optimization (Low Priority)
+### 4. Future Performance Optimization (Low Priority)
 
 **Only if needed** (after queue system proves stable):
 

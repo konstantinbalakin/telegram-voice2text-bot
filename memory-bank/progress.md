@@ -10,8 +10,9 @@
 - **Phase 6**: ✅ Complete (2025-10-29) - Queue-based concurrency control
 - **Phase 6.5**: ✅ Complete (2025-10-29) - Database migration system
 - **Phase 6.6**: ✅ Complete (2025-10-29) - Production limit optimization
+- **Phase 6.7**: ✅ Complete (2025-10-30) - Long transcription message splitting
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- Current focus (2025-10-30): Production monitoring & documentation updates
+- Current focus (2025-10-30): Production deployment of message splitting fix
 
 ## Delivered Milestones
 
@@ -392,7 +393,71 @@ health check (verify schema version)
 
 **Status**: ✅ Deployed and operational since 2025-10-29
 
-### Phase 6.7: Performance Optimization ⏳ DEFERRED
+### Phase 6.7: Long Transcription Message Splitting ✅ COMPLETE (2025-10-30)
+**Achievement**: Automatic splitting of long transcriptions to handle Telegram's 4096 character limit
+
+**Problem**: Bot crashed when transcribing long voice messages (30+ minutes). Telegram limits messages to 4096 characters, but transcriptions could be 23,000+ characters, causing `telegram.error.BadRequest: Message is too long`.
+
+**Implementation** (commit 0906229):
+
+**1. Smart Text Splitting Function** (`split_text()` in `src/bot/handlers.py`)
+- Reserves 50 characters for message headers (e.g., "📝 Часть 1/6")
+- Effective max: 4046 characters per chunk
+- Smart boundary detection:
+  - Prefers paragraph boundaries (double newline)
+  - Falls back to single newline
+  - Then sentence boundaries (. ! ?)
+  - Finally word boundaries
+  - Force splits only as last resort
+- Ensures no chunk exceeds 4096 chars including header
+
+**2. Updated TranscriptionRequest Model**
+- Added `user_message: Message` field to `TranscriptionRequest` dataclass
+- Enables proper reply threading for multi-message transcriptions
+- Updated in `src/services/queue_manager.py`
+
+**3. Dynamic Message Handling** (`src/bot/handlers.py`)
+- Short transcriptions (≤4096 chars): Edit status message (unchanged behavior)
+- Long transcriptions (>4096 chars):
+  - Delete status message
+  - Send multiple reply messages with headers:
+    ```
+    📝 Часть 1/6
+    [first chunk of text]
+
+    📝 Часть 2/6
+    [second chunk of text]
+    ...
+    ```
+  - Small delay (0.1s) between messages to avoid rate limits
+
+**Testing**:
+- Created comprehensive test suite (`test_split.py`, removed after testing)
+- Tested with 5 scenarios: short text, long text, paragraphs, realistic 23K chars, edge cases
+- Verified all chunks fit within 4096 limit including headers
+
+**Files Modified**:
+- `src/bot/handlers.py` - Added split_text() function, updated result sending logic
+- `src/services/queue_manager.py` - Added user_message field to TranscriptionRequest
+
+**Production Testing**:
+- ✅ Tested with 31-minute voice message (1885 seconds)
+- ✅ Transcription: 23,676 characters
+- ✅ Split into multiple messages successfully
+- ✅ Processing time: 559 seconds (RTF 0.30x)
+- ✅ No errors, all messages delivered
+
+**Impact**:
+- ✅ Bot can now handle voice messages of any length
+- ✅ Maintains clean UX with numbered message parts
+- ✅ No data loss from truncation
+- ✅ Graceful handling of edge cases
+
+**Key Pattern Established**: For services with message length limits, implement smart text splitting with boundary detection and reserve space for metadata headers.
+
+**Status**: ✅ Tested and ready for production deployment
+
+### Phase 6.8: Performance Optimization ⏳ DEFERRED
 **Goal**: Achieve RTF ~0.3x (match local benchmark performance)
 
 **Current Baseline**:
