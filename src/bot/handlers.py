@@ -18,6 +18,76 @@ from src.services.progress_tracker import ProgressTracker
 
 logger = logging.getLogger(__name__)
 
+# Telegram message length limit
+TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+
+
+def split_text(
+    text: str,
+    max_length: int = TELEGRAM_MAX_MESSAGE_LENGTH,
+    header_reserve: int = 50,
+) -> list[str]:
+    """Split text into chunks that fit Telegram message length limit.
+
+    Args:
+        text: Text to split
+        max_length: Maximum length of each chunk (default: 4096)
+        header_reserve: Reserve space for header like "📝 Часть 1/10\n\n"
+
+    Returns:
+        List of text chunks
+    """
+    # Effective max length accounting for potential header
+    effective_max = max_length - header_reserve
+
+    if len(text) <= max_length:
+        return [text]
+
+    chunks = []
+
+    # Simple approach: split by character count with smart breaks
+    while text:
+        if len(text) <= effective_max:
+            chunks.append(text)
+            break
+
+        # Find best split point within limit
+        chunk = text[:effective_max]
+
+        # Try to split at paragraph boundary (double newline)
+        split_pos = chunk.rfind("\n\n")
+        if split_pos > effective_max * 0.5:  # At least 50% of chunk
+            chunks.append(text[:split_pos])
+            text = text[split_pos + 2 :]  # Skip the \n\n
+            continue
+
+        # Try to split at single newline
+        split_pos = chunk.rfind("\n")
+        if split_pos > effective_max * 0.5:
+            chunks.append(text[:split_pos])
+            text = text[split_pos + 1 :]  # Skip the \n
+            continue
+
+        # Try to split at sentence boundary
+        split_pos = max(chunk.rfind(". "), chunk.rfind("! "), chunk.rfind("? "))
+        if split_pos > effective_max * 0.5:
+            chunks.append(text[: split_pos + 1])  # Include punctuation
+            text = text[split_pos + 2 :]  # Skip punctuation and space
+            continue
+
+        # Try to split at word boundary
+        split_pos = chunk.rfind(" ")
+        if split_pos > 0:
+            chunks.append(text[:split_pos])
+            text = text[split_pos + 1 :]  # Skip the space
+            continue
+
+        # No good split point found, force split
+        chunks.append(text[:effective_max])
+        text = text[effective_max:]
+
+    return chunks
+
 
 class BotHandlers:
     """Telegram bot handlers for processing voice messages with queue management."""
@@ -315,6 +385,7 @@ class BotHandlers:
                     duration_seconds=duration_seconds,
                     context=transcription_context,
                     status_message=status_msg,
+                    user_message=update.message,
                     usage_id=usage.id,
                 )
 
@@ -512,6 +583,7 @@ class BotHandlers:
                     duration_seconds=duration_seconds,
                     context=transcription_context,
                     status_message=status_msg,
+                    user_message=update.message,
                     usage_id=usage.id,
                 )
 
@@ -602,7 +674,27 @@ class BotHandlers:
                 )
 
             # Send final result (clean text for easy copying)
-            await request.status_message.edit_text(result.text)
+            # Split long text into multiple messages if needed
+            text_chunks = split_text(result.text)
+
+            if len(text_chunks) == 1:
+                # Single message - edit existing status message
+                await request.status_message.edit_text(result.text)
+            else:
+                # Multiple messages needed
+                # First, delete the status message
+                try:
+                    await request.status_message.delete()
+                except Exception as e:
+                    logger.warning(f"Failed to delete status message: {e}")
+
+                # Send text in chunks
+                for i, chunk in enumerate(text_chunks, 1):
+                    header = f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
+                    await request.user_message.reply_text(header + chunk)
+                    # Small delay to avoid rate limits
+                    if i < len(text_chunks):
+                        await asyncio.sleep(0.1)
 
             # Cleanup temporary file
             self.audio_handler.cleanup_file(request.file_path)

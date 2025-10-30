@@ -24,6 +24,7 @@ class TranscriptionRequest:
     duration_seconds: int
     context: TranscriptionContext
     status_message: Message
+    user_message: Message  # Original user voice message (for replies)
     usage_id: int  # Database usage record ID for updates
     created_at: float = field(default_factory=lambda: asyncio.get_event_loop().time())
 
