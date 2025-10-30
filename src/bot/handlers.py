@@ -22,7 +22,11 @@ logger = logging.getLogger(__name__)
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
 
 
-def split_text(text: str, max_length: int = TELEGRAM_MAX_MESSAGE_LENGTH, header_reserve: int = 50) -> list[str]:
+def split_text(
+    text: str,
+    max_length: int = TELEGRAM_MAX_MESSAGE_LENGTH,
+    header_reserve: int = 50,
+) -> list[str]:
     """Split text into chunks that fit Telegram message length limit.
 
     Args:
