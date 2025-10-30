@@ -69,7 +69,9 @@ def split_text(
             continue
 
         # Try to split at sentence boundary
-        split_pos = max(chunk.rfind(". "), chunk.rfind("! "), chunk.rfind("? "))
+        split_pos = max(
+            chunk.rfind(". "), chunk.rfind("! "), chunk.rfind("? ")
+        )
         if split_pos > effective_max * 0.5:
             chunks.append(text[:split_pos + 1])  # Include punctuation
             text = text[split_pos + 2:]  # Skip punctuation and space
@@ -690,7 +692,11 @@ class BotHandlers:
 
                 # Send text in chunks
                 for i, chunk in enumerate(text_chunks, 1):
-                    header = f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
+                    header = (
+                        f"📝 Часть {i}/{len(text_chunks)}\n\n"
+                        if len(text_chunks) > 1
+                        else ""
+                    )
                     await request.user_message.reply_text(header + chunk)
                     # Small delay to avoid rate limits
                     if i < len(text_chunks):
