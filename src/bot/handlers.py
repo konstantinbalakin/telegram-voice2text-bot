@@ -58,30 +58,28 @@ def split_text(
         split_pos = chunk.rfind("\n\n")
         if split_pos > effective_max * 0.5:  # At least 50% of chunk
             chunks.append(text[:split_pos])
-            text = text[split_pos + 2:]  # Skip the \n\n
+            text = text[split_pos + 2 :]  # Skip the \n\n
             continue
 
         # Try to split at single newline
         split_pos = chunk.rfind("\n")
         if split_pos > effective_max * 0.5:
             chunks.append(text[:split_pos])
-            text = text[split_pos + 1:]  # Skip the \n
+            text = text[split_pos + 1 :]  # Skip the \n
             continue
 
         # Try to split at sentence boundary
-        split_pos = max(
-            chunk.rfind(". "), chunk.rfind("! "), chunk.rfind("? ")
-        )
+        split_pos = max(chunk.rfind(". "), chunk.rfind("! "), chunk.rfind("? "))
         if split_pos > effective_max * 0.5:
-            chunks.append(text[:split_pos + 1])  # Include punctuation
-            text = text[split_pos + 2:]  # Skip punctuation and space
+            chunks.append(text[: split_pos + 1])  # Include punctuation
+            text = text[split_pos + 2 :]  # Skip punctuation and space
             continue
 
         # Try to split at word boundary
         split_pos = chunk.rfind(" ")
         if split_pos > 0:
             chunks.append(text[:split_pos])
-            text = text[split_pos + 1:]  # Skip the space
+            text = text[split_pos + 1 :]  # Skip the space
             continue
 
         # No good split point found, force split
@@ -692,11 +690,7 @@ class BotHandlers:
 
                 # Send text in chunks
                 for i, chunk in enumerate(text_chunks, 1):
-                    header = (
-                        f"📝 Часть {i}/{len(text_chunks)}\n\n"
-                        if len(text_chunks) > 1
-                        else ""
-                    )
+                    header = f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
                     await request.user_message.reply_text(header + chunk)
                     # Small delay to avoid rate limits
                     if i < len(text_chunks):
