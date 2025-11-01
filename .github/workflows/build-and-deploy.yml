@@ -356,6 +356,7 @@ jobs:
             MAX_CONCURRENT_WORKERS=1
             TRANSCRIPTION_TIMEOUT=120
             MAX_VOICE_DURATION_SECONDS=120
+            PROGRESS_RTF=0.6
 
             # Quota
             DEFAULT_DAILY_QUOTA_SECONDS=60
