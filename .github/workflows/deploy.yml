@@ -4,6 +4,17 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  workflow_run:
+    workflows: ["Build and Tag"]
+    types:
+      - completed
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag to deploy (e.g., v0.1.0)'
+        required: true
+        type: string
 
 jobs:
   migrate:
@@ -17,8 +28,12 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # Get version from tag (refs/tags/v0.1.0 -> v0.1.0)
-          VERSION=${GITHUB_REF#refs/tags/}
+          # Get version from tag or workflow_dispatch input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Deploying version: $VERSION"
 
@@ -166,8 +181,12 @@ jobs:
       - name: Extract version from tag
         id: version
         run: |
-          # Get version from tag (refs/tags/v0.1.0 -> v0.1.0)
-          VERSION=${GITHUB_REF#refs/tags/}
+          # Get version from tag or workflow_dispatch input
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Deploying version: $VERSION"
 
