@@ -141,9 +141,7 @@ def setup_logging(
     # Console handler for development (human-readable)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-    console_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    console_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 
@@ -163,9 +161,7 @@ def setup_logging(
         except Exception as e:
             logging.warning(f"Failed to setup remote syslog: {e}. Continuing with file logging.")
 
-    logging.info(
-        f"Logging configured: level={log_level}, log_dir={log_dir}, version={version[:7]}"
-    )
+    logging.info(f"Logging configured: level={log_level}, log_dir={log_dir}, version={version[:7]}")
 
 
 def log_deployment_event(
@@ -220,7 +216,9 @@ def get_config_summary() -> Dict[str, Any]:
 
     return {
         "bot_mode": settings.bot_mode,
-        "database_url": settings.database_url.split("///")[-1] if "///" in settings.database_url else "postgres",
+        "database_url": (
+            settings.database_url.split("///")[-1] if "///" in settings.database_url else "postgres"
+        ),
         "whisper_providers": settings.whisper_providers,
         "primary_provider": settings.primary_provider,
         "routing_strategy": settings.whisper_routing_strategy,
