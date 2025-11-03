@@ -237,6 +237,9 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-10-29 | Automated database migrations | Test migrations in CI, apply before deploy, rollback on failure | 95% |
 | 2025-10-29 | Health check with schema verification | Prevent bot startup with outdated schema, docker health checks | 90% |
 | 2025-10-29 | Queue size optimization (10 max) | Conservative limit for 1GB VPS, adequate buffering with progress feedback | 85% |
+| 2025-11-03 | Centralized logging with version tracking | Essential for production observability, size-based rotation per user request | 95% |
+| 2025-11-03 | Separate build and deploy workflows | Enables testing between stages, automatic versioning without manual overhead | 90% |
+| 2025-11-03 | Size-based log rotation only | User request: "Если мало логов, то пусть хранятся долго" - predictable disk usage | 90% |
 
 ## Design Patterns in Use
 
@@ -640,6 +643,71 @@ This architecture prioritizes:
 4. **Scalability path**: Can migrate to microservices when needed
 
 The hybrid approach means we don't over-engineer for scale we don't have yet, but we also don't paint ourselves into a corner.
+
+### 13. **Version-Enriched Logging Pattern** (added 2025-11-03)
+- **Where**: `VersionEnrichmentFilter` in `src/utils/logging_config.py`
+- **Why**: Correlate logs with specific deployments for debugging and post-mortem analysis
+- **Benefit**: Every log entry knows its version, enabling filtering by deployment
+- **Implementation**:
+  - Custom logging filter adds version and container_id to all log records
+  - Version from `APP_VERSION` environment variable (set by CI/CD)
+  - Short form (7 chars) for readability: 09f9af8
+  - JSON formatter includes version in every log entry
+- **Usage**: All logs automatically include version, no code changes needed
+- **Pattern**: Cross-cutting concern handled at logging infrastructure level
+
+### 14. **Size-Based Log Rotation Pattern** (added 2025-11-03)
+- **Where**: `RotatingFileHandler` configuration in `src/utils/logging_config.py`
+- **Why**: Predictable disk usage, logs kept longer when generation is low
+- **Benefit**: No data loss from time-based rotation, clear disk usage ceiling
+- **Implementation**:
+  - app.log: 10MB per file, 5 backups (60MB max)
+  - errors.log: 5MB per file, 5 backups (30MB max)
+  - deployments.jsonl: Never rotated (minimal size growth)
+- **User Requirement**: "Если мало логов, то пусть хранятся долго"
+- **Pattern**: Resource management with user-friendly behavior
+
+### 15. **Deployment Event Tracking Pattern** (added 2025-11-03)
+- **Where**: `log_deployment_event()` in `src/utils/logging_config.py`
+- **Why**: Track application lifecycle across deployments
+- **Benefit**: JSONL format enables time-series analysis of deployments
+- **Implementation**:
+  - Separate file: `deployments.jsonl`
+  - Events: startup (with config), ready, shutdown
+  - One JSON object per line for easy streaming analysis
+  - Includes full version, timestamp, container_id
+- **Usage**: Called from `src/main.py` at lifecycle events
+- **Pattern**: Append-only event log for audit trail
+
+### 16. **Automatic Semantic Versioning Pattern** (added 2025-11-03)
+- **Where**: `.github/workflows/build-and-tag.yml`
+- **Why**: Remove manual version management overhead, user-friendly version numbers
+- **Benefit**: Every merge to main gets readable version (v0.1.1), automatic GitHub releases
+- **Implementation**:
+  - Parse last tag: `git describe --tags --abbrev=0`
+  - Increment patch version automatically
+  - Create annotated git tag
+  - Push tag to trigger deploy workflow
+- **Version Format**: v{major}.{minor}.{patch}
+- **Manual Override**: Create tag manually for minor/major bumps
+- **Pattern**: Convention-based automation with escape hatch
+
+### 17. **Separated Build and Deploy Workflow Pattern** (added 2025-11-03)
+- **Where**: `.github/workflows/build-and-tag.yml` + `.github/workflows/deploy.yml`
+- **Why**: Enable testing and verification between build and deploy stages
+- **Benefit**: Deploy specific versions, rollback capability, safer releases
+- **Implementation**:
+  - **Build workflow**: Triggered by push to main
+    - Test migrations
+    - Build Docker image
+    - Create version tag
+    - Push image with version tag
+  - **Deploy workflow**: Triggered by tag creation
+    - Run migrations on VPS
+    - Deploy specific version
+    - Health checks
+- **Rollback**: Redeploy previous tag or create new tag pointing to old commit
+- **Pattern**: Two-phase deployment with artifact versioning
 
 ## Development Workflow
 

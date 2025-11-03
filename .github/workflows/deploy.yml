@@ -1,0 +1,278 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Get version from tag (refs/tags/v0.1.0 -> v0.1.0)
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Deploying version: $VERSION"
+
+      - name: Run database migrations on VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e  # Exit on error
+
+            VERSION="${{ steps.version.outputs.version }}"
+            echo "🔄 Starting database migration process for $VERSION..."
+
+            # Navigate to project directory
+            cd /opt/telegram-voice2text-bot || exit 1
+
+            # Pull latest code (for migration files and docker-compose updates)
+            git fetch --all --tags
+            git checkout "$VERSION"
+
+            # Check current migration status
+            echo "📊 Current database revision:"
+            CURRENT_REV=$(docker run --rm \
+              -v $(pwd)/data:/app/data \
+              -v $(pwd)/alembic:/app/alembic \
+              -v $(pwd)/alembic.ini:/app/alembic.ini \
+              -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+              -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+              ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION \
+              alembic current 2>&1 || true)
+
+            echo "$CURRENT_REV"
+
+            # Check if database exists but has no alembic version
+            if [ -f "data/bot.db" ] && echo "$CURRENT_REV" | grep -q "Can't locate revision"; then
+              echo "⚠️  Existing database detected without migration history"
+              echo "🔖 Stamping database to initial revision 7751fc657749..."
+
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION \
+                alembic stamp 7751fc657749
+
+              echo "✅ Database stamped to initial revision"
+              echo "⬆️  Now applying new migrations..."
+            fi
+
+            # Run migrations
+            echo "⬆️  Applying migrations..."
+            MIGRATION_OUTPUT=$(docker run --rm \
+              -v $(pwd)/data:/app/data \
+              -v $(pwd)/alembic:/app/alembic \
+              -v $(pwd)/alembic.ini:/app/alembic.ini \
+              -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+              -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+              ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION \
+              alembic upgrade head 2>&1) || MIGRATION_FAILED=1
+
+            echo "$MIGRATION_OUTPUT"
+
+            if [ -z "$MIGRATION_FAILED" ]; then
+              # Success - show new revision
+              echo "✅ Migration successful!"
+              echo "📊 New database revision:"
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION \
+                alembic current
+
+            elif echo "$MIGRATION_OUTPUT" | grep -q "table .* already exists"; then
+              # Database has tables but no alembic version - stamp to initial revision
+              echo "⚠️  Tables already exist - stamping database to initial revision 7751fc657749..."
+
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION \
+                alembic stamp 7751fc657749
+
+              echo "✅ Database stamped to initial revision"
+              echo "⬆️  Now applying new migrations..."
+
+              # Try upgrade again
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION \
+                alembic upgrade head
+
+              echo "✅ Migration successful!"
+              echo "📊 New database revision:"
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION \
+                alembic current
+
+            else
+              # Real migration failure - attempt rollback
+              echo "❌ Migration failed with unexpected error!"
+
+              # Try to rollback
+              echo "🔄 Attempting rollback..."
+              docker run --rm \
+                -v $(pwd)/data:/app/data \
+                -v $(pwd)/alembic:/app/alembic \
+                -v $(pwd)/alembic.ini:/app/alembic.ini \
+                -e DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db \
+                -e TELEGRAM_BOT_TOKEN=test_token_for_migrations \
+                ${{ secrets.DOCKER_USERNAME}}/telegram-voice2text-bot:$VERSION \
+                alembic downgrade -1 2>&1 || echo "Rollback failed (may not be at any revision)"
+
+              echo "❌ Deployment aborted due to migration failure"
+              exit 1
+            fi
+
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          # Get version from tag (refs/tags/v0.1.0 -> v0.1.0)
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Deploying version: $VERSION"
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            VERSION="${{ steps.version.outputs.version }}"
+            echo "🚀 Deploying version $VERSION to production..."
+
+            # Navigate to project directory
+            cd /opt/telegram-voice2text-bot || exit 1
+
+            # Ensure we're on the right tag
+            git fetch --all --tags
+            git checkout "$VERSION"
+
+            # Create .env file with secrets
+            cat > .env <<EOF
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            BOT_MODE=polling
+
+            # Transcription Provider Configuration
+            WHISPER_PROVIDERS=["faster-whisper"]
+            WHISPER_ROUTING_STRATEGY=single
+            PRIMARY_PROVIDER=faster-whisper
+
+            # FasterWhisper Production Configuration (medium/int8/beam1)
+            FASTER_WHISPER_MODEL_SIZE=medium
+            FASTER_WHISPER_DEVICE=cpu
+            FASTER_WHISPER_COMPUTE_TYPE=int8
+            FASTER_WHISPER_BEAM_SIZE=1
+            FASTER_WHISPER_VAD_FILTER=true
+
+            # Database
+            DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
+
+            # Processing
+            MAX_QUEUE_SIZE=10
+            MAX_CONCURRENT_WORKERS=1
+            TRANSCRIPTION_TIMEOUT=120
+            MAX_VOICE_DURATION_SECONDS=120
+            PROGRESS_RTF=0.6
+
+            # Quota
+            DEFAULT_DAILY_QUOTA_SECONDS=60
+
+            # Logging
+            LOG_LEVEL=INFO
+
+            # Benchmark Mode
+            BENCHMARK_MODE=false
+
+            # Application Version (for centralized logging)
+            APP_VERSION=$VERSION
+
+            # Optional: Remote Syslog Configuration
+            # Uncomment and configure if using remote log aggregation
+            # SYSLOG_ENABLED=false
+            # SYSLOG_HOST=logs.example.com
+            # SYSLOG_PORT=514
+            EOF
+
+            # Pull Docker image with version tag
+            docker pull ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION
+
+            # Tag as latest
+            docker tag ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION \
+                       ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:latest
+
+            # Update IMAGE_NAME in .env for docker-compose
+            echo "IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$VERSION" >> .env
+
+            # Create required directories (if not exist)
+            mkdir -p data logs
+
+            # Set permissions for appuser inside container (UID 1000)
+            chown -R 1000:1000 data logs
+
+            # Rolling update with zero downtime
+            docker compose -f docker-compose.prod.yml up -d --no-deps bot
+
+            # Wait for container to be healthy
+            echo "⏳ Waiting for health check..."
+            sleep 15
+
+            # Check if container is healthy
+            CONTAINER_STATUS=$(docker inspect --format='{{.State.Health.Status}}' telegram-voice2text-bot 2>/dev/null || echo "unknown")
+
+            if [ "$CONTAINER_STATUS" != "healthy" ] && [ "$CONTAINER_STATUS" != "unknown" ]; then
+              echo "❌ Health check failed! Container status: $CONTAINER_STATUS"
+              docker compose -f docker-compose.prod.yml logs --tail=50 bot
+              exit 1
+            fi
+
+            # Show status
+            echo "✅ Deployment successful! Version $VERSION is now live."
+            docker compose -f docker-compose.prod.yml ps
+
+            # Cleanup old images (keep last 3 versions)
+            echo "🧹 Cleaning up old Docker images..."
+            docker images ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot --format "{{.ID}} {{.CreatedAt}}" | \
+              tail -n +4 | awk '{print $1}' | xargs -r docker rmi || true
+
+            echo "🎉 Deployment complete!"

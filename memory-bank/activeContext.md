@@ -2,13 +2,13 @@
 
 ## Current Status
 
-**Phase**: Phase 6.7 - Long Transcription Message Splitting ✅
-**Date**: 2025-10-30
-**Stage**: Ready for production deployment
-**Branch**: `main` (commit 0906229)
-**Production Status**: ✅ OPERATIONAL - All systems stable, message splitting fix tested
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, **long transcription message splitting**
-**Next Phase**: Deploy message splitting fix, continue monitoring
+**Phase**: Phase 7 - Centralized Logging & Automatic Versioning ✅
+**Date**: 2025-11-03
+**Stage**: Production-ready, awaiting deployment
+**Branch**: Creating feature branch for review
+**Production Status**: ✅ OPERATIONAL - All systems stable
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging**, **automatic semantic versioning**
+**Next Phase**: Deploy logging and versioning systems, continue monitoring
 
 ## Production Configuration Finalized ✅
 
@@ -430,19 +430,239 @@ health check (verify schema)
 
 **Status**: ✅ Tested locally, ready for production push
 
+### Phase 7: Centralized Logging & Automatic Versioning ✅ COMPLETE (2025-11-03)
+**Achievement**: Full observability with version tracking and automated semantic versioning
+
+**Problem Solved**:
+- No logs preserved across container rebuilds during deployments
+- Git SHA version identifiers not user-friendly
+- No correlation between logs and deployed versions
+- Manual version management required
+
+**Solution Implemented** (2 major features):
+
+#### Feature 1: Centralized Logging System
+
+**1. Logging Infrastructure** (`src/utils/logging_config.py`, 233 lines)
+- **VersionEnrichmentFilter**: Custom filter adds version and container_id to all log records
+- **CustomJsonFormatter**: JSON formatter with ISO timestamps and structured context
+- **setup_logging()**: Configures file handlers with rotation, optional remote syslog
+- **log_deployment_event()**: Records deployment lifecycle (startup, ready, shutdown)
+
+**2. Log Files**:
+- **app.log**: All INFO+ logs in JSON format
+  - **Size-based rotation**: 10MB per file, keeps 5 backups
+  - Total: ~60MB max (app.log + app.log.1-5)
+  - Structure: timestamp, level, logger, version, container_id, message, context
+- **errors.log**: ERROR/CRITICAL logs only
+  - **Size-based rotation**: 5MB per file, keeps 5 backups
+  - Total: ~30MB max
+- **deployments.jsonl**: Deployment events
+  - **Never rotated**: JSONL format, one event per line
+  - Tracks: startup (with full config), ready, shutdown
+  - ~1KB per deployment, ~365KB/year
+
+**3. Version Tracking**:
+- `APP_VERSION` environment variable set by CI/CD (git SHA)
+- Short form (7 chars) included in every log entry
+- Enables filtering logs by specific deployment
+- Container ID tracking for multi-instance deployments
+
+**4. Integration Points**:
+- `src/main.py`: Logging initialization, deployment events
+- `docker-compose.prod.yml`: Volume mount for log persistence (`./logs:/app/logs`)
+- `.github/workflows/deploy.yml`: APP_VERSION passed from git tag
+
+**5. Configuration**:
+```python
+# Environment Variables
+APP_VERSION=<git-tag>  # Set by CI/CD
+LOG_DIR=/app/logs
+LOG_LEVEL=INFO
+SYSLOG_ENABLED=false  # Optional
+SYSLOG_HOST=  # Optional (e.g., logs.papertrailapp.com)
+SYSLOG_PORT=514  # Optional
+```
+
+**6. Documentation**:
+- `docs/development/logging.md` (347 lines): Complete logging guide
+  - Log file formats and rotation strategy
+  - Configuration and usage
+  - Searching and analyzing logs with jq
+  - Remote syslog setup (Papertrail)
+  - Troubleshooting
+
+**Rotation Strategy Decision**:
+- **Size-based only** (NOT time-based): "Если мало логов, то пусть хранятся долго"
+- If few logs generated → files kept for weeks/months
+- Predictable disk usage: ~90MB max total
+- No data loss from time-based rotation
+
+**Files Created**:
+- `src/utils/logging_config.py`
+- `docs/development/logging.md`
+- `memory-bank/plans/2025-11-03-centralized-logging.md` (implementation plan)
+
+**Files Modified**:
+- `pyproject.toml` - Added `python-json-logger = "^4.0.0"` dependency
+- `src/main.py` - Logging setup, deployment event tracking
+- `docker-compose.prod.yml` - LOG_DIR, SYSLOG_* environment variables
+- `docs/README.md` - Added logging documentation link
+
+**Key Benefit**: Full traceability - every log entry knows its version, enabling post-mortem analysis of any deployment
+
+#### Feature 2: Automatic Semantic Versioning
+
+**Problem**: Git SHA (09f9af8) not user-friendly for tracking releases
+
+**Solution**: Automatic semantic versioning with separate build and deploy workflows
+
+**1. Build & Tag Workflow** (`.github/workflows/build-and-tag.yml`)
+- **Trigger**: Push to main (after PR merge)
+- **Steps**:
+  1. Run database migration tests (fresh DB, upgrade/downgrade cycle, app startup)
+  2. Calculate next version:
+     ```bash
+     LAST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+     VERSION=${LAST_TAG#v}  # Remove 'v' prefix
+     IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+     NEW_PATCH=$((PATCH + 1))
+     NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+     ```
+  3. Build Docker image
+  4. Export requirements with extras: `poetry export --extras "faster-whisper"`
+  5. Push to Docker Hub with multiple tags:
+     - `konstantinbalakin/telegram-voice2text-bot:$NEW_VERSION` (e.g., v0.1.1)
+     - `konstantinbalakin/telegram-voice2text-bot:${{ github.sha }}`
+     - `konstantinbalakin/telegram-voice2text-bot:latest`
+  6. Create annotated git tag: `git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"`
+  7. Push tag to GitHub
+  8. Create GitHub Release
+
+**2. Deploy Workflow** (`.github/workflows/deploy.yml`)
+- **Trigger**: Tag creation (refs/tags/v*.*.*)
+- **Steps**:
+  1. **Migrate Job** (runs first):
+     - Extract version from tag
+     - SSH to VPS
+     - Checkout tagged version
+     - Check current database revision
+     - Handle existing DB without alembic version (stamp to initial revision)
+     - Run `alembic upgrade head`
+     - Automatic rollback on failure: `alembic downgrade -1`
+     - Abort deployment if migration fails
+  2. **Deploy Job** (runs after migrate succeeds):
+     - Extract version from tag
+     - SSH to VPS
+     - Checkout tagged version
+     - Create .env with production configuration
+     - Pull Docker image by version tag
+     - Rolling update: `docker compose up -d --no-deps bot`
+     - Health check verification (15s wait)
+     - Image cleanup (keep last 3 versions)
+
+**3. Version Format**:
+- **Automatic patch versions**: v0.1.0 → v0.1.1 → v0.1.2 (every merge to main)
+- **Manual minor/major versions**:
+  ```bash
+  git tag -a v0.2.0 -m "Release v0.2.0: Add quota system"
+  git push origin v0.2.0  # Triggers deployment
+  ```
+
+**4. Workflow Separation**:
+```
+PR merged to main
+  ↓
+Build & Tag Workflow
+  - Test migrations
+  - Build image
+  - Create v0.1.1 tag
+  - Push to Docker Hub
+  - Create GitHub Release
+  ↓ (tag created)
+Deploy Workflow (triggered by tag)
+  - Run migrations on VPS
+  - Deploy v0.1.1
+  - Health checks
+  ↓
+Production running v0.1.1
+```
+
+**5. Initial Version**:
+- Created `v0.1.0` tag at commit 09f9af8
+- Next merge to main will create `v0.1.1` automatically
+
+**6. Documentation**:
+- `docs/development/git-workflow.md` - Added comprehensive versioning section (517 lines total):
+  - Automatic versioning workflow
+  - Creating manual minor/major versions
+  - Viewing versions and rollback procedures
+  - Docker image tagging strategy
+  - Troubleshooting version issues
+
+**Files Created**:
+- `.github/workflows/build-and-tag.yml`
+- `.github/workflows/deploy.yml`
+- Git tag: `v0.1.0` (initial version)
+
+**Files Modified**:
+- `.github/workflows/build-and-deploy.yml` → `.github/workflows/build-and-deploy.yml.old` (disabled)
+- `docs/development/git-workflow.md` - Added "Versioning and Releases" section
+
+**Key Benefits**:
+- ✅ User-friendly version numbers (v0.1.0 instead of 09f9af8)
+- ✅ Automatic patch version increments
+- ✅ Separation of build and deploy for testing
+- ✅ Automated GitHub Releases with changelog
+- ✅ Version-tagged Docker images for rollback
+- ✅ Full version history: `git tag -l "v*"`
+
+**Deployment Status**:
+- ✅ Both systems implemented and tested
+- ✅ Initial version tag created (v0.1.0)
+- ✅ Documentation complete
+- ⏳ Awaiting next merge to main to test automatic versioning
+- ⏳ Logs will start being collected on next deployment
+
+**Key Pattern Established**: Centralized logging with version tracking is essential for production observability. Size-based log rotation ensures logs persist longer when generation is low, while automatic semantic versioning provides user-friendly release tracking without manual version management.
+
 ## Next Steps (Current Priority)
 
-### 1. Deploy Message Splitting Fix (IMMEDIATE) 🔥
+### 1. Deploy Logging & Versioning Systems (IMMEDIATE) 🔥
 
 **Actions**:
 ```bash
 # Create feature branch
-git checkout -b fix/long-transcription-splitting
+git checkout -b feat/logging-and-versioning
 
 # Push to remote
-git push -u origin fix/long-transcription-splitting
+git push -u origin feat/logging-and-versioning
 
 # Create PR and merge to trigger deployment
+```
+
+**What Will Happen**:
+1. Build & Tag workflow runs:
+   - Creates v0.1.1 tag automatically
+   - Builds and pushes Docker image
+2. Deploy workflow triggers on tag:
+   - Runs migrations (no new migrations in this PR)
+   - Deploys v0.1.1 to VPS
+3. Bot starts with logging system:
+   - Creates /app/logs/ directory
+   - Logs deployment startup event to deployments.jsonl
+   - All logs include version "v0.1.1"
+
+**Verification**:
+```bash
+# Check version deployed
+ssh telegram-bot "cat /opt/telegram-voice2text-bot/logs/deployments.jsonl | tail -1 | jq .version"
+
+# Check logs are being written
+ssh telegram-bot "ls -lh /opt/telegram-voice2text-bot/logs/"
+
+# View recent logs with version
+ssh telegram-bot "tail /opt/telegram-voice2text-bot/logs/app.log | jq ."
 ```
 
 **Deployment via CI/CD**: Automatic on merge to main

@@ -1,0 +1,241 @@
+name: Build and Tag
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent builds
+concurrency:
+  group: build-and-tag
+  cancel-in-progress: false
+
+jobs:
+  test-migrations:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          poetry install --with dev --extras "faster-whisper"
+
+      - name: Test migrations on fresh database
+        env:
+          TELEGRAM_BOT_TOKEN: test_token_for_migration_testing
+        run: |
+          # Create test database directory
+          mkdir -p data
+          export DATABASE_URL="sqlite+aiosqlite:///./data/test_fresh.db"
+
+          # Apply all migrations from scratch
+          poetry run alembic upgrade head
+
+          # Verify we're at HEAD
+          CURRENT=$(poetry run alembic current)
+          echo "Current revision: $CURRENT"
+
+          # Check that migration succeeded
+          if [ -f "data/test_fresh.db" ]; then
+            echo "✅ Fresh database migration successful"
+          else
+            echo "❌ Fresh database migration failed"
+            exit 1
+          fi
+
+      - name: Test upgrade/downgrade cycle
+        env:
+          TELEGRAM_BOT_TOKEN: test_token_for_migration_testing
+        run: |
+          # Create another test database
+          export DATABASE_URL="sqlite+aiosqlite:///./data/test_cycle.db"
+
+          # Apply all migrations
+          poetry run alembic upgrade head
+          HEAD_REV=$(poetry run alembic current | awk '{print $1}')
+          echo "HEAD revision: $HEAD_REV"
+
+          # Downgrade one step
+          poetry run alembic downgrade -1
+          PREV_REV=$(poetry run alembic current | awk '{print $1}')
+          echo "After downgrade: $PREV_REV"
+
+          # Upgrade back to head
+          poetry run alembic upgrade head
+          FINAL_REV=$(poetry run alembic current | awk '{print $1}')
+          echo "After upgrade: $FINAL_REV"
+
+          # Verify we're back at HEAD
+          if [ "$FINAL_REV" = "$HEAD_REV" ]; then
+            echo "✅ Upgrade/downgrade cycle successful"
+          else
+            echo "❌ Upgrade/downgrade cycle failed"
+            exit 1
+          fi
+
+      - name: Test application startup after migration
+        run: |
+          # Use fresh database
+          export DATABASE_URL="sqlite+aiosqlite:///./data/test_fresh.db"
+          export TELEGRAM_BOT_TOKEN="test:token"
+
+          # Try to import main module (this will init db)
+          poetry run python -c "
+          import asyncio
+          from src.storage.database import get_engine
+          from sqlalchemy import text
+
+          async def test_connection():
+              engine = get_engine()
+              async with engine.connect() as conn:
+                  result = await conn.execute(text('SELECT 1'))
+                  assert result.fetchone()[0] == 1
+              await engine.dispose()
+              print('✅ Database connection successful')
+
+          asyncio.run(test_connection())
+          "
+
+  build:
+    needs: test-migrations
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      any_changed: ${{ steps.changed-files.outputs.any_changed }}
+      new_version: ${{ steps.version.outputs.new_version }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for versioning
+
+      - name: Check changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v45
+        with:
+          files_ignore: |
+            memory-bank/**
+            *.md
+            docs/**
+            .claude/**
+            CLAUDE.md
+
+      - name: Calculate next version
+        id: version
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          # Get last tag (or default to v0.0.0)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Last tag: $LAST_TAG"
+
+          # Parse version (v0.1.2 → 0 1 2)
+          VERSION=${LAST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          # Increment patch version
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Poetry
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          curl -sSL https://install.python-poetry.org | python3 -
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Poetry Export Plugin
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          poetry self add poetry-plugin-export
+
+      - name: Export requirements.txt
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: |
+          poetry export --without dev -f requirements.txt -o requirements.txt --extras "faster-whisper"
+
+      - name: Set up Docker Buildx
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ steps.version.outputs.new_version }}
+            ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:${{ github.sha }}
+            ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create and push git tag
+        if: steps.changed-files.outputs.any_changed == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+
+          # Create annotated tag
+          git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION
+
+          Automated release created by GitHub Actions
+          Commit: ${{ github.sha }}
+
+          Changes: https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 2>/dev/null || echo 'HEAD')...$NEW_VERSION"
+
+          # Push tag (this will trigger deploy workflow)
+          git push origin "$NEW_VERSION"
+
+          echo "✅ Created and pushed tag: $NEW_VERSION"
+
+      - name: Create GitHub Release
+        if: steps.changed-files.outputs.any_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ steps.version.outputs.new_version }}"
+
+          # Generate release notes
+          gh release create "$NEW_VERSION" \
+            --title "Release $NEW_VERSION" \
+            --notes "Automated release created by GitHub Actions.
+
+          **Docker Images:**
+          - \`docker pull ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:$NEW_VERSION\`
+          - \`docker pull ${{ secrets.DOCKER_USERNAME }}/telegram-voice2text-bot:latest\`
+
+          **Changes:** See commit history for details.
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo 'HEAD')...$NEW_VERSION"

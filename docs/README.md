@@ -19,6 +19,7 @@ For contributors and developers:
 - **[Architecture](development/architecture.md)** - System design and components
 - **[Database Migrations](development/database-migrations.md)** - Creating and testing migrations
 - **[Dependencies](development/dependencies.md)** - Managing Python packages
+- **[Logging](development/logging.md)** - Centralized logging and version tracking
 - **[Testing](development/testing.md)** - Local testing and benchmarks
 - **[Git Workflow](development/git-workflow.md)** - Branching and PR process
 
@@ -80,6 +81,7 @@ docs/
 │   ├── architecture.md            # System architecture
 │   ├── database-migrations.md     # Database migrations
 │   ├── dependencies.md            # Package management
+│   ├── logging.md                 # Centralized logging
 │   ├── testing.md                 # Testing guide
 │   └── git-workflow.md            # Git and PR workflow
 │

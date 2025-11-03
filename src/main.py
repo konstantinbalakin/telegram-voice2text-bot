@@ -5,7 +5,9 @@ Entry point for the application
 
 import asyncio
 import logging
+import os
 import sys
+from pathlib import Path
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
@@ -14,17 +16,37 @@ from src.storage.database import init_db, close_db
 from src.transcription import get_transcription_router, shutdown_transcription_router, AudioHandler
 from src.bot.handlers import BotHandlers
 from src.services.queue_manager import QueueManager
+from src.utils.logging_config import setup_logging, log_deployment_event, get_config_summary
 
-# Configure logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=getattr(logging, settings.log_level.upper()),
+# Setup centralized logging
+APP_VERSION = os.getenv("APP_VERSION", "unknown")
+LOG_DIR = Path(os.getenv("LOG_DIR", "/app/logs"))
+SYSLOG_ENABLED = os.getenv("SYSLOG_ENABLED", "false").lower() == "true"
+SYSLOG_HOST = os.getenv("SYSLOG_HOST")
+SYSLOG_PORT = int(os.getenv("SYSLOG_PORT", "514"))
+
+setup_logging(
+    log_dir=LOG_DIR,
+    version=APP_VERSION,
+    log_level=settings.log_level,
+    enable_syslog=SYSLOG_ENABLED,
+    syslog_host=SYSLOG_HOST,
+    syslog_port=SYSLOG_PORT,
 )
+
 logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
     """Main application entry point."""
+    # Log deployment startup event
+    log_deployment_event(
+        log_dir=LOG_DIR,
+        event="startup",
+        version=APP_VERSION,
+        config=get_config_summary(),
+    )
+
     logger.info("Starting Telegram Voice2Text Bot")
     logger.info(f"Bot mode: {settings.bot_mode}")
     logger.info(f"Enabled providers: {settings.whisper_providers}")
@@ -86,6 +108,13 @@ async def main() -> None:
                 await application.updater.start_polling(drop_pending_updates=True)
             logger.info("Bot is ready and running (polling mode)")
 
+            # Log ready event
+            log_deployment_event(
+                log_dir=LOG_DIR,
+                event="ready",
+                version=APP_VERSION,
+            )
+
             # Keep running
             await asyncio.Event().wait()
 
@@ -98,6 +127,13 @@ async def main() -> None:
         logger.info("Shutting down...")
 
     finally:
+        # Log shutdown event
+        log_deployment_event(
+            log_dir=LOG_DIR,
+            event="shutdown",
+            version=APP_VERSION,
+        )
+
         # Cleanup
         logger.info("Cleaning up resources...")
 

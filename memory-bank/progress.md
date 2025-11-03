@@ -11,8 +11,9 @@
 - **Phase 6.5**: ✅ Complete (2025-10-29) - Database migration system
 - **Phase 6.6**: ✅ Complete (2025-10-29) - Production limit optimization
 - **Phase 6.7**: ✅ Complete (2025-10-30) - Long transcription message splitting
+- **Phase 7**: ✅ Complete (2025-11-03) - Centralized logging & automatic versioning
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- Current focus (2025-10-30): Production deployment of message splitting fix
+- Current focus (2025-11-03): Deploy logging and versioning systems
 
 ## Delivered Milestones
 
@@ -457,7 +458,147 @@ health check (verify schema version)
 
 **Status**: ✅ Tested and ready for production deployment
 
-### Phase 6.8: Performance Optimization ⏳ DEFERRED
+### Phase 7: Centralized Logging & Automatic Versioning ✅ COMPLETE (2025-11-03)
+**Achievement**: Production observability and user-friendly versioning system
+
+**Motivation**: Two critical production needs emerged:
+1. **Logs lost during deployments**: Container rebuilds deleted all logs, no way to debug past issues
+2. **Git SHA not user-friendly**: Version "09f9af8" meaningless for tracking releases
+
+**Implementation** (2 major systems):
+
+#### System 1: Centralized Logging
+
+**Infrastructure** (`src/utils/logging_config.py`, 233 lines):
+- JSON-formatted logs with structured context
+- Version enrichment: every log entry includes version and container_id
+- Size-based rotation (NOT time-based per user request)
+- Optional remote syslog support (Papertrail, etc.)
+- Deployment event tracking (startup, ready, shutdown)
+
+**Log Files**:
+1. `app.log`: All INFO+ logs, 10MB per file, 5 backups (~60MB max)
+2. `errors.log`: ERROR/CRITICAL only, 5MB per file, 5 backups (~30MB max)
+3. `deployments.jsonl`: Never rotated, one event per line (~365KB/year)
+
+**Configuration**:
+```python
+APP_VERSION=v0.1.0  # Set by CI/CD from git tag
+LOG_DIR=/app/logs
+LOG_LEVEL=INFO
+# Optional remote syslog
+SYSLOG_ENABLED=false
+SYSLOG_HOST=logs.papertrailapp.com
+SYSLOG_PORT=514
+```
+
+**Integration**:
+- `src/main.py`: Initialize logging, log deployment events
+- Volume mount: `./logs:/app/logs` (persists across container rebuilds)
+- All log entries include version for filtering
+
+**Benefits**:
+- ✅ Logs persist across deployments
+- ✅ Every log entry knows its version
+- ✅ Deployment lifecycle tracked
+- ✅ Size-based rotation: logs kept longer when generation is low
+- ✅ Structured JSON for easy parsing (jq, log aggregation)
+- ✅ Predictable disk usage: ~90MB max
+
+#### System 2: Automatic Semantic Versioning
+
+**Architecture**: Separate workflows for build and deploy
+
+**Build & Tag Workflow** (`.github/workflows/build-and-tag.yml`):
+- Trigger: Push to main
+- Test migrations in CI
+- Calculate next patch version automatically: v0.1.0 → v0.1.1
+- Build Docker image
+- Push with multiple tags (version, sha, latest)
+- Create annotated git tag
+- Push tag to GitHub
+- Create GitHub Release
+
+**Deploy Workflow** (`.github/workflows/deploy.yml`):
+- Trigger: Tag creation (v*.*.*)
+- Run database migrations on VPS first
+- Deploy specific version to production
+- Health checks and validation
+- Automatic rollback on migration failure
+
+**Version Format**:
+- **Automatic**: v0.1.0 → v0.1.1 → v0.1.2 (every merge to main)
+- **Manual minor/major**:
+  ```bash
+  git tag -a v0.2.0 -m "Release v0.2.0: Add quota system"
+  git push origin v0.2.0  # Triggers deploy
+  ```
+
+**Workflow Separation**:
+```
+PR merged to main
+  ↓
+Build & Tag Workflow
+  - Tests
+  - Build image
+  - Create v0.1.1 tag
+  ↓ (tag pushed)
+Deploy Workflow
+  - Migrations
+  - Deploy v0.1.1
+  - Health checks
+```
+
+**Benefits**:
+- ✅ User-friendly versions: v0.1.1 instead of 09f9af8
+- ✅ Automatic patch increments
+- ✅ Separation of build and deploy
+- ✅ GitHub Releases for changelog
+- ✅ Version-tagged Docker images for rollback
+- ✅ Full version history
+
+**Files Created**:
+- `src/utils/logging_config.py` (233 lines)
+- `docs/development/logging.md` (347 lines)
+- `.github/workflows/build-and-tag.yml` (153 lines)
+- `.github/workflows/deploy.yml` (279 lines)
+- `memory-bank/plans/2025-11-03-centralized-logging.md`
+- Git tag: `v0.1.0` (initial version)
+
+**Files Modified**:
+- `pyproject.toml` - Added python-json-logger ^4.0.0
+- `src/main.py` - Logging initialization, deployment events
+- `docker-compose.prod.yml` - LOG_DIR, SYSLOG_* env vars
+- `docs/README.md` - Added logging link
+- `docs/development/git-workflow.md` - Added versioning section (82 lines added)
+- `.github/workflows/build-and-deploy.yml` → `build-and-deploy.yml.old` (disabled)
+
+**Testing**:
+- ✅ Logging code syntax validated
+- ✅ Version calculation tested
+- ✅ Initial v0.1.0 tag created
+- ✅ Documentation complete
+- ⏳ Full system test on next merge to main
+
+**Deployment Status**:
+- ✅ Implementation complete
+- ✅ Initial version tag created
+- ⏳ Awaiting next merge to test automatic workflow
+- ⏳ Logs will start collecting on deployment
+
+**Key Patterns Established**:
+1. **Size-based log rotation**: "Если мало логов, то пусть хранятся долго" - logs persist longer when generation is low, predictable disk usage
+2. **Version in every log**: Essential for post-mortem analysis and troubleshooting specific deployments
+3. **Workflow separation**: Build → Tag → Deploy enables testing between stages
+4. **Automatic versioning**: Remove manual version management overhead for patch releases
+
+**Documentation**:
+- `docs/development/logging.md`: Complete logging guide (formats, rotation, searching, remote syslog, troubleshooting)
+- `docs/development/git-workflow.md`: Comprehensive versioning guide (automatic/manual versions, rollback, troubleshooting)
+
+**Next**: Deploy to production to activate both systems
+
+### Phase 7.1: Performance Optimization ⏳ DEFERRED
 **Goal**: Achieve RTF ~0.3x (match local benchmark performance)
 
 **Current Baseline**:
