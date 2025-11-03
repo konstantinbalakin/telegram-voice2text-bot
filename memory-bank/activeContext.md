@@ -2,13 +2,14 @@
 
 ## Current Status
 
-**Phase**: Phase 7 - Centralized Logging & Automatic Versioning ✅
-**Date**: 2025-11-03
-**Stage**: Production-ready, awaiting deployment
-**Branch**: Creating feature branch for review
-**Production Status**: ✅ OPERATIONAL - All systems stable
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging**, **automatic semantic versioning**
-**Next Phase**: Deploy logging and versioning systems, continue monitoring
+**Phase**: Phase 7.1 - Fully Automatic CI/CD Pipeline ✅ COMPLETE (2025-11-04)
+**Date**: 2025-11-04
+**Stage**: Production operational with fully automatic deployment
+**Branch**: main
+**Production Version**: v0.0.3 (deployed and healthy)
+**Production Status**: ✅ OPERATIONAL - All systems stable, fully automatic CI/CD working
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**
+**Next Phase**: Production monitoring and feature development
 
 ## Production Configuration Finalized ✅
 
@@ -619,55 +620,124 @@ Production running v0.1.1
 
 **Deployment Status**:
 - ✅ Both systems implemented and tested
-- ✅ Initial version tag created (v0.1.0)
+- ✅ Initial version v0.0.1 created and deployed
 - ✅ Documentation complete
-- ⏳ Awaiting next merge to main to test automatic versioning
-- ⏳ Logs will start being collected on next deployment
+- ✅ Logging system active on production VPS
+- ✅ Logs being collected successfully with version tracking
+- ✅ Workflow fixes deployed (PRs #30, #31, #32)
+- ✅ Fully automatic deployment working (v0.0.3)
 
-**Key Pattern Established**: Centralized logging with version tracking is essential for production observability. Size-based log rotation ensures logs persist longer when generation is low, while automatic semantic versioning provides user-friendly release tracking without manual version management.
+**Production Verification** (2025-11-03):
+- ✅ Version v0.0.1 running on VPS
+- ✅ Logs directory created: `/opt/telegram-voice2text-bot/logs/`
+- ✅ Log files:
+  - `app.log` (9.3KB) - All logs with version enrichment
+  - `errors.log` (0KB) - No errors yet
+  - `deployments.jsonl` (586B) - Startup and ready events
+- ✅ Every log entry includes version "v0.0.1" and container_id
+- ✅ Deployment events recorded with full configuration
+- ✅ Docker container: `kosbalakin/telegram-voice2text-bot:v0.0.1`
+- ✅ Container status: `healthy`
+
+**Workflow Improvements** (PRs #30, #31, #32):
+- PR #30: Added `contents: write` and `packages: write` permissions to Build & Tag workflow
+- PR #31: Added `workflow_run` and `workflow_dispatch` triggers to Deploy workflow
+- PR #32: ✅ SOLVED automatic deployment issue
+  - Problem: `workflow_run` receives `refs/heads/main` instead of tag
+  - Solution: Get latest tag via `git describe --tags --abbrev=0` for workflow_run trigger
+  - Result: Fully automatic deployment working (v0.0.3 deployed successfully)
+
+**Key Pattern Established**: Centralized logging with version tracking is essential for production observability. Size-based log rotation ensures logs persist longer when generation is low, while automatic semantic versioning provides user-friendly release tracking without manual version management. For GitHub Actions: when `workflow_run` has limitations, use `git describe --tags --abbrev=0` to get latest tag instead of relying on GITHUB_REF.
+
+### Phase 7.2: Fully Automatic Deployment Pipeline ✅ COMPLETE (2025-11-04)
+**Achievement**: Resolved workflow_run limitations to achieve fully automatic CI/CD pipeline without manual intervention
+
+**Problem Encountered** (after Phase 7.1):
+- User requirement: "не, погоди. Я хотел, чтобы было все автоматически без ручных вмешательств"
+- workflow_run trigger receives `refs/heads/main` instead of tag reference
+- This caused Docker image naming issues: `konstantinbalakin/telegram-voice2text-bot:refs/heads/main` (invalid)
+- Manual workaround (workflow_dispatch) was acceptable but not fully automatic
+- User expectation: **Merge to main → automatic production deploy** with zero manual steps
+
+**Solution Implemented** (PR #32):
+
+**1. Version Extraction Logic in Deploy Workflow**
+- Modified `.github/workflows/deploy.yml` to handle all trigger types
+- Added conditional version extraction based on `github.event_name`:
+  ```yaml
+  - name: Extract version from tag
+    id: version
+    run: |
+      if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+        VERSION="${{ github.event.inputs.version }}"
+      elif [ "${{ github.event_name }}" = "push" ]; then
+        VERSION=${GITHUB_REF#refs/tags/}
+      else
+        # workflow_run - get latest tag from repository
+        git fetch --tags
+        VERSION=$(git describe --tags --abbrev=0)
+      fi
+  ```
+
+**2. Key Insight**:
+- `workflow_run` trigger doesn't provide tag reference in GITHUB_REF
+- Solution: Use `git describe --tags --abbrev=0` to get latest tag from repository
+- This works because Build & Tag workflow creates and pushes tag BEFORE triggering deploy
+
+**3. Additional Changes**:
+- Added `fetch-depth: 0` to checkout steps (need full history for git describe)
+- Added success check: `if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}`
+- Prevents deployment if build failed
+
+**Testing**:
+- ✅ v0.0.2 deployment successful (initial test)
+- ✅ v0.0.3 deployment successful (production verification)
+- ✅ Both migrate and deploy jobs ran automatically
+- ✅ Container healthy, bot operational
+- ✅ No manual intervention required
+
+**Deployment Flow (Fully Automatic)**:
+```
+PR merged to main
+  ↓
+Build & Tag Workflow
+  - Test migrations
+  - Build Docker image
+  - Create v0.0.3 tag
+  - Push tag to GitHub
+  ↓ (triggers workflow_run)
+Deploy Workflow (automatic)
+  - Extract version via git describe
+  - Run migrations on VPS
+  - Deploy v0.0.3
+  - Health checks
+  ↓
+Production running v0.0.3
+```
+
+**Files Modified**:
+- `.github/workflows/deploy.yml` - Added version extraction logic, fetch-depth, success check
+
+**Impact**:
+- ✅ Zero manual intervention required
+- ✅ Main branch is deployable source of truth
+- ✅ Full automation: PR merge → production deploy
+- ✅ Version tracking maintained
+- ✅ Rollback still possible via workflow_dispatch
+
+**Key Pattern Established**: For GitHub Actions workflow_run limitations, use `git describe --tags --abbrev=0` to retrieve the latest tag created by previous workflow. This enables fully automatic deployment pipelines without manual triggers.
+
+**Status**: ✅ Deployed and operational, v0.0.3 running in production
 
 ## Next Steps (Current Priority)
 
-### 1. Deploy Logging & Versioning Systems (IMMEDIATE) 🔥
+### 1. Production Monitoring (High Priority) ⏳
 
-**Actions**:
-```bash
-# Create feature branch
-git checkout -b feat/logging-and-versioning
-
-# Push to remote
-git push -u origin feat/logging-and-versioning
-
-# Create PR and merge to trigger deployment
-```
-
-**What Will Happen**:
-1. Build & Tag workflow runs:
-   - Creates v0.1.1 tag automatically
-   - Builds and pushes Docker image
-2. Deploy workflow triggers on tag:
-   - Runs migrations (no new migrations in this PR)
-   - Deploys v0.1.1 to VPS
-3. Bot starts with logging system:
-   - Creates /app/logs/ directory
-   - Logs deployment startup event to deployments.jsonl
-   - All logs include version "v0.1.1"
-
-**Verification**:
-```bash
-# Check version deployed
-ssh telegram-bot "cat /opt/telegram-voice2text-bot/logs/deployments.jsonl | tail -1 | jq .version"
-
-# Check logs are being written
-ssh telegram-bot "ls -lh /opt/telegram-voice2text-bot/logs/"
-
-# View recent logs with version
-ssh telegram-bot "tail /opt/telegram-voice2text-bot/logs/app.log | jq ."
-```
-
-**Deployment via CI/CD**: Automatic on merge to main
-
-### 2. Production Monitoring (High Priority) ⏳
+**Current Production State**:
+- Version: v0.0.1
+- Logging: ✅ Active and collecting
+- Health: ✅ Container healthy
+- Performance: Stable
 
 **Monitor These Metrics**:
 - Queue depth (should stay < 10)

@@ -933,3 +933,333 @@ git push
 3. **Safety**: Health checks catch failures, automatic rollback
 4. **Traceability**: Every deployment tracked by commit SHA
 5. **Reliability**: Tested process, no human error
+
+## Logging and Observability Patterns (added 2025-11-03)
+
+### Pattern 1: Version-Enriched Logging
+**Problem**: Need to correlate logs with specific deployments for post-mortem analysis.
+
+**Solution**: Custom logging filter that adds version and container_id to every log entry.
+
+**Implementation**:
+```python
+class VersionEnrichmentFilter(logging.Filter):
+    def filter(self, record):
+        record.version = get_version()
+        record.container_id = socket.gethostname()
+        return True
+```
+
+**Benefits**:
+- Every log entry knows its deployment version
+- Can filter logs by specific version: `jq 'select(.version=="v0.1.1")' app.log`
+- Enables multi-version debugging in staging/production
+- Container ID helps with multi-instance deployments
+
+**Example Log Entry**:
+```json
+{
+  "timestamp": "2025-11-03T20:10:13.628064+00:00",
+  "level": "INFO",
+  "logger": "root",
+  "version": "v0.0.1",
+  "container_id": "3f33660445f8",
+  "message": "Logging configured..."
+}
+```
+
+### Pattern 2: Size-Based Log Rotation
+**Problem**: Time-based rotation deletes logs even when generation is low.
+
+**Decision**: Use size-based rotation ONLY (per user request: "Если мало логов, то пусть хранятся долго")
+
+**Configuration**:
+- `app.log`: 10MB per file, 5 backups → ~60MB max
+- `errors.log`: 5MB per file, 5 backups → ~30MB max
+- `deployments.jsonl`: Never rotated → ~365KB/year
+
+**Benefits**:
+- Logs persist longer when generation is low
+- Predictable disk usage (~90MB max)
+- No data loss from time-based expiry
+- Low-traffic periods fully logged
+
+**Implementation**:
+```python
+handler = RotatingFileHandler(
+    filename="app.log",
+    maxBytes=10_000_000,  # 10MB
+    backupCount=5
+)
+```
+
+### Pattern 3: Deployment Event Tracking
+**Problem**: Need to understand deployment lifecycle and configuration changes.
+
+**Solution**: Dedicated JSONL file for deployment events, never rotated.
+
+**Events Tracked**:
+1. **startup**: Bot starting with full configuration snapshot
+2. **ready**: Bot fully initialized and accepting requests
+3. **shutdown**: Graceful shutdown (when implemented)
+
+**Example Deployment Log**:
+```json
+{
+  "timestamp": "2025-11-03T20:10:13.629654+00:00",
+  "event": "startup",
+  "version": "v0.0.1",
+  "container_id": "3f33660445f8",
+  "config": {
+    "bot_mode": "polling",
+    "database_url": "/app/data/bot.db",
+    "whisper_providers": ["faster-whisper"],
+    "max_queue_size": 10,
+    "max_concurrent_workers": 1
+  }
+}
+```
+
+**Benefits**:
+- Full history of all deployments
+- Configuration changes tracked over time
+- Enables rollback decision support
+- ~1KB per deployment, minimal disk usage
+
+### Pattern 4: Structured JSON Logging
+**Problem**: Plain text logs difficult to parse and analyze programmatically.
+
+**Solution**: JSON-formatted logs with python-json-logger library.
+
+**Benefits**:
+- Easy parsing with jq: `cat app.log | jq 'select(.level=="ERROR")'`
+- Machine-readable for log aggregation tools
+- Structured context: additional fields without parsing
+- Consistent format across services
+
+**Example Analysis**:
+```bash
+# Count errors by logger
+cat app.log | jq -r '.logger' | sort | uniq -c
+
+# Filter logs by version
+jq 'select(.version=="v0.0.1")' app.log
+
+# Extract timestamps for specific events
+jq -r 'select(.message | contains("Processing")) | .timestamp' app.log
+```
+
+### Pattern 5: Optional Remote Syslog
+**Problem**: Want centralized logging without forcing complexity in MVP.
+
+**Solution**: Optional syslog handler configuration via environment variables.
+
+**Configuration**:
+```bash
+SYSLOG_ENABLED=true
+SYSLOG_HOST=logs.papertrailapp.com
+SYSLOG_PORT=514
+```
+
+**Benefits**:
+- Easy integration with Papertrail, Loggly, etc.
+- Opt-in: disabled by default for simplicity
+- Same log format sent to both file and syslog
+- Enables log aggregation as project grows
+
+## Versioning and Release Patterns (added 2025-11-03)
+
+### Pattern 1: Automatic Semantic Versioning
+**Problem**: Manual version management is overhead, git SHA not user-friendly.
+
+**Solution**: Automated semantic versioning with separate workflows.
+
+**Architecture**:
+```
+Build & Tag Workflow (on push to main)
+  ↓
+1. Test migrations
+2. Calculate next version (v0.1.0 → v0.1.1)
+3. Build Docker image
+4. Push with version tags
+5. Create git tag
+6. Create GitHub Release
+  ↓ (tag pushed triggers next workflow)
+Deploy Workflow (on tag push)
+  ↓
+1. Run migrations on VPS
+2. Deploy specific version
+3. Health checks
+```
+
+**Version Calculation**:
+```bash
+LAST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+VERSION=${LAST_TAG#v}  # Remove 'v' prefix
+IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+NEW_PATCH=$((PATCH + 1))
+NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
+```
+
+**Benefits**:
+- Zero manual version management for patches
+- User-friendly versions (v0.1.1 vs 09f9af8)
+- Separation of build and deploy
+- Testable between stages
+- Full version history
+
+### Pattern 2: Separated Build and Deploy Workflow
+**Problem**: Combined workflow makes testing difficult and limits flexibility.
+
+**Solution**: Two separate workflows with tag-based trigger.
+
+**Advantages**:
+1. **Testing**: Can build and test before deploying
+2. **Rollback**: Can deploy any previous version manually
+3. **Staging**: Can deploy same version to multiple environments
+4. **Debugging**: Workflow failures isolated
+
+**Implementation**:
+- Build workflow: Creates version, builds image, pushes tag
+- Tag push: Triggers deploy workflow automatically
+- Deploy workflow: Can also be triggered manually via workflow_dispatch
+
+### Pattern 3: workflow_dispatch for Manual Deployments
+**Problem**: workflow_run trigger has limitations with tag references.
+
+**Discovered Issue**: `workflow_run` receives `refs/heads/main` instead of tag, causing Docker image name issues.
+
+**Solution**: Use `workflow_dispatch` for manual deployments:
+```bash
+gh workflow run deploy.yml -f version=v0.0.1
+```
+
+**Benefits**:
+- Reliable deployment of any version
+- Works around GitHub Actions security limitations
+- Enables re-deployment of previous versions
+- Full control over when deployment happens
+
+**Pattern**:
+```yaml
+on:
+  push:
+    tags: ['v*.*.*']  # Automatic for manually created tags
+  workflow_dispatch:  # Manual trigger
+    inputs:
+      version:
+        description: 'Version tag to deploy (e.g., v0.1.0)'
+        required: true
+        type: string
+```
+
+### Pattern 4: Version-Tagged Docker Images
+**Problem**: Need to deploy and rollback specific versions easily.
+
+**Solution**: Multiple Docker image tags per build.
+
+**Tags Created**:
+- `konstantinbalakin/telegram-voice2text-bot:v0.1.1` (semantic version)
+- `konstantinbalakin/telegram-voice2text-bot:09f9af8` (git SHA)
+- `konstantinbalakin/telegram-voice2text-bot:latest` (most recent)
+
+**Benefits**:
+- Easy rollback: `docker pull ...bot:v0.1.0`
+- Version history preserved
+- Can compare versions easily
+- Latest always available for testing
+
+### Pattern 5: GitHub Releases for Changelog
+**Problem**: Need user-facing changelog without manual work.
+
+**Solution**: Automated GitHub Release creation on tag push.
+
+**Release Contents**:
+- Release notes with Docker pull commands
+- Link to full changelog (git compare)
+- Automated from commit messages
+- Tagged with semantic version
+
+**Benefits**:
+- Automatic documentation of releases
+- Users can see what changed
+- Links to specific Docker images
+- Historical record of changes
+
+## GitHub Actions Workflow Patterns (added 2025-11-03)
+
+### Pattern 1: Explicit Permissions for Tag Pushing
+**Problem**: GitHub Actions can't push tags by default.
+
+**Error**: `Permission to konstantinbalakin/telegram-voice2text-bot.git denied to github-actions[bot]`
+
+**Solution**: Explicitly grant permissions in workflow:
+```yaml
+jobs:
+  build:
+    permissions:
+      contents: write  # Push tags
+      packages: write  # Push Docker images
+```
+
+**Key Learning**: Default `GITHUB_TOKEN` has read-only permissions for security. Must explicitly grant write access per job.
+
+### Pattern 2: Workflow Trigger Limitations
+**Problem**: Workflows triggered by `GITHUB_TOKEN` don't trigger other workflows (security feature).
+
+**Impact**: Build & Tag workflow creates a tag, but Deploy workflow doesn't trigger automatically.
+
+**Reason**: Prevents infinite workflow loops and security issues.
+
+**Solutions**:
+1. **workflow_dispatch**: Manual trigger with version input (WORKS)
+2. **workflow_run**: Automatic trigger after workflow completes (HAS LIMITATIONS)
+3. **PAT (Personal Access Token)**: Use instead of GITHUB_TOKEN (more permissive)
+
+**Chosen**: workflow_dispatch for reliability and control.
+
+### Pattern 3: workflow_run Limitations and Solution
+**Issue**: `workflow_run` trigger receives branch reference instead of tag.
+
+**Problem**:
+```yaml
+on:
+  workflow_run:
+    workflows: ["Build and Tag"]
+    types: [completed]
+```
+
+**Result**: `GITHUB_REF=refs/heads/main` instead of `refs/tags/v0.1.1`
+
+**Impact**: Docker image names become `...bot:refs/heads/main` (invalid)
+
+**Solution (2025-11-04)**: Use `git describe --tags --abbrev=0` to get latest tag from repository
+```yaml
+- name: Extract version from tag
+  id: version
+  run: |
+    if [ "${{ github.event_name }}" = "workflow_run" ]; then
+      git fetch --tags
+      VERSION=$(git describe --tags --abbrev=0)
+    fi
+```
+
+**Requirements**:
+- Need `fetch-depth: 0` in checkout step (full git history)
+- Works because Build & Tag workflow pushes tag BEFORE workflow_run fires
+- Enables fully automatic deployment without workflow_dispatch
+
+**Documentation**: Added to troubleshooting in git-workflow.md
+
+### Pattern 4: Iterative Workflow Testing
+**Experience**: Required 5 workflow runs to identify and fix all issues.
+
+**Issues Found**:
+1. poetry.lock not synced (CI failed)
+2. mypy type error (CI failed)
+3. unused import (ruff failed)
+4. black formatting (CI failed)
+5. GitHub Actions permissions (deploy failed)
+6. workflow_run limitations (deploy didn't trigger)
+
+**Learning**: Test workflows incrementally, expect multiple iterations, document issues for future reference.

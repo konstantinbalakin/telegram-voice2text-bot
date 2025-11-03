@@ -12,8 +12,11 @@
 - **Phase 6.6**: ✅ Complete (2025-10-29) - Production limit optimization
 - **Phase 6.7**: ✅ Complete (2025-10-30) - Long transcription message splitting
 - **Phase 7**: ✅ Complete (2025-11-03) - Centralized logging & automatic versioning
+- **Phase 7.1**: ✅ Complete (2025-11-03) - Workflow fixes and production deployment
+- **Phase 7.2**: ✅ Complete (2025-11-04) - Fully automatic deployment pipeline
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- Current focus (2025-11-03): Deploy logging and versioning systems
+- **Current Version**: v0.0.3 (fully automatic deployment working)
+- Current focus (2025-11-04): Production monitoring with automatic deployment
 
 ## Delivered Milestones
 
@@ -596,9 +599,209 @@ Deploy Workflow
 - `docs/development/logging.md`: Complete logging guide (formats, rotation, searching, remote syslog, troubleshooting)
 - `docs/development/git-workflow.md`: Comprehensive versioning guide (automatic/manual versions, rollback, troubleshooting)
 
-**Next**: Deploy to production to activate both systems
+**Next**: Monitor production usage with new logging and versioning systems
 
-### Phase 7.1: Performance Optimization ⏳ DEFERRED
+### Phase 7.1: Workflow Fixes & Production Deployment ✅ COMPLETE (2025-11-03)
+**Achievement**: Fixed workflow issues and successfully deployed logging and versioning to production
+
+**Problems Encountered**:
+1. **GitHub Actions Permissions** (PR #30)
+   - Build and Tag workflow couldn't push tags
+   - Error: `Permission to konstantinbalakin/telegram-voice2text-bot.git denied to github-actions[bot]`
+   - Fix: Added explicit permissions:
+     ```yaml
+     permissions:
+       contents: write
+       packages: write
+     ```
+
+2. **Deploy Workflow Not Triggering** (PR #31)
+   - Deploy workflow didn't trigger when Build and Tag created a tag
+   - Root cause: GitHub Actions doesn't trigger workflows on events from other workflows (security)
+   - Solution: Added multiple triggers:
+     - `workflow_run` for automatic deploy after build (has limitations)
+     - `workflow_dispatch` for manual deployments (works perfectly)
+     - `push: tags` for manually created tags
+
+3. **workflow_run Limitation Discovered**:
+   - `workflow_run` trigger receives `refs/heads/main` instead of tag reference
+   - Causes Docker image name issues: `konstantinbalakin/telegram-voice2text-bot:refs/heads/main`
+   - Not suitable for automatic deployment
+   - Documented as known issue
+
+**Solution Implemented**:
+- Use `workflow_dispatch` for manual deployments:
+  ```bash
+  gh workflow run deploy.yml -f version=v0.0.1
+  ```
+- Works reliably and allows deployment of any version
+
+**Production Deployment Results**:
+- ✅ Version v0.0.1 deployed successfully
+- ✅ Logging system active:
+  - `app.log` (9.3KB) - All logs with JSON format and version enrichment
+  - `errors.log` (0KB) - No errors
+  - `deployments.jsonl` (586B) - Deployment events with full config
+- ✅ Every log entry includes:
+  - `"version": "v0.0.1"`
+  - `"container_id": "3f33660445f8"`
+  - Structured JSON with timestamp, level, logger, message
+- ✅ Deployment events captured:
+  ```json
+  {"timestamp": "...", "event": "startup", "version": "v0.0.1", ...}
+  {"timestamp": "...", "event": "ready", "version": "v0.0.1", ...}
+  ```
+- ✅ Docker container: `kosbalakin/telegram-voice2text-bot:v0.0.1`
+- ✅ Container status: `healthy`
+- ✅ Bot fully operational
+
+**PRs Created**:
+- PR #29: Main Phase 7 implementation (+2042/-20 lines)
+- PR #30: Workflow permissions fix
+- PR #31: Deploy trigger improvements
+
+**Files Modified** (PR #30, #31):
+- `.github/workflows/build-and-tag.yml` - Added permissions
+- `.github/workflows/deploy.yml` - Added workflow_run and workflow_dispatch triggers
+
+**Verification Commands Used**:
+```bash
+# Check version
+ssh telegram-bot "docker ps --format '{{.Image}}'"
+# Output: kosbalakin/telegram-voice2text-bot:v0.0.1
+
+# Check logs directory
+ssh telegram-bot "ls -lh /opt/telegram-voice2text-bot/logs/"
+
+# View deployment events
+ssh telegram-bot "cat /opt/telegram-voice2text-bot/logs/deployments.jsonl"
+
+# View application logs with version
+ssh telegram-bot "head -20 /opt/telegram-voice2text-bot/logs/app.log"
+```
+
+**Impact**:
+- ✅ Full production observability with version tracking
+- ✅ Logs persist across container rebuilds
+- ✅ Can correlate logs with specific deployments
+- ✅ User-friendly version numbers (v0.0.1 instead of 09f9af8)
+- ✅ Manual deployment workflow proven reliable
+- ✅ GitHub Releases created automatically
+
+**Key Learnings**:
+1. **GitHub Actions Workflows**: Workflows triggered by `GITHUB_TOKEN` don't automatically trigger other workflows (security)
+2. **workflow_run Limitations**: Receives branch reference instead of tag, not suitable for version-based deployments
+3. **workflow_dispatch Pattern**: Reliable for manual deployments, works perfectly with version inputs
+4. **Permissions Matter**: Explicit permissions required for pushing tags and packages
+5. **Testing Workflows**: Iterative testing needed - 5 workflow runs to identify and fix issues
+
+**Status**: ✅ Deployed and operational, logging collecting production data
+
+### Phase 7.2: Fully Automatic Deployment Pipeline ✅ COMPLETE (2025-11-04)
+**Achievement**: Resolved GitHub Actions workflow_run limitations to achieve zero-intervention deployment
+
+**User Requirement**:
+- "не, погоди. Я хотел, чтобы было все автоматически без ручных вмешательств"
+- "т.к. считается, что в мастер вливается проверенная версия из PR. Мастер - это рабочая ветка, из которой можно в любой момент сделать деплой"
+- Expected: PR merge to main → automatic production deploy (zero manual steps)
+
+**Problem Identified** (after Phase 7.1):
+- workflow_run trigger receives `refs/heads/main` instead of tag reference
+- Caused Docker image naming issues: `konstantinbalakin/telegram-voice2text-bot:refs/heads/main`
+- Phase 7.1 solution (workflow_dispatch) required manual trigger
+- Not acceptable for fully automatic pipeline
+
+**Solution Implemented** (PR #32):
+
+**1. Conditional Version Extraction**
+- Modified `.github/workflows/deploy.yml` to handle all trigger types
+- For workflow_run: use `git describe --tags --abbrev=0` to get latest tag
+- For workflow_dispatch: use manual version input
+- For tag push: use tag from GITHUB_REF
+
+**2. Version Extraction Logic**:
+```bash
+if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+  VERSION="${{ github.event.inputs.version }}"
+elif [ "${{ github.event_name }}" = "push" ]; then
+  VERSION=${GITHUB_REF#refs/tags/}
+else
+  # workflow_run - get latest tag from repository
+  git fetch --tags
+  VERSION=$(git describe --tags --abbrev=0)
+fi
+```
+
+**3. Additional Safeguards**:
+- Added `fetch-depth: 0` to checkout (need full git history)
+- Added success check: only deploy if Build & Tag succeeded
+- Maintained workflow_dispatch as rollback mechanism
+
+**Testing Results**:
+- ✅ v0.0.2: First automatic deployment test
+- ✅ v0.0.3: Production verification
+- ✅ Both migrate and deploy jobs ran automatically
+- ✅ No manual intervention required
+- ✅ Container healthy, bot operational
+
+**Deployment Flow (Fully Automatic)**:
+```
+Developer merges PR to main
+  ↓
+Build & Tag Workflow (automatic)
+  - Test database migrations
+  - Build Docker image
+  - Increment version (v0.0.2 → v0.0.3)
+  - Push to Docker Hub
+  - Create git tag
+  - Create GitHub Release
+  ↓ (workflow_run trigger fires)
+Deploy Workflow (automatic)
+  - Get latest tag via git describe
+  - Run migrations on VPS
+  - Deploy new version
+  - Health check verification
+  ↓
+Production updated automatically
+```
+
+**Files Modified**:
+- `.github/workflows/deploy.yml` (PR #32)
+  - Added conditional version extraction (lines 32-52, 197-217)
+  - Added `fetch-depth: 0` to checkout steps
+  - Added workflow success check
+
+**Verification**:
+```bash
+# v0.0.3 deployed automatically
+docker ps --format '{{.Image}}'
+# Output: kosbalakin/telegram-voice2text-bot:v0.0.3
+
+# Container status
+docker inspect telegram-voice2text-bot --format='{{.State.Health.Status}}'
+# Output: healthy
+```
+
+**Impact**:
+- ✅ Fully automatic deployment pipeline operational
+- ✅ Main branch is single source of truth for production
+- ✅ Zero manual intervention required
+- ✅ Version tracking maintained (v0.0.1 → v0.0.2 → v0.0.3)
+- ✅ Rollback still possible via workflow_dispatch
+- ✅ User requirement met: "автоматически без ручных вмешательств"
+
+**Key Learnings**:
+1. **workflow_run Limitation**: Receives branch reference, not tag
+2. **Workaround**: Use `git describe --tags --abbrev=0` to get latest tag
+3. **Timing**: Works because Build & Tag pushes tag BEFORE workflow_run fires
+4. **Full History Required**: Need `fetch-depth: 0` for git describe
+5. **Iterative Testing**: Required 3 versions (v0.0.1 → v0.0.3) to validate
+
+**Key Pattern Established**: For GitHub Actions workflow_run with tag-based deployments, use `git describe --tags --abbrev=0` instead of relying on GITHUB_REF. This enables fully automatic CI/CD without manual triggers while maintaining version-based deployments.
+
+**Status**: ✅ Deployed and operational, fully automatic pipeline proven
+
+### Phase 8: Performance Optimization ⏳ DEFERRED
 **Goal**: Achieve RTF ~0.3x (match local benchmark performance)
 
 **Current Baseline**:
