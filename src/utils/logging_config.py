@@ -217,7 +217,7 @@ def get_config_summary() -> Dict[str, Any]:
     """
     from src.config import Settings
 
-    settings = Settings()
+    settings = Settings()  # type: ignore[call-arg]
 
     return {
         "bot_mode": settings.bot_mode,
