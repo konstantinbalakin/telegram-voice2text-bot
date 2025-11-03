@@ -11,7 +11,6 @@ Supports:
 import json
 import logging
 import logging.handlers
-import os
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
