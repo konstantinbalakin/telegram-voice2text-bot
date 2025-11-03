@@ -20,22 +20,36 @@ jobs:
   migrate:
     runs-on: ubuntu-latest
     environment: production
+    # Only run if Build and Tag succeeded (for workflow_run) or for other triggers
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to get tags
 
       - name: Extract version from tag
         id: version
         run: |
-          # Get version from tag or workflow_dispatch input
+          # Get version based on trigger type
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger - use input
             VERSION="${{ github.event.inputs.version }}"
-          else
+            echo "Using manual version: $VERSION"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Tag push - extract from GITHUB_REF
             VERSION=${GITHUB_REF#refs/tags/}
+            echo "Using tag from push: $VERSION"
+          else
+            # workflow_run - get latest tag from repository
+            echo "Getting latest tag from repository (workflow_run trigger)..."
+            git fetch --tags
+            VERSION=$(git describe --tags --abbrev=0)
+            echo "Found latest tag: $VERSION"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Deploying version: $VERSION"
+          echo "🚀 Deploying version: $VERSION"
 
       - name: Run database migrations on VPS
         uses: appleboy/ssh-action@v1.0.3
@@ -177,18 +191,30 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Need full history to get tags
 
       - name: Extract version from tag
         id: version
         run: |
-          # Get version from tag or workflow_dispatch input
+          # Get version based on trigger type
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            # Manual trigger - use input
             VERSION="${{ github.event.inputs.version }}"
-          else
+            echo "Using manual version: $VERSION"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            # Tag push - extract from GITHUB_REF
             VERSION=${GITHUB_REF#refs/tags/}
+            echo "Using tag from push: $VERSION"
+          else
+            # workflow_run - get latest tag from repository
+            echo "Getting latest tag from repository (workflow_run trigger)..."
+            git fetch --tags
+            VERSION=$(git describe --tags --abbrev=0)
+            echo "Found latest tag: $VERSION"
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Deploying version: $VERSION"
+          echo "🚀 Deploying version: $VERSION"
 
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1.0.3
