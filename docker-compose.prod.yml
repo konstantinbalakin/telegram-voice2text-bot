@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   bot:
     # Use pre-built image from Docker Hub instead of building
@@ -11,6 +9,12 @@ services:
     environment:
       # Override with Docker-specific settings if needed
       - DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
+      # Application version for logging
+      - APP_VERSION=${APP_VERSION:-unknown}
+      # Optional: Remote syslog configuration
+      - SYSLOG_ENABLED=${SYSLOG_ENABLED:-false}
+      - SYSLOG_HOST=${SYSLOG_HOST:-}
+      - SYSLOG_PORT=${SYSLOG_PORT:-514}
     volumes:
       # Persist database
       - ./data:/app/data

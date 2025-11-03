@@ -86,8 +86,12 @@ python-dotenv = "^1.0.0"             # Environment variables
 pydantic = "^2.10"                   # Data validation
 pydantic-settings = "^2.6"           # Settings management
 
+# Logging
+python-json-logger = "^4.0.0"        # JSON log formatting
+
 # Async HTTP (if needed)
 httpx = "^0.28"                      # Async HTTP client
+psutil = "^6.1"                      # System monitoring
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"                      # Testing framework
@@ -206,6 +210,60 @@ MAX_CONCURRENT_WORKERS=1
 PROGRESS_UPDATE_INTERVAL=5
 PROGRESS_RTF=0.3
 ```
+
+### Logging Configuration (2025-11-03)
+
+**New Module**: `src/utils/logging_config.py` (233 lines)
+
+**Purpose**: Centralized logging with version tracking, structured JSON format, and size-based rotation
+
+**Components**:
+1. **VersionEnrichmentFilter**: Adds version and container_id to all log records
+2. **CustomJsonFormatter**: JSON formatter with ISO timestamps and structured context
+3. **setup_logging()**: Configures file handlers with rotation and optional remote syslog
+4. **log_deployment_event()**: Records deployment lifecycle events
+
+**Log Files** (in `/app/logs/` or `LOG_DIR`):
+- `app.log`: All INFO+ logs, 10MB per file, 5 backups (60MB max)
+- `errors.log`: ERROR/CRITICAL only, 5MB per file, 5 backups (30MB max)
+- `deployments.jsonl`: Deployment events, never rotated (~1KB per deployment)
+
+**Environment Variables**:
+```bash
+# Required
+APP_VERSION=v0.1.0  # Set by CI/CD from git tag
+LOG_DIR=/app/logs
+LOG_LEVEL=INFO
+
+# Optional (remote syslog)
+SYSLOG_ENABLED=false
+SYSLOG_HOST=logs.papertrailapp.com
+SYSLOG_PORT=514
+```
+
+**Integration**:
+- Called from `src/main.py` at startup
+- Volume mount: `./logs:/app/logs` in docker-compose
+- All log entries automatically include version (short form: 09f9af8)
+
+**Log Format Example**:
+```json
+{
+  "timestamp": "2025-11-03T15:00:05.123Z",
+  "level": "INFO",
+  "logger": "src.bot.handlers",
+  "version": "09f9af8",
+  "container_id": "e3f297d9fe90",
+  "message": "Processing voice message",
+  "context": {
+    "user_id": 123456,
+    "duration": 45.2,
+    "file_size": 128000
+  }
+}
+```
+
+**Key Design Decision**: Size-based rotation ONLY (not time-based) per user request: "Если мало логов, то пусть хранятся долго". Logs persist longer when generation is low, predictable disk usage (~90MB max).
 
 ## Development Environment
 

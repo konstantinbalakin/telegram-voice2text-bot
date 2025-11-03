@@ -371,6 +371,149 @@ git pull origin main
 4. **Создать первую feature ветку** для Phase 2
 5. **Настроить защиту main** через GitHub Settings
 
+## Версионирование и релизы
+
+### Автоматическое версионирование
+
+Проект использует **автоматическое semantic versioning**:
+- При каждом мерже в `main` создается новая версия
+- Версия автоматически увеличивается (patch): `v0.1.0` → `v0.1.1` → `v0.1.2`
+- Деплой происходит только для тегированных версий
+
+### Как это работает
+
+**Workflow:**
+```
+1. Merge PR to main
+   ↓
+2. Build & Tag Workflow
+   - Прогоняются тесты миграций
+   - Билдится Docker образ
+   - Автоматически создается версия (v0.1.X)
+   - Создается git tag
+   - Образ тегируется версией в Docker Hub
+   ↓
+3. Deploy Workflow (triggered by tag)
+   - Запускаются миграции БД
+   - Деплоится новая версия на VPS
+```
+
+### Типы версий
+
+**Patch версии** (автоматически):
+- `v0.1.0` → `v0.1.1` - автоматически при мерже в main
+- Используются для bug fixes, small improvements
+
+**Minor/Major версии** (вручную):
+- `v0.1.x` → `v0.2.0` - новая функциональность
+- `v0.x.x` → `v1.0.0` - breaking changes, major release
+
+### Создание Minor/Major версии
+
+Для создания non-patch версии:
+
+```bash
+# Убедитесь что main актуальна
+git checkout main
+git pull origin main
+
+# Создайте тег вручную
+git tag -a v0.2.0 -m "Release v0.2.0: Add quota system"
+
+# Запушьте тег (запустится деплой)
+git push origin v0.2.0
+```
+
+### Просмотр версий
+
+**Список всех версий:**
+```bash
+git tag -l "v*"
+```
+
+**Текущая версия на VPS:**
+```bash
+# Посмотреть в логах
+ssh telegram-bot "cat /opt/telegram-voice2text-bot/logs/deployments.jsonl | tail -1 | jq .version"
+
+# Или через docker
+ssh telegram-bot "docker inspect telegram-voice2text-bot --format '{{range .Config.Env}}{{println .}}{{end}}' | grep APP_VERSION"
+```
+
+**GitHub Releases:**
+- Автоматически создаются при каждом релизе
+- Доступны на: `https://github.com/konstantinbalakin/telegram-voice2text-bot/releases`
+
+### Откат версии
+
+Если нужно откатиться на предыдущую версию:
+
+**Вариант 1: Пересоздать тег (быстро)**
+```bash
+# Удалить новый тег
+git tag -d v0.1.3
+git push origin :refs/tags/v0.1.3
+
+# Пересоздать на старом коммите
+git checkout <old-commit>
+git tag -a v0.1.3 -m "Rollback to stable version"
+git push origin v0.1.3
+```
+
+**Вариант 2: Деплой старой версии напрямую**
+```bash
+# На VPS
+ssh telegram-bot
+cd /opt/telegram-voice2text-bot
+
+# Checkout старого тега
+git fetch --all --tags
+git checkout v0.1.2
+
+# Пересоздать контейнер с старой версией
+docker pull konstantinbalakin/telegram-voice2text-bot:v0.1.2
+echo "IMAGE_NAME=konstantinbalakin/telegram-voice2text-bot:v0.1.2" >> .env
+docker compose -f docker-compose.prod.yml up -d --no-deps bot
+```
+
+### Docker образы
+
+Каждая версия доступна в Docker Hub:
+
+```bash
+# Конкретная версия
+docker pull konstantinbalakin/telegram-voice2text-bot:v0.1.2
+
+# Последняя версия
+docker pull konstantinbalakin/telegram-voice2text-bot:latest
+
+# По git SHA (для отладки)
+docker pull konstantinbalakin/telegram-voice2text-bot:09f9af8
+```
+
+### Best Practices
+
+1. **Не деплойте напрямую в main** - используйте PR
+2. **Patch версии создаются автоматически** - ничего делать не нужно
+3. **Minor/Major версии** - создавайте вручную для значительных изменений
+4. **Тестируйте перед мержем** - CI прогоняет тесты автоматически
+5. **Следите за логами** - `deployments.jsonl` содержит историю всех деплоев
+
+### Troubleshooting
+
+**Версия не увеличилась:**
+- Проверьте, что были изменения в коде (не только docs/memory-bank)
+- Проверьте GitHub Actions: `.github/workflows/build-and-tag.yml`
+
+**Деплой не запустился:**
+- Проверьте, что тег создан: `git tag -l "v*"`
+- Проверьте GitHub Actions: `.github/workflows/deploy.yml`
+- Убедитесь, что образ существует в Docker Hub
+
+**Нужно пропустить деплой:**
+- Добавьте `[skip ci]` в commit message
+- Или измените только docs/memory-bank (они игнорируются)
+
 ## Вопросы?
 
 - Хотите упрощенный workflow без PR? (коммит → пуш напрямую в main)

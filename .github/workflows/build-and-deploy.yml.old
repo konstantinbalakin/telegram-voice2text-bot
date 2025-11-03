@@ -366,6 +366,15 @@ jobs:
 
             # Benchmark Mode
             BENCHMARK_MODE=false
+
+            # Application Version (for centralized logging)
+            APP_VERSION=${{ github.sha }}
+
+            # Optional: Remote Syslog Configuration
+            # Uncomment and configure if using remote log aggregation
+            # SYSLOG_ENABLED=false
+            # SYSLOG_HOST=logs.example.com
+            # SYSLOG_PORT=514
             EOF
 
             # Pull new Docker image
