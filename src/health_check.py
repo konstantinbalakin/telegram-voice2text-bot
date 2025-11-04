@@ -95,8 +95,7 @@ async def check_database_connectivity() -> bool:
 
         # Create async engine with shorter timeout
         engine = create_async_engine(
-            settings.database_url,
-            connect_args={"timeout": 10}  # 10 second timeout for SQLite
+            settings.database_url, connect_args={"timeout": 10}  # 10 second timeout for SQLite
         )
 
         # Try to connect and execute simple query with timeout
