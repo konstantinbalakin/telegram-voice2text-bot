@@ -109,7 +109,7 @@ async def check_database_connectivity() -> bool:
         return True
 
     except asyncio.TimeoutError:
-        print(f"❌ Database connection timeout (database may be busy)", file=sys.stderr)
+        print("❌ Database connection timeout (database may be busy)", file=sys.stderr)
         return False
     except Exception as e:
         print(f"❌ Database connection failed: {e}", file=sys.stderr)
