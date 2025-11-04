@@ -35,14 +35,14 @@ services:
       - 8.8.4.4       # Google DNS (fallback)
     # Resource limits for production (1GB VPS)
     # Note: Limits tuned for 1 vCPU / 1GB RAM VPS
-    deploy:
-      resources:
-        limits:
-          cpus: '0.95'
-          memory: 900M
-        reservations:
-          cpus: '0.1'
-          memory: 150M
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.95'
+    #       memory: 900M
+    #     reservations:
+    #       cpus: '0.1'
+    #       memory: 150M
 
   # Optional: PostgreSQL for production
   # Uncomment if you want to use PostgreSQL instead of SQLite
