@@ -93,17 +93,24 @@ async def check_database_connectivity() -> bool:
         # Import settings here to avoid circular imports
         from src.config import settings
 
-        # Create async engine
-        engine = create_async_engine(settings.database_url)
+        # Create async engine with shorter timeout
+        engine = create_async_engine(
+            settings.database_url,
+            connect_args={"timeout": 10}  # 10 second timeout for SQLite
+        )
 
-        # Try to connect and execute simple query
-        async with engine.connect() as conn:
-            result = await conn.execute(text("SELECT 1"))
-            result.fetchone()
+        # Try to connect and execute simple query with timeout
+        async with asyncio.timeout(15):  # 15 second overall timeout
+            async with engine.connect() as conn:
+                result = await conn.execute(text("SELECT 1"))
+                result.fetchone()
 
         await engine.dispose()
         return True
 
+    except asyncio.TimeoutError:
+        print(f"❌ Database connection timeout (database may be busy)", file=sys.stderr)
+        return False
     except Exception as e:
         print(f"❌ Database connection failed: {e}", file=sys.stderr)
         return False
