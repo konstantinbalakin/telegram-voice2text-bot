@@ -1,0 +1,138 @@
+Часть env переменных:
+# Processing
+MAX_QUEUE_SIZE=2
+MAX_CONCURRENT_WORKERS=1
+TRANSCRIPTION_TIMEOUT=3600
+MAX_VOICE_DURATION_SECONDS=3600
+PROGRESS_RTF=0.6
+
+# Logging
+LOG_LEVEL=DEBUG
+
+
+В docker-compose.prod.yaml я закомментировал блок с deploy временно, чтобы протестировать полноценную работу на сервере с 4CPU и 4RAM
+
+
+Сценарий:
+1. Первый пользователь присылает аудиозапись длительностью 2 минуты
+    1.1. Сначала отображается: Загружаю файл, затем Начинаю обработку..., затем Обрабатываю с прогресс баром.
+2. Второй пользователь высылает свою аудиозапись на 1 минуту.
+    2.1. Обображается: Загружаю файл, затем начинаю обработку... И вот эта надпись висела до тех пор, пока не завершилась обработка первой записи от первого пользователя.
+    Вопрос: а должно вроде как отображаться информация о том, какой в очереди?
+
+Смотрим что отобразиться в каждый конкретный момент времени.
+
+Снимаем статистику:
+```bash
+while true; do
+  echo "$(date '+%H:%M:%S') $(docker stats telegram-voice2text-bot --no-stream --format 'CPU: {{.CPUPerc}} | MEM: {{.MemUsage}} ({{.MemPerc}}) | NET: {{.NetIO}} | DISK: {{.BlockIO}} | PIDs: {{.PIDs}}')"
+  sleep 0.5
+done
+```
+21:13:43 CPU: 0.00% | MEM: 930.9MiB / 3.822GiB (23.78%) | NET: 157kB / 113kB | DISK: 1.46GB / 840kB | PIDs: 10
+21:13:45 CPU: 0.00% | MEM: 930.9MiB / 3.822GiB (23.78%) | NET: 157kB / 113kB | DISK: 1.46GB / 840kB | PIDs: 10
+21:13:47 CPU: 0.28% | MEM: 931.2MiB / 3.822GiB (23.79%) | NET: 157kB / 113kB | DISK: 1.46GB / 840kB | PIDs: 10
+21:13:49 CPU: 0.00% | MEM: 930.9MiB / 3.822GiB (23.78%) | NET: 157kB / 113kB | DISK: 1.46GB / 840kB | PIDs: 10
+21:13:51 CPU: 0.00% | MEM: 930.9MiB / 3.822GiB (23.78%) | NET: 157kB / 113kB | DISK: 1.46GB / 840kB | PIDs: 10
+21:13:53 CPU: 5.02% | MEM: 937.3MiB / 3.822GiB (23.95%) | NET: 157kB / 113kB | DISK: 1.46GB / 844kB | PIDs: 11
+21:13:55 CPU: 46.36% | MEM: 931.3MiB / 3.822GiB (23.79%) | NET: 356kB / 119kB | DISK: 1.46GB / 864kB | PIDs: 11
+21:13:57 CPU: 310.37% | MEM: 1.091GiB / 3.822GiB (28.53%) | NET: 720kB / 127kB | DISK: 1.47GB / 881kB | PIDs: 16
+21:14:00 CPU: 310.44% | MEM: 1.098GiB / 3.822GiB (28.73%) | NET: 720kB / 127kB | DISK: 1.47GB / 881kB | PIDs: 16
+21:14:02 CPU: 295.53% | MEM: 1.343GiB / 3.822GiB (35.15%) | NET: 728kB / 130kB | DISK: 1.47GB / 1.42MB | PIDs: 16
+21:14:04 CPU: 317.77% | MEM: 1.343GiB / 3.822GiB (35.14%) | NET: 728kB / 130kB | DISK: 1.47GB / 1.42MB | PIDs: 16
+21:14:06 CPU: 300.08% | MEM: 1.611GiB / 3.822GiB (42.15%) | NET: 728kB / 131kB | DISK: 1.47GB / 1.42MB | PIDs: 16
+21:14:08 CPU: 311.96% | MEM: 1.572GiB / 3.822GiB (41.11%) | NET: 737kB / 133kB | DISK: 1.47GB / 1.42MB | PIDs: 16
+21:14:10 CPU: 294.91% | MEM: 1.369GiB / 3.822GiB (35.82%) | NET: 974kB / 137kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:12 CPU: 339.21% | MEM: 1.369GiB / 3.822GiB (35.82%) | NET: 976kB / 138kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:14 CPU: 308.65% | MEM: 1.387GiB / 3.822GiB (36.29%) | NET: 976kB / 138kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:16 CPU: 316.81% | MEM: 1.487GiB / 3.822GiB (38.91%) | NET: 976kB / 138kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:18 CPU: 328.96% | MEM: 1.385GiB / 3.822GiB (36.22%) | NET: 984kB / 141kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:20 CPU: 331.80% | MEM: 1.388GiB / 3.822GiB (36.32%) | NET: 984kB / 141kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:22 CPU: 321.99% | MEM: 1.6GiB / 3.822GiB (41.86%) | NET: 992kB / 144kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:24 CPU: 323.70% | MEM: 1.675GiB / 3.822GiB (43.81%) | NET: 992kB / 144kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:26 CPU: 340.02% | MEM: 1.446GiB / 3.822GiB (37.84%) | NET: 992kB / 144kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:28 CPU: 340.14% | MEM: 1.446GiB / 3.822GiB (37.84%) | NET: 1MB / 146kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:30 CPU: 321.11% | MEM: 1.526GiB / 3.822GiB (39.93%) | NET: 1MB / 146kB | DISK: 1.47GB / 1.46MB | PIDs: 16
+21:14:32 CPU: 315.54% | MEM: 1.604GiB / 3.822GiB (41.95%) | NET: 1.01MB / 149kB | DISK: 1.47GB / 1.47MB | PIDs: 16
+21:14:34 CPU: 242.79% | MEM: 1.389GiB / 3.822GiB (36.33%) | NET: 1.02MB / 156kB | DISK: 1.47GB / 1.49MB | PIDs: 16
+21:14:36 CPU: 320.58% | MEM: 1.389GiB / 3.822GiB (36.34%) | NET: 1.02MB / 156kB | DISK: 1.47GB / 1.49MB | PIDs: 16
+21:14:38 CPU: 327.63% | MEM: 1.389GiB / 3.822GiB (36.33%) | NET: 1.02MB / 156kB | DISK: 1.47GB / 1.49MB | PIDs: 16
+21:14:40 CPU: 330.41% | MEM: 1.389GiB / 3.822GiB (36.33%) | NET: 1.03MB / 159kB | DISK: 1.47GB / 1.49MB | PIDs: 16
+21:14:42 CPU: 317.00% | MEM: 1.389GiB / 3.822GiB (36.34%) | NET: 1.03MB / 159kB | DISK: 1.47GB / 1.72MB | PIDs: 16
+21:14:44 CPU: 315.50% | MEM: 1.389GiB / 3.822GiB (36.33%) | NET: 1.03MB / 161kB | DISK: 1.47GB / 1.72MB | PIDs: 16
+21:14:46 CPU: 337.58% | MEM: 1.389GiB / 3.822GiB (36.33%) | NET: 1.03MB / 161kB | DISK: 1.47GB / 1.72MB | PIDs: 16
+21:14:48 CPU: 317.31% | MEM: 1.585GiB / 3.822GiB (41.48%) | NET: 1.03MB / 161kB | DISK: 1.47GB / 1.72MB | PIDs: 16
+21:14:50 CPU: 321.57% | MEM: 1.389GiB / 3.822GiB (36.34%) | NET: 1.04MB / 164kB | DISK: 1.47GB / 1.72MB | PIDs: 16
+21:14:52 CPU: 336.33% | MEM: 1.389GiB / 3.822GiB (36.34%) | NET: 1.04MB / 164kB | DISK: 1.47GB / 1.72MB | PIDs: 16
+21:14:54 CPU: 0.00% | MEM: 1.389GiB / 3.822GiB (36.33%) | NET: 1.05MB / 168kB | DISK: 1.47GB / 1.74MB | PIDs: 16
+21:14:56 CPU: 88.34% | MEM: 1.392GiB / 3.822GiB (36.41%) | NET: 1.05MB / 168kB | DISK: 1.47GB / 1.74MB | PIDs: 16
+21:14:58 CPU: 0.00% | MEM: 1.392GiB / 3.822GiB (36.41%) | NET: 1.05MB / 168kB | DISK: 1.47GB / 1.74MB | PIDs: 16
+21:15:01 CPU: 0.00% | MEM: 1.392GiB / 3.822GiB (36.41%) | NET: 1.05MB / 168kB | DISK: 1.47GB / 1.74MB | PIDs: 16
+21:15:03 CPU: 0.02% | MEM: 1.392GiB / 3.822GiB (36.41%) | NET: 1.05MB / 168kB | DISK: 1.47GB / 1.74MB | PIDs: 16
+21:15:05 CPU: 0.00% | MEM: 1.392GiB / 3.822GiB (36.41%) | NET: 1.05MB / 168kB | DISK: 1.47GB / 1.75MB | PIDs: 16
+
+
+Логи:
+{"timestamp": "2025-11-04T21:13:56.474567+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/sendMessage \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:13:56.502570+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Usage record 59 created for user 110859240"}
+{"timestamp": "2025-11-04T21:13:56.770691+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/getFile \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:13:56.771915+00:00", "level": "INFO", "logger": "src.transcription.audio_handler", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Downloading voice message: AwACAgIAAxkBAAPlaQpslDLs6HA8sLNpPo24ZF1qWewAAiGHAAKQkwhI2PGqaDSdZXY2BA (529256 bytes)"}
+{"timestamp": "2025-11-04T21:13:56.861503+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: GET https://api.telegram.org/file/bot8010062260%3AAAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/voice/file_51.oga \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:13:57.036316+00:00", "level": "INFO", "logger": "src.transcription.audio_handler", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Download complete: /tmp/telegram_voice2text/AwACAgIAAxkBAAPlaQpslDLs6HA8sLNpPo24ZF1qWewAAiGHAAKQkwhI2PGqaDSdZXY2BA.oga"}
+{"timestamp": "2025-11-04T21:13:57.036586+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "File downloaded: /tmp/telegram_voice2text/AwACAgIAAxkBAAPlaQpslDLs6HA8sLNpPo24ZF1qWewAAiGHAAKQkwhI2PGqaDSdZXY2BA.oga"}
+{"timestamp": "2025-11-04T21:13:57.042924+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Usage record 59 updated with duration 139s"}
+{"timestamp": "2025-11-04T21:13:57.045025+00:00", "level": "INFO", "logger": "src.services.queue_manager", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Request b0bfa7c8-ffda-481c-afd2-71390c72ec93 enqueued at position 1"}
+{"timestamp": "2025-11-04T21:13:57.045782+00:00", "level": "INFO", "logger": "src.services.queue_manager", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Processing request b0bfa7c8-ffda-481c-afd2-71390c72ec93 (queue=0, active=1)"}
+{"timestamp": "2025-11-04T21:13:57.045886+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Processing transcription request b0bfa7c8-ffda-481c-afd2-71390c72ec93"}
+{"timestamp": "2025-11-04T21:13:57.108946+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:13:57.109878+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Request b0bfa7c8-ffda-481c-afd2-71390c72ec93 starting immediately"}
+{"timestamp": "2025-11-04T21:13:57.191781+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 400 Bad Request\""}
+{"timestamp": "2025-11-04T21:13:57.192583+00:00", "level": "WARNING", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Failed to update status message: Message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message"}
+{"timestamp": "2025-11-04T21:13:57.192765+00:00", "level": "INFO", "logger": "src.services.progress_tracker", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "ProgressTracker initialized: duration=139s, estimated=83.4s, interval=5s"}
+{"timestamp": "2025-11-04T21:13:57.192898+00:00", "level": "INFO", "logger": "src.services.progress_tracker", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Progress tracker started"}
+{"timestamp": "2025-11-04T21:13:57.193015+00:00", "level": "INFO", "logger": "src.transcription.routing.router", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Routing to provider: faster-whisper"}
+{"timestamp": "2025-11-04T21:13:57.193145+00:00", "level": "INFO", "logger": "src.transcription.providers.faster_whisper_provider", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Starting transcription: AwACAgIAAxkBAAPlaQpslDLs6HA8sLNpPo24ZF1qWewAAiGHAAKQkwhI2PGqaDSdZXY2BA.oga, language=ru, model=medium"}
+{"timestamp": "2025-11-04T21:13:57.480241+00:00", "level": "INFO", "logger": "faster_whisper", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Processing audio with duration 02:19.834"}
+{"timestamp": "2025-11-04T21:13:57.922839+00:00", "level": "INFO", "logger": "faster_whisper", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "VAD filter removed 00:13.817 of audio"}
+{"timestamp": "2025-11-04T21:14:02.378783+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:07.577826+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:10.022521+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/sendMessage \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:10.039843+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Usage record 60 created for user 7964380536"}
+{"timestamp": "2025-11-04T21:14:10.101510+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/getFile \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:10.103257+00:00", "level": "INFO", "logger": "src.transcription.audio_handler", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Downloading voice message: AwACAgIAAxkBAAPgaQpbti0UF3KViWe6nLM4b29mQhsAAkasAAKQBVFIeAIxVnQgamc2BA (228680 bytes)"}
+{"timestamp": "2025-11-04T21:14:10.227205+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: GET https://api.telegram.org/file/bot8010062260%3AAAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/voice/file_50.oga \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:10.358624+00:00", "level": "INFO", "logger": "src.transcription.audio_handler", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Download complete: /tmp/telegram_voice2text/AwACAgIAAxkBAAPgaQpbti0UF3KViWe6nLM4b29mQhsAAkasAAKQBVFIeAIxVnQgamc2BA.oga"}
+{"timestamp": "2025-11-04T21:14:10.358885+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "File downloaded: /tmp/telegram_voice2text/AwACAgIAAxkBAAPgaQpbti0UF3KViWe6nLM4b29mQhsAAkasAAKQBVFIeAIxVnQgamc2BA.oga"}
+{"timestamp": "2025-11-04T21:14:10.367030+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Usage record 60 updated with duration 60s"}
+{"timestamp": "2025-11-04T21:14:10.372981+00:00", "level": "INFO", "logger": "src.services.queue_manager", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Request d57b9c98-1a7e-41f5-9d08-d14949fd7e15 enqueued at position 1"}
+{"timestamp": "2025-11-04T21:14:10.452112+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:10.454612+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Request d57b9c98-1a7e-41f5-9d08-d14949fd7e15 starting immediately"}
+{"timestamp": "2025-11-04T21:14:12.674310+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:17.843503+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:23.084090+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:28.325567+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:33.501414+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:35.304241+00:00", "level": "INFO", "logger": "src.transcription.providers.faster_whisper_provider", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Transcription complete: 1180 chars, 139.83s audio, 38.11s processing, language=ru, RTF=0.27x"}
+{"timestamp": "2025-11-04T21:14:35.304773+00:00", "level": "INFO", "logger": "src.services.progress_tracker", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Progress tracker stopped"}
+{"timestamp": "2025-11-04T21:14:35.374874+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:35.376075+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Request b0bfa7c8-ffda-481c-afd2-71390c72ec93 completed successfully (duration=139s, processing_time=38.11s)"}
+{"timestamp": "2025-11-04T21:14:35.376253+00:00", "level": "INFO", "logger": "src.services.queue_manager", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Request b0bfa7c8-ffda-481c-afd2-71390c72ec93 completed in 38.33s"}
+{"timestamp": "2025-11-04T21:14:35.376387+00:00", "level": "INFO", "logger": "src.services.queue_manager", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Processing request d57b9c98-1a7e-41f5-9d08-d14949fd7e15 (queue=0, active=1)"}
+{"timestamp": "2025-11-04T21:14:35.376464+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Processing transcription request d57b9c98-1a7e-41f5-9d08-d14949fd7e15"}
+{"timestamp": "2025-11-04T21:14:35.435130+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 400 Bad Request\""}
+{"timestamp": "2025-11-04T21:14:35.435767+00:00", "level": "WARNING", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Failed to update status message: Message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message"}
+{"timestamp": "2025-11-04T21:14:35.435881+00:00", "level": "INFO", "logger": "src.services.progress_tracker", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "ProgressTracker initialized: duration=60s, estimated=36.0s, interval=5s"}
+{"timestamp": "2025-11-04T21:14:35.435977+00:00", "level": "INFO", "logger": "src.services.progress_tracker", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Progress tracker started"}
+{"timestamp": "2025-11-04T21:14:35.436046+00:00", "level": "INFO", "logger": "src.transcription.routing.router", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Routing to provider: faster-whisper"}
+{"timestamp": "2025-11-04T21:14:35.436124+00:00", "level": "INFO", "logger": "src.transcription.providers.faster_whisper_provider", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Starting transcription: AwACAgIAAxkBAAPgaQpbti0UF3KViWe6nLM4b29mQhsAAkasAAKQBVFIeAIxVnQgamc2BA.oga, language=ru, model=medium"}
+{"timestamp": "2025-11-04T21:14:35.584177+00:00", "level": "INFO", "logger": "faster_whisper", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Processing audio with duration 01:00.574"}
+{"timestamp": "2025-11-04T21:14:35.741866+00:00", "level": "INFO", "logger": "faster_whisper", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "VAD filter removed 00:05.790 of audio"}
+{"timestamp": "2025-11-04T21:14:40.593067+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:45.846486+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:51.031258+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:53.950137+00:00", "level": "INFO", "logger": "src.transcription.providers.faster_whisper_provider", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Transcription complete: 564 chars, 60.57s audio, 18.51s processing, language=ru, RTF=0.31x"}
+{"timestamp": "2025-11-04T21:14:53.950439+00:00", "level": "INFO", "logger": "src.services.progress_tracker", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Progress tracker stopped"}
+{"timestamp": "2025-11-04T21:14:54.018486+00:00", "level": "INFO", "logger": "httpx", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "HTTP Request: POST https://api.telegram.org/bot8010062260:AAGnA0EC6bOUI9vdTTtN2TqqW94BkCSRtkQ/editMessageText \"HTTP/1.1 200 OK\""}
+{"timestamp": "2025-11-04T21:14:54.019614+00:00", "level": "INFO", "logger": "src.bot.handlers", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Request d57b9c98-1a7e-41f5-9d08-d14949fd7e15 completed successfully (duration=60s, processing_time=18.51s)"}
+{"timestamp": "2025-11-04T21:14:54.019785+00:00", "level": "INFO", "logger": "src.services.queue_manager", "version": "v0.0.4", "container_id": "732706f6ab3e", "message": "Request d57b9c98-1a7e-41f5-9d08-d14949fd7e15 completed in 18.64s"}
+

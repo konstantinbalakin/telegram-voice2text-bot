@@ -254,10 +254,10 @@ jobs:
             DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
 
             # Processing
-            MAX_QUEUE_SIZE=10
+            MAX_QUEUE_SIZE=1
             MAX_CONCURRENT_WORKERS=1
-            TRANSCRIPTION_TIMEOUT=120
-            MAX_VOICE_DURATION_SECONDS=120
+            TRANSCRIPTION_TIMEOUT=3600
+            MAX_VOICE_DURATION_SECONDS=3600
             PROGRESS_RTF=0.6
 
             # Quota
