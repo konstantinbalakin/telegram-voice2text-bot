@@ -391,17 +391,27 @@ class BotHandlers:
 
                 # Enqueue request
                 try:
-                    position = await self.queue_manager.enqueue(request)
+                    await self.queue_manager.enqueue(request)
 
-                    # Show queue position
-                    if position > 1:
-                        estimated_wait = (position - 1) * duration_seconds * settings.progress_rtf
+                    # Calculate actual position considering active workers
+                    queue_depth = self.queue_manager.get_queue_depth()
+                    active_workers = self.queue_manager.get_processing_count()
+                    total_position = queue_depth + active_workers
+
+                    # Show queue position or immediate start
+                    if total_position > self.queue_manager._max_concurrent:
+                        # Request is in queue (not processing yet)
+                        queue_position = total_position - active_workers
+                        estimated_wait = (
+                            (queue_position - 1) * duration_seconds * settings.progress_rtf
+                        )
                         await status_msg.edit_text(
-                            f"📋 В очереди: позиция {position}\n"
+                            f"📋 В очереди: позиция {queue_position}\n"
                             f"⏱️ Примерное время ожидания: ~{int(estimated_wait)}с"
                         )
-                        logger.info(f"Request {request.id} enqueued at position {position}")
+                        logger.info(f"Request {request.id} enqueued at position {queue_position}")
                     else:
+                        # Request will start immediately
                         await status_msg.edit_text("⚙️ Начинаю обработку...")
                         logger.info(f"Request {request.id} starting immediately")
 
@@ -589,17 +599,27 @@ class BotHandlers:
 
                 # Enqueue request
                 try:
-                    position = await self.queue_manager.enqueue(request)
+                    await self.queue_manager.enqueue(request)
 
-                    # Show queue position
-                    if position > 1:
-                        estimated_wait = (position - 1) * duration_seconds * settings.progress_rtf
+                    # Calculate actual position considering active workers
+                    queue_depth = self.queue_manager.get_queue_depth()
+                    active_workers = self.queue_manager.get_processing_count()
+                    total_position = queue_depth + active_workers
+
+                    # Show queue position or immediate start
+                    if total_position > self.queue_manager._max_concurrent:
+                        # Request is in queue (not processing yet)
+                        queue_position = total_position - active_workers
+                        estimated_wait = (
+                            (queue_position - 1) * duration_seconds * settings.progress_rtf
+                        )
                         await status_msg.edit_text(
-                            f"📋 В очереди: позиция {position}\n"
+                            f"📋 В очереди: позиция {queue_position}\n"
                             f"⏱️ Примерное время ожидания: ~{int(estimated_wait)}с"
                         )
-                        logger.info(f"Request {request.id} enqueued at position {position}")
+                        logger.info(f"Request {request.id} enqueued at position {queue_position}")
                     else:
+                        # Request will start immediately
                         await status_msg.edit_text("⚙️ Начинаю обработку...")
                         logger.info(f"Request {request.id} starting immediately")
 
