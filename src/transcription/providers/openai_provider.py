@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import mimetypes
 import time
 from pathlib import Path
 from typing import Optional
@@ -111,9 +112,13 @@ class OpenAIProvider(TranscriptionProvider):
         last_exception: Optional[Exception] = None
         for attempt in range(1, self.max_retries + 1):
             try:
+                # Detect MIME type based on file extension
+                mime_type = mimetypes.guess_type(audio_path)[0] or "audio/mpeg"
+                logger.debug(f"Detected MIME type: {mime_type} for file {audio_path.name}")
+
                 # Prepare request
                 with open(audio_path, "rb") as audio_file:
-                    files = {"file": (audio_path.name, audio_file, "audio/ogg")}
+                    files = {"file": (audio_path.name, audio_file, mime_type)}
                     data = {
                         "model": self.model,
                     }
@@ -153,9 +158,20 @@ class OpenAIProvider(TranscriptionProvider):
                 last_exception = e
                 status_code = e.response.status_code
 
+                # Log detailed error information
+                error_body = ""
+                try:
+                    error_body = e.response.text
+                    logger.error(f"OpenAI API response body: {error_body}")
+                except Exception:
+                    pass
+
                 # Don't retry on client errors (4xx)
                 if 400 <= status_code < 500:
-                    logger.error(f"OpenAI API client error ({status_code}): {e}")
+                    error_msg = f"OpenAI API client error ({status_code}): {e}"
+                    if error_body:
+                        error_msg += f" | Response: {error_body}"
+                    logger.error(error_msg)
                     raise RuntimeError(f"OpenAI API error: {e}") from e
 
                 # Retry on server errors (5xx) and rate limits (429)
