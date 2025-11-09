@@ -250,6 +250,9 @@ jobs:
             FASTER_WHISPER_BEAM_SIZE=1
             FASTER_WHISPER_VAD_FILTER=true
 
+            # Whisper API Key
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+
             # Database
             DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
 
