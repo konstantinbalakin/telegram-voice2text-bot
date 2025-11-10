@@ -76,3 +76,4 @@ temp/
 .claude/settings.local.json
 
 debug/
+logs/
