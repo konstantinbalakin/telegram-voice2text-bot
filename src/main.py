@@ -20,7 +20,7 @@ from src.utils.logging_config import setup_logging, log_deployment_event, get_co
 
 # Setup centralized logging
 APP_VERSION = os.getenv("APP_VERSION", "unknown")
-LOG_DIR = Path(os.getenv("LOG_DIR", "/app/logs"))
+LOG_DIR = Path(os.getenv("LOG_DIR", "./logs"))
 SYSLOG_ENABLED = os.getenv("SYSLOG_ENABLED", "false").lower() == "true"
 SYSLOG_HOST = os.getenv("SYSLOG_HOST")
 SYSLOG_PORT = int(os.getenv("SYSLOG_PORT", "514"))
