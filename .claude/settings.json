@@ -1,0 +1,71 @@
+{
+  "permissions": {
+    "allow": [
+    "Bash(git:*)",
+    "Bash(gh:*)",
+
+    "Bash(ssh:*)",
+
+    "Bash(poetry:*)",
+    "Bash(python:*)",
+    "Bash(python3:*)",
+    "Bash(pip:*)",
+    "Bash(alembic:*)",
+    "Bash(black:*)",
+    
+    "Bash(brew:*)",
+    "Bash(tree:*)",
+    "Bash(cat:*)",
+    "Bash(awk:*)",
+    "Bash(sqlite3:*)",
+    
+    "Read(//Users/computer/Library/Caches/pypoetry/virtualenvs/**)",
+    
+    "WebFetch(domain:pypi.org)",
+    
+    "SlashCommand(/workflow:*)"
+],
+    "deny": [],
+    "ask": []
+  },
+  "enabledMcpjsonServers": [
+    "context7"
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PROTECTED_PATTERNS=('*/etc/*' '*/usr/bin/*' '*/usr/sbin/*' '*.production.*' '*prod*config*' '*/node_modules/*' '*/vendor/*'); for pattern in \"${PROTECTED_PATTERNS[@]}\"; do if [[ \"$CLAUDE_TOOL_FILE_PATH\" == $pattern ]]; then echo \"Error: File $CLAUDE_TOOL_FILE_PATH is protected from modification\" >&2; exit 1; fi; done"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v semgrep >/dev/null 2>&1; then semgrep --config=auto \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || true; fi; if command -v bandit >/dev/null 2>&1 && [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then bandit \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || true; fi; if command -v gitleaks >/dev/null 2>&1; then gitleaks detect --source=\"$CLAUDE_TOOL_FILE_PATH\" --no-git 2>/dev/null || true; fi; if grep -qE '(password|secret|key|token)\\s*=\\s*[\"\\'][^\"\\'\n]{8,}' \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null; then echo \"Warning: Potential hardcoded secrets detected in $CLAUDE_TOOL_FILE_PATH\" >&2; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then black \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || true; fi"
+          },
+          {
+              "type": "command",
+              "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *pyproject.toml || \"$CLAUDE_TOOL_FILE_PATH\" == *poetry.lock ]]; then echo \"✓ Poetry dependency file modified: $CLAUDE_TOOL_FILE_PATH\"; if command -v poetry >/dev/null 2>&1; then echo \"\\n→ Checking for outdated packages...\"; poetry show --outdated 2>/dev/null || true; echo \"\\n→ Running security audit...\"; poetry export -f requirements.txt --without-hashes | poetry run safety check --stdin 2>/dev/null || echo \"Note: Install safety with 'poetry add --group dev safety' for security scanning\"; fi; fi"
+            }
+        ]
+      }
+    ]
+  }
+}
