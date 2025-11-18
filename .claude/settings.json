@@ -53,7 +53,7 @@
           },
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then black \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || true; fi"
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Formatting with black...\"; poetry run black \"$CLAUDE_TOOL_FILE_PATH\" 2>&1 || true; fi"
           },
           {
             "type": "command",
