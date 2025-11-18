@@ -14,9 +14,11 @@
 - **Phase 7**: ✅ Complete (2025-11-03) - Centralized logging & automatic versioning
 - **Phase 7.1**: ✅ Complete (2025-11-03) - Workflow fixes and production deployment
 - **Phase 7.2**: ✅ Complete (2025-11-04) - Fully automatic deployment pipeline
+- **Phase 7.3**: ✅ Complete (2025-11-19) - Queue position & file naming bug fixes
+- **Phase 7.4**: ✅ Complete (2025-11-19) - Dynamic queue notifications with accurate time calculation
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- **Current Version**: v0.0.3 (fully automatic deployment working)
-- Current focus (2025-11-04): Production monitoring with automatic deployment
+- **Current Version**: v0.0.3+ (queue notifications pending deployment)
+- Current focus (2025-11-19): Deploy dynamic queue notifications and continue monitoring
 
 ## Delivered Milestones
 
@@ -800,6 +802,113 @@ docker inspect telegram-voice2text-bot --format='{{.State.Health.Status}}'
 **Key Pattern Established**: For GitHub Actions workflow_run with tag-based deployments, use `git describe --tags --abbrev=0` instead of relying on GITHUB_REF. This enables fully automatic CI/CD without manual triggers while maintaining version-based deployments.
 
 **Status**: ✅ Deployed and operational, fully automatic pipeline proven
+
+### Phase 7.3: Queue Position & File Naming Bug Fixes ✅ COMPLETE (2025-11-19)
+**Achievement**: Fixed two critical production bugs affecting multi-user concurrent usage
+
+**Bug 1: Queue Position Always Showing "1"**
+
+**Problem**: When multiple audio files were sent in sequence, all queued messages displayed "📋 В очереди: позиция 1" instead of their actual positions (2, 3, etc.).
+
+**Root Cause**: Race condition between `enqueue()` and worker pulling from queue
+- Handler was recalculating position using `get_queue_depth()` after enqueueing
+- Worker immediately pulls items, making `qsize()` unreliable
+- Position returned by `enqueue()` was being ignored
+
+**Solution** (commit pending):
+- Added `_total_pending` counter in `QueueManager.__init__()`
+- Counter increments BEFORE `put()` atomically
+- Counter decrements in `_process_request()` finally block
+- Handler uses returned position directly
+
+**Bug 2: FileNotFoundError with Concurrent Users**
+
+**Problem**: When two users forwarded the same voice message, second user got `FileNotFoundError`.
+
+**Root Cause**: Same `file_id` created same filename
+- First request downloads, processes, deletes file
+- Second request fails to find deleted file
+
+**Solution** (commit pending):
+- Added UUID suffix to all downloaded filenames in `audio_handler.py`
+- Format: `{file_id}_{uuid.uuid4().hex[:8]}{extension}`
+- Each download creates unique file regardless of `file_id`
+
+**Files Modified**:
+- `src/services/queue_manager.py` - Added `_total_pending` counter
+- `src/bot/handlers.py` - Use returned position from `enqueue()`
+- `src/transcription/audio_handler.py` - UUID suffix for filenames
+
+**Testing Results**:
+- ✅ Queue positions correctly show 1, 2, 3...
+- ✅ User confirmed fix works: "Вроде теперь ок"
+- ✅ File conflicts resolved for concurrent users
+- ✅ All code quality checks pass
+
+**Key Patterns Established**:
+1. **Atomic Counter Pattern**: Use dedicated counter for queue position tracking instead of `qsize()` which is affected by concurrent workers
+2. **Unique File Naming Pattern**: Add UUID suffix when multiple users may process same resource (file_id) to prevent collisions
+
+**Impact**:
+- ✅ Accurate queue position feedback
+- ✅ Reliable concurrent multi-user operation
+- ✅ No file conflicts when same message forwarded by multiple users
+
+**Status**: ✅ Implemented and tested, ready for production deployment
+
+### Phase 7.4: Dynamic Queue Notifications ✅ COMPLETE (2025-11-19)
+**Achievement**: Enhanced queue notification system with accurate time calculation and dynamic updates
+
+**Problem Solved**:
+- Confusing formulation: "Примерное время ожидания" didn't clarify queue wait vs processing time
+- Inaccurate calculation: Used current message duration instead of messages ahead
+- No dynamic updates when queue progressed
+- Didn't account for currently processing messages
+- Didn't handle parallel processing (max_concurrent > 1)
+
+**Implementation**:
+
+**1. QueueManager Enhancements** (`src/services/queue_manager.py`)
+- `_pending_requests` list: Track queue items with durations
+- `_processing_requests` list: Track currently processing items
+- `_on_queue_changed` callback: Notify handlers on queue changes
+- `get_estimated_wait_time_by_id()`: Accurate time calculation
+- `get_queue_position_by_id()`: Current position in queue
+- Wait time formula: `(processing + pending_ahead) * rtf / max_concurrent`
+
+**2. Dynamic Updates** (`src/bot/handlers.py`)
+- `_update_queue_messages()`: Updates all pending users when queue changes
+- Clear message format:
+  ```
+  📋 В очереди: позиция 2
+  ⏱️ Ожидание в очереди: ~1м 50с
+  🎯 Обработка вашего сообщения: ~18с
+  ```
+- Time formatting: seconds for <60s, minutes+seconds for longer
+
+**Files Modified**:
+- `src/services/queue_manager.py` - Queue tracking and time calculation
+- `src/bot/handlers.py` - Dynamic updates and message formatting
+
+**Testing Results**:
+- ✅ User confirmed: "Белиссимо! Все идеально вроде работает"
+- ✅ Correct positions (1, 2, 3...)
+- ✅ Accurate wait times
+- ✅ Dynamic updates work
+- ✅ All quality checks pass
+
+**Key Patterns**:
+1. **Callback Pattern**: Notify handlers when queue state changes
+2. **Dual List Tracking**: Separate pending and processing for accurate calculation
+3. **Time Formatting**: Appropriate units (seconds vs minutes)
+
+**Impact**:
+- ✅ Clear, informative notifications
+- ✅ Accurate wait estimates
+- ✅ Better UX with dynamic updates
+- ✅ Full transparency about queue state
+
+**Status**: ✅ Implemented and tested, ready for production deployment
 
 ### Phase 8: Performance Optimization ⏳ DEFERRED
 **Goal**: Achieve RTF ~0.3x (match local benchmark performance)
