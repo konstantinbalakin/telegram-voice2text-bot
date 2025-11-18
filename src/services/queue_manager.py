@@ -5,7 +5,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, Optional, Awaitable
 
 from telegram import Message
 
@@ -74,6 +74,13 @@ class QueueManager:
         self._callback: Optional[Callable] = None
         self._max_queue_size = max_queue_size
         self._max_concurrent = max_concurrent
+        self._total_pending: int = 0  # Total requests pending (in queue + being processed)
+
+        # For tracking queue items and their durations
+        self._pending_requests: list[TranscriptionRequest] = []
+        self._processing_requests: list[TranscriptionRequest] = []  # Requests currently being processed
+        self._lock: asyncio.Lock = asyncio.Lock()
+        self._on_queue_changed: Optional[Callable[[], Awaitable[None]]] = None
 
         logger.info(
             f"QueueManager initialized: max_queue={max_queue_size}, max_concurrent={max_concurrent}"
@@ -121,11 +128,22 @@ class QueueManager:
             asyncio.QueueFull: If queue is at capacity
         """
         try:
-            await self._queue.put(request)
-            position = self._queue.qsize()
+            async with self._lock:
+                # Increment counter BEFORE put() to get correct position
+                # This is atomic within the same coroutine
+                self._total_pending += 1
+                position = self._total_pending
+                self._pending_requests.append(request)
+                await self._queue.put(request)
             logger.info(f"Request {request.id} enqueued at position {position}")
             return position
         except asyncio.QueueFull:
+            # Rollback counter on failure
+            async with self._lock:
+                self._total_pending -= 1
+                # Remove from pending if it was added
+                if request in self._pending_requests:
+                    self._pending_requests.remove(request)
             logger.warning(f"Queue full, rejecting request {request.id}")
             raise
 
@@ -233,6 +251,19 @@ class QueueManager:
             self._processing.add(request_id)
             start_time = asyncio.get_event_loop().time()
 
+            # Move from pending to processing when processing starts
+            async with self._lock:
+                if request in self._pending_requests:
+                    self._pending_requests.remove(request)
+                self._processing_requests.append(request)
+
+            # Notify about queue change (for updating other users' messages)
+            if self._on_queue_changed:
+                try:
+                    await self._on_queue_changed()
+                except Exception as e:
+                    logger.warning(f"Error in queue change callback: {e}")
+
             logger.info(
                 f"Processing request {request_id} "
                 f"(queue={self.get_queue_depth()}, active={self.get_processing_count()})"
@@ -274,6 +305,10 @@ class QueueManager:
 
             finally:
                 self._processing.remove(request_id)
+                # Remove from processing_requests list
+                if request in self._processing_requests:
+                    self._processing_requests.remove(request)
+                self._total_pending -= 1  # Decrement counter when request completes
                 self._queue.task_done()
 
     def get_stats(self) -> dict:
@@ -289,3 +324,76 @@ class QueueManager:
             "max_concurrent": self._max_concurrent,
             "results_cached": len(self._results),
         }
+
+    def set_on_queue_changed(self, callback: Callable[[], Awaitable[None]]) -> None:
+        """Set callback to be called when queue changes.
+
+        Args:
+            callback: Async function to call when queue position changes
+        """
+        self._on_queue_changed = callback
+
+    def get_pending_requests(self) -> list[TranscriptionRequest]:
+        """Get list of pending requests in queue order.
+
+        Returns:
+            List of TranscriptionRequest objects in queue order
+        """
+        return self._pending_requests.copy()
+
+    def get_estimated_wait_time_by_id(self, request_id: str, rtf: float) -> tuple[float, float]:
+        """Calculate estimated wait time and processing time for a request.
+
+        Args:
+            request_id: Request ID to calculate time for
+            rtf: Real-time factor for processing time estimation
+
+        Returns:
+            Tuple of (wait_time_seconds, processing_time_seconds)
+        """
+        # Find request index in pending list
+        request_index = -1
+        current_request = None
+        for i, req in enumerate(self._pending_requests):
+            if req.id == request_id:
+                request_index = i
+                current_request = req
+                break
+
+        if request_index < 0 or current_request is None:
+            return (0.0, 0.0)
+
+        # Calculate total duration of items currently being processed
+        # (these need to finish before queue items can start)
+        processing_duration = sum(r.duration_seconds for r in self._processing_requests)
+
+        # Get requests ahead of this one in the pending queue
+        items_ahead = self._pending_requests[:request_index]
+
+        # Calculate total duration of items ahead in pending queue
+        pending_duration_ahead = sum(r.duration_seconds for r in items_ahead)
+
+        # Total duration = processing + pending ahead
+        total_duration_ahead = processing_duration + pending_duration_ahead
+
+        # Wait time = total processing time of items ahead / concurrent workers
+        wait_time = (total_duration_ahead * rtf) / self._max_concurrent
+
+        # Processing time of current request
+        processing_time = current_request.duration_seconds * rtf
+
+        return (wait_time, processing_time)
+
+    def get_queue_position_by_id(self, request_id: str) -> int:
+        """Get current queue position for a request.
+
+        Args:
+            request_id: Request ID to find
+
+        Returns:
+            Position in queue (1-based), or 0 if not found
+        """
+        for i, req in enumerate(self._pending_requests):
+            if req.id == request_id:
+                return i + 1
+        return 0

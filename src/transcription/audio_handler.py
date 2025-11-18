@@ -4,6 +4,7 @@ Audio file handler for downloading and processing Telegram voice messages
 
 import logging
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -64,8 +65,10 @@ class AudioHandler:
         if extension not in self.supported_formats:
             raise ValueError(f"Unsupported audio format: {extension}")
 
-        # Create unique filename
-        audio_file = self.temp_dir / f"{file_id}{extension}"
+        # Create unique filename with UUID suffix to avoid conflicts
+        # when multiple users forward the same voice message
+        unique_suffix = uuid.uuid4().hex[:8]
+        audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
 
         logger.info(f"Downloading voice message: {file_id} ({telegram_file.file_size} bytes)")
 
@@ -106,7 +109,9 @@ class AudioHandler:
         Raises:
             RuntimeError: If download fails
         """
-        audio_file = self.temp_dir / f"{file_id}{extension}"
+        # Create unique filename with UUID suffix
+        unique_suffix = uuid.uuid4().hex[:8]
+        audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
 
         logger.info(f"Downloading from URL: {url}")
 
