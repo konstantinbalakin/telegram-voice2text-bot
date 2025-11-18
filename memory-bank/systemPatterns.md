@@ -240,6 +240,11 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-11-03 | Centralized logging with version tracking | Essential for production observability, size-based rotation per user request | 95% |
 | 2025-11-03 | Separate build and deploy workflows | Enables testing between stages, automatic versioning without manual overhead | 90% |
 | 2025-11-03 | Size-based log rotation only | User request: "Если мало логов, то пусть хранятся долго" - predictable disk usage | 90% |
+| 2025-11-19 | Atomic counter for queue position | `qsize()` unreliable due to worker immediately pulling items; dedicated counter provides accurate position | 95% |
+| 2025-11-19 | UUID suffix for file downloads | Prevent filename collisions when multiple users process same file_id | 95% |
+| 2025-11-19 | Dual list tracking for queue | Separate _pending_requests and _processing_requests lists for accurate wait time calculation | 95% |
+| 2025-11-19 | Callback pattern for queue updates | Notify handlers when queue changes to enable dynamic UI updates | 90% |
+| 2025-11-19 | Time calculation with parallel processing | Wait time = (processing + pending ahead) × RTF / max_concurrent | 95% |
 
 ## Design Patterns in Use
 
@@ -708,6 +713,102 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
     - Health checks
 - **Rollback**: Redeploy previous tag or create new tag pointing to old commit
 - **Pattern**: Two-phase deployment with artifact versioning
+
+### 18. **Atomic Counter for Queue Position Pattern** (added 2025-11-19)
+- **Where**: `QueueManager._total_pending` in `src/services/queue_manager.py`
+- **Why**: `asyncio.Queue.qsize()` is unreliable because background worker immediately pulls items
+- **Benefit**: Accurate queue position tracking regardless of worker timing
+- **Implementation**:
+  - Add `_total_pending: int = 0` counter in `__init__`
+  - Increment BEFORE `put()`: `self._total_pending += 1; position = self._total_pending`
+  - Decrement in `finally` block: `self._total_pending -= 1`
+  - Return position from `enqueue()` for immediate use by caller
+- **Problem Solved**: Race condition where position was recalculated after worker already consumed items
+- **Key Insight**: Counter operations are atomic within same coroutine (no await between increment and assignment)
+- **Pattern**: Atomic counter for tracking logical position vs physical queue state
+
+### 19. **Unique File Naming with UUID Pattern** (added 2025-11-19)
+- **Where**: `AudioHandler.download_voice_message()` and `download_from_url()` in `src/transcription/audio_handler.py`
+- **Why**: Multiple users may forward same voice message (same file_id), causing filename collision
+- **Benefit**: Each download creates unique file, preventing concurrent access conflicts
+- **Implementation**:
+  ```python
+  unique_suffix = uuid.uuid4().hex[:8]  # 8 hex chars = 4 billion combinations
+  audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
+  ```
+- **Problem Solved**: First request deletes file after processing, second request fails with FileNotFoundError
+- **Key Insight**: file_id is unique per file in Telegram, but multiple users can access same file
+- **Usage Pattern**: Always add UUID suffix when temporary files may be accessed concurrently by multiple requests for same resource
+- **Pattern**: Resource isolation through unique naming
+
+### 20. **Callback Pattern for Queue State Changes** (added 2025-11-19)
+- **Where**: `QueueManager._on_queue_changed` callback in `src/services/queue_manager.py`
+- **Why**: Need to update all users' messages when queue state changes (request starts processing)
+- **Benefit**: Dynamic UI updates without polling, decoupled notification logic
+- **Implementation**:
+  - `set_on_queue_changed(callback)`: Register async callback
+  - Callback called in `_process_request()` after moving request from pending to processing
+  - Handler implements callback to iterate and update all pending messages
+- **Usage**: `queue_manager.set_on_queue_changed(self._update_queue_messages)`
+- **Pattern**: Observer pattern for queue state changes
+
+### 21. **Dual List Tracking Pattern** (added 2025-11-19)
+- **Where**: `_pending_requests` and `_processing_requests` in `src/services/queue_manager.py`
+- **Why**: Need to calculate accurate wait times based on both queued and processing items
+- **Benefit**: Accurate time estimation, proper accounting for all work in progress
+- **Implementation**:
+  ```python
+  # In enqueue():
+  self._pending_requests.append(request)
+
+  # In _process_request():
+  self._pending_requests.remove(request)
+  self._processing_requests.append(request)
+
+  # After completion:
+  self._processing_requests.remove(request)
+  ```
+- **Time Calculation**:
+  ```python
+  processing_duration = sum(r.duration_seconds for r in self._processing_requests)
+  pending_duration = sum(r.duration_seconds for r in pending_ahead)
+  wait_time = (processing_duration + pending_duration) * rtf / max_concurrent
+  ```
+- **Pattern**: State tracking with separate collections for different lifecycle stages
+
+### 22. **Dynamic Message Update Pattern** (added 2025-11-19)
+- **Where**: `_update_queue_messages()` in `src/bot/handlers.py`
+- **Why**: Keep users informed of queue progress without requiring them to check
+- **Benefit**: Better UX, transparency about wait times
+- **Implementation**:
+  - Called when any request starts processing
+  - Iterates through all pending requests
+  - Calculates new position and times for each
+  - Updates Telegram message via `edit_text()`
+  - Handles errors gracefully (message deleted, etc.)
+- **Message Format**:
+  ```
+  📋 В очереди: позиция {position}
+  ⏱️ Ожидание в очереди: {wait_time}
+  🎯 Обработка вашего сообщения: {processing_time}
+  ```
+- **Pattern**: Proactive notification with error tolerance
+
+### 23. **Time Formatting with Appropriate Units** (added 2025-11-19)
+- **Where**: Queue notification messages in `src/bot/handlers.py`
+- **Why**: Times displayed should be easy to read at a glance
+- **Benefit**: Better readability for users
+- **Implementation**:
+  ```python
+  if time < 60:
+      time_str = f"~{int(time)}с"
+  else:
+      minutes = int(time // 60)
+      seconds = int(time % 60)
+      time_str = f"~{minutes}м {seconds}с"
+  ```
+- **Usage**: Applied to both wait time and processing time displays
+- **Pattern**: User-friendly formatting based on magnitude
 
 ## Development Workflow
 

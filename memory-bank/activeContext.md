@@ -2,14 +2,14 @@
 
 ## Current Status
 
-**Phase**: Phase 7.1 - Fully Automatic CI/CD Pipeline ✅ COMPLETE (2025-11-04)
-**Date**: 2025-11-04
-**Stage**: Production operational with fully automatic deployment
+**Phase**: Phase 7.4 - Dynamic Queue Notifications ✅ COMPLETE (2025-11-19)
+**Date**: 2025-11-19
+**Stage**: Production operational with enhanced queue notification system
 **Branch**: main
-**Production Version**: v0.0.3 (deployed and healthy)
-**Production Status**: ✅ OPERATIONAL - All systems stable, fully automatic CI/CD working
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**
-**Next Phase**: Production monitoring and feature development
+**Production Version**: v0.0.3+ (pending deployment with queue notification improvements)
+**Production Status**: ✅ OPERATIONAL - All systems stable, dynamic queue notifications implemented
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**
+**Next Phase**: Production deployment and monitoring
 
 ## Production Configuration Finalized ✅
 
@@ -728,6 +728,193 @@ Production running v0.0.3
 **Key Pattern Established**: For GitHub Actions workflow_run limitations, use `git describe --tags --abbrev=0` to retrieve the latest tag created by previous workflow. This enables fully automatic deployment pipelines without manual triggers.
 
 **Status**: ✅ Deployed and operational, v0.0.3 running in production
+
+### Phase 7.3: Production Bug Fixes ✅ COMPLETE (2025-11-19)
+**Achievement**: Fixed two critical bugs affecting queue position display and concurrent file downloads
+
+**Bug 1: Queue Position Always Showing "1"**
+
+**Problem**: When multiple audio files were sent in sequence, all queued messages displayed "📋 В очереди: позиция 1" instead of their actual positions (2, 3, etc.).
+
+**Root Cause Analysis**:
+- The `enqueue()` method returned the correct position, but the handler was recalculating it using `get_queue_depth()`
+- Race condition: by the time `get_queue_depth()` was called, the worker had already pulled items from the queue
+- `qsize()` is unreliable because the background worker immediately empties the queue
+
+**Solution Implemented**:
+1. Added `_total_pending` counter in `QueueManager` class
+2. Counter increments BEFORE `put()` to get correct position atomically
+3. Counter decrements in `finally` block after request completes
+4. Handler now uses the position returned by `enqueue()` directly
+
+**Files Modified**:
+- `src/services/queue_manager.py`:
+  ```python
+  # In __init__:
+  self._total_pending: int = 0
+
+  # In enqueue():
+  self._total_pending += 1
+  position = self._total_pending
+  await self._queue.put(request)
+  return position
+
+  # In _process_request() finally block:
+  self._total_pending -= 1
+  ```
+- `src/bot/handlers.py`: Use returned position instead of recalculating
+
+**Bug 2: FileNotFoundError with Concurrent Users**
+
+**Problem**: When two users forwarded the same voice message, the second user got `FileNotFoundError` because the file was already deleted.
+
+**Root Cause Analysis**:
+- Same Telegram `file_id` creates the same filename
+- First request downloads file, processes it, deletes it after completion
+- Second request tries to access the same filename but file is gone
+- Issue: filename collision when multiple users process the same forwarded message
+
+**Solution Implemented**:
+- Added UUID suffix to all downloaded filenames
+- Each download creates a unique file regardless of `file_id`
+
+**Files Modified**:
+- `src/transcription/audio_handler.py`:
+  ```python
+  import uuid
+
+  # In download_voice_message():
+  unique_suffix = uuid.uuid4().hex[:8]
+  audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
+
+  # In download_from_url():
+  unique_suffix = uuid.uuid4().hex[:8]
+  audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
+  ```
+
+**Testing Results**:
+- ✅ Queue positions now correctly show 1, 2, 3...
+- ✅ User confirmed: "Вроде теперь ок"
+- ✅ File naming conflict resolved
+- ✅ All code quality checks pass (syntax, mypy, ruff)
+
+**Key Patterns Established**:
+1. **Atomic Counter Pattern**: For queue position tracking, use a dedicated counter that increments/decrements atomically rather than relying on `qsize()` which can be affected by concurrent workers
+2. **Unique File Naming Pattern**: When multiple users may process the same resource (same file_id), always add UUID suffix to prevent filename collisions and race conditions
+
+**Impact**:
+- ✅ Accurate queue position feedback for users
+- ✅ No more file conflicts when multiple users forward same message
+- ✅ Improved reliability for concurrent usage scenarios
+
+**Status**: ✅ Implemented and tested locally, ready for production deployment
+
+### Phase 7.4: Dynamic Queue Notifications ✅ COMPLETE (2025-11-19)
+**Achievement**: Enhanced queue notification system with accurate wait time calculation and dynamic updates
+
+**Problem Solved**:
+- Confusing message formulation: "Примерное время ожидания" didn't clarify if it was queue wait or processing time
+- Inaccurate wait time calculation: used duration of current message instead of messages ahead in queue
+- No dynamic updates: users didn't see position changes when queue progressed
+- Didn't account for messages currently being processed
+- Didn't correctly handle parallel processing (max_concurrent > 1)
+
+**Solution Implemented**:
+
+**1. Enhanced QueueManager** (`src/services/queue_manager.py`)
+- Added `_pending_requests: list[TranscriptionRequest]` to track queue items with their data
+- Added `_processing_requests: list[TranscriptionRequest]` to track items being processed
+- Added `_on_queue_changed` callback for notifying handlers when queue changes
+- New methods:
+  - `get_estimated_wait_time_by_id()`: Calculates wait time based on:
+    - Duration of all currently processing requests
+    - Duration of all pending requests ahead in queue
+    - Divides by `max_concurrent` for parallel processing
+  - `get_queue_position_by_id()`: Returns current position in pending queue
+  - `set_on_queue_changed()`: Registers callback for queue updates
+
+**2. Dynamic Message Updates** (`src/bot/handlers.py`)
+- New method `_update_queue_messages()`:
+  - Called when any request starts processing
+  - Iterates through all pending requests
+  - Updates each user's status message with new position and times
+  - Handles Telegram API errors gracefully
+- Improved message format with clear separation:
+  ```
+  📋 В очереди: позиция 2
+  ⏱️ Ожидание в очереди: ~1м 50с
+  🎯 Обработка вашего сообщения: ~18с
+  ```
+
+**3. Accurate Wait Time Calculation**
+```python
+# Calculate total duration of items currently being processed
+processing_duration = sum(r.duration_seconds for r in self._processing_requests)
+
+# Get requests ahead in pending queue
+pending_duration_ahead = sum(r.duration_seconds for r in items_ahead)
+
+# Total wait = (processing + pending ahead) * RTF / concurrent workers
+wait_time = (processing_duration + pending_duration_ahead) * rtf / max_concurrent
+
+# Processing time = current message duration * RTF
+processing_time = current_request.duration_seconds * rtf
+```
+
+**4. Time Formatting**
+- Shows seconds for times < 60s: "~18с"
+- Shows minutes and seconds for longer times: "~1м 50с"
+
+**User Experience Improvements**:
+
+*Before*:
+- ❌ "Примерное время ожидания: ~18с" (confusing - is it wait or processing?)
+- ❌ Time based on own message duration, not queue
+- ❌ No updates when queue progresses
+- ❌ All messages showed position 1 due to race condition
+
+*After*:
+- ✅ Clear separation: "Ожидание в очереди" vs "Обработка вашего сообщения"
+- ✅ Wait time calculated from actual messages ahead
+- ✅ Dynamic updates when queue progresses
+- ✅ Correct position display (1, 2, 3...)
+- ✅ Accounts for messages currently being processed
+- ✅ Handles parallel processing correctly
+
+**Files Modified**:
+- `src/services/queue_manager.py`:
+  - Added `_pending_requests`, `_processing_requests` lists
+  - Added `_on_queue_changed` callback
+  - Added `get_estimated_wait_time_by_id()`, `get_queue_position_by_id()`, `set_on_queue_changed()`
+  - Updated `enqueue()` to add to `_pending_requests`
+  - Updated `_process_request()` to move between lists and call callback
+- `src/bot/handlers.py`:
+  - Added `_update_queue_messages()` method
+  - Registered callback in `__init__`
+  - Updated queue notification formatting in both handlers
+
+**Testing Results**:
+- ✅ User confirmed: "Белиссимо! Все идеально вроде работает"
+- ✅ Positions correctly show 1, 2, 3...
+- ✅ Wait times accurately reflect messages ahead
+- ✅ Processing times show individual message duration
+- ✅ Messages update dynamically when queue progresses
+- ✅ All code quality checks pass (ruff, mypy)
+
+**Key Patterns Established**:
+1. **Callback Pattern for Queue Updates**: Use callbacks to notify handlers when queue state changes, enabling dynamic UI updates
+2. **Dual List Tracking**: Separate lists for pending and processing requests enables accurate time calculation
+3. **Time Formatting Helper**: Consistent time display with appropriate units (seconds vs minutes)
+
+**Plan Documentation**: `memory-bank/plans/2025-01-19-queue-notifications-improvement.md`
+
+**Impact**:
+- ✅ Clear, informative queue notifications
+- ✅ Accurate wait time estimates
+- ✅ Better user experience with dynamic updates
+- ✅ Full transparency about queue state
+
+**Status**: ✅ Implemented and tested, ready for production deployment
 
 ## Next Steps (Current Priority)
 

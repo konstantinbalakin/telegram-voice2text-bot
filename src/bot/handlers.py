@@ -109,8 +109,55 @@ class BotHandlers:
         self.audio_handler = audio_handler
         self.queue_manager = queue_manager
 
+        # Register callback for queue updates
+        self.queue_manager.set_on_queue_changed(self._update_queue_messages)
+
         # Start queue worker
         asyncio.create_task(self.queue_manager.start_worker(self._process_transcription))
+
+    async def _update_queue_messages(self) -> None:
+        """Update all pending queue messages with new positions and wait times.
+
+        Called when queue changes (request starts processing).
+        """
+        pending_requests = self.queue_manager.get_pending_requests()
+
+        for i, request in enumerate(pending_requests):
+            position = i + 1
+            wait_time, processing_time = self.queue_manager.get_estimated_wait_time_by_id(
+                request.id, settings.progress_rtf
+            )
+
+            try:
+                # Format wait time nicely
+                if wait_time < 60:
+                    wait_str = f"~{int(wait_time)}с"
+                else:
+                    minutes = int(wait_time // 60)
+                    seconds = int(wait_time % 60)
+                    wait_str = f"~{minutes}м {seconds}с"
+
+                if processing_time < 60:
+                    proc_str = f"~{int(processing_time)}с"
+                else:
+                    minutes = int(processing_time // 60)
+                    seconds = int(processing_time % 60)
+                    proc_str = f"~{minutes}м {seconds}с"
+
+                message_text = (
+                    f"📋 В очереди: позиция {position}\n"
+                    f"⏱️ Ожидание в очереди: {wait_str}\n"
+                    f"🎯 Обработка вашего сообщения: {proc_str}"
+                )
+
+                await request.status_message.edit_text(message_text)
+                logger.debug(
+                    f"Updated queue message for request {request.id} at position {position}"
+                )
+
+            except Exception as e:
+                # Ignore errors (message might be deleted, etc.)
+                logger.debug(f"Failed to update queue message for {request.id}: {e}")
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /start command.
@@ -391,27 +438,46 @@ class BotHandlers:
 
                 # Enqueue request
                 try:
-                    await self.queue_manager.enqueue(request)
-
-                    # Calculate actual position considering active workers
-                    queue_depth = self.queue_manager.get_queue_depth()
+                    queue_position = await self.queue_manager.enqueue(request)
                     active_workers = self.queue_manager.get_processing_count()
-                    total_position = queue_depth + active_workers
 
                     # Show queue position or immediate start
-                    if total_position > self.queue_manager._max_concurrent:
-                        # Request is in queue (not processing yet)
-                        queue_position = total_position - active_workers
-                        estimated_wait = (
-                            (queue_position - 1) * duration_seconds * settings.progress_rtf
+                    # Position 1 with no active workers = starts immediately
+                    # Position 1 with active workers = waiting for current to finish
+                    # Position 2+ = waiting in queue
+                    if queue_position > 1 or active_workers > 0:
+                        # Request is in queue, waiting
+                        # Get actual position in pending queue (not absolute position)
+                        actual_position = self.queue_manager.get_queue_position_by_id(request.id)
+                        wait_time, processing_time = (
+                            self.queue_manager.get_estimated_wait_time_by_id(
+                                request.id, settings.progress_rtf
+                            )
                         )
+
+                        # Format wait time nicely
+                        if wait_time < 60:
+                            wait_str = f"~{int(wait_time)}с"
+                        else:
+                            minutes = int(wait_time // 60)
+                            seconds = int(wait_time % 60)
+                            wait_str = f"~{minutes}м {seconds}с"
+
+                        if processing_time < 60:
+                            proc_str = f"~{int(processing_time)}с"
+                        else:
+                            minutes = int(processing_time // 60)
+                            seconds = int(processing_time % 60)
+                            proc_str = f"~{minutes}м {seconds}с"
+
                         await status_msg.edit_text(
-                            f"📋 В очереди: позиция {queue_position}\n"
-                            f"⏱️ Примерное время ожидания: ~{int(estimated_wait)}с"
+                            f"📋 В очереди: позиция {actual_position}\n"
+                            f"⏱️ Ожидание в очереди: {wait_str}\n"
+                            f"🎯 Обработка вашего сообщения: {proc_str}"
                         )
-                        logger.info(f"Request {request.id} enqueued at position {queue_position}")
+                        logger.info(f"Request {request.id} enqueued at position {actual_position}")
                     else:
-                        # Request will start immediately
+                        # Request will start immediately (position 1, no active workers)
                         await status_msg.edit_text("⚙️ Начинаю обработку...")
                         logger.info(f"Request {request.id} starting immediately")
 
@@ -599,27 +665,46 @@ class BotHandlers:
 
                 # Enqueue request
                 try:
-                    await self.queue_manager.enqueue(request)
-
-                    # Calculate actual position considering active workers
-                    queue_depth = self.queue_manager.get_queue_depth()
+                    queue_position = await self.queue_manager.enqueue(request)
                     active_workers = self.queue_manager.get_processing_count()
-                    total_position = queue_depth + active_workers
 
                     # Show queue position or immediate start
-                    if total_position > self.queue_manager._max_concurrent:
-                        # Request is in queue (not processing yet)
-                        queue_position = total_position - active_workers
-                        estimated_wait = (
-                            (queue_position - 1) * duration_seconds * settings.progress_rtf
+                    # Position 1 with no active workers = starts immediately
+                    # Position 1 with active workers = waiting for current to finish
+                    # Position 2+ = waiting in queue
+                    if queue_position > 1 or active_workers > 0:
+                        # Request is in queue, waiting
+                        # Get actual position in pending queue (not absolute position)
+                        actual_position = self.queue_manager.get_queue_position_by_id(request.id)
+                        wait_time, processing_time = (
+                            self.queue_manager.get_estimated_wait_time_by_id(
+                                request.id, settings.progress_rtf
+                            )
                         )
+
+                        # Format wait time nicely
+                        if wait_time < 60:
+                            wait_str = f"~{int(wait_time)}с"
+                        else:
+                            minutes = int(wait_time // 60)
+                            seconds = int(wait_time % 60)
+                            wait_str = f"~{minutes}м {seconds}с"
+
+                        if processing_time < 60:
+                            proc_str = f"~{int(processing_time)}с"
+                        else:
+                            minutes = int(processing_time // 60)
+                            seconds = int(processing_time % 60)
+                            proc_str = f"~{minutes}м {seconds}с"
+
                         await status_msg.edit_text(
-                            f"📋 В очереди: позиция {queue_position}\n"
-                            f"⏱️ Примерное время ожидания: ~{int(estimated_wait)}с"
+                            f"📋 В очереди: позиция {actual_position}\n"
+                            f"⏱️ Ожидание в очереди: {wait_str}\n"
+                            f"🎯 Обработка вашего сообщения: {proc_str}"
                         )
-                        logger.info(f"Request {request.id} enqueued at position {queue_position}")
+                        logger.info(f"Request {request.id} enqueued at position {actual_position}")
                     else:
-                        # Request will start immediately
+                        # Request will start immediately (position 1, no active workers)
                         await status_msg.edit_text("⚙️ Начинаю обработку...")
                         logger.info(f"Request {request.id} starting immediately")
 
