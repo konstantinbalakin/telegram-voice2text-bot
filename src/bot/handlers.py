@@ -151,7 +151,9 @@ class BotHandlers:
                 )
 
                 await request.status_message.edit_text(message_text)
-                logger.debug(f"Updated queue message for request {request.id} at position {position}")
+                logger.debug(
+                    f"Updated queue message for request {request.id} at position {position}"
+                )
 
             except Exception as e:
                 # Ignore errors (message might be deleted, etc.)
@@ -447,8 +449,10 @@ class BotHandlers:
                         # Request is in queue, waiting
                         # Get actual position in pending queue (not absolute position)
                         actual_position = self.queue_manager.get_queue_position_by_id(request.id)
-                        wait_time, processing_time = self.queue_manager.get_estimated_wait_time_by_id(
-                            request.id, settings.progress_rtf
+                        wait_time, processing_time = (
+                            self.queue_manager.get_estimated_wait_time_by_id(
+                                request.id, settings.progress_rtf
+                            )
                         )
 
                         # Format wait time nicely
@@ -672,8 +676,10 @@ class BotHandlers:
                         # Request is in queue, waiting
                         # Get actual position in pending queue (not absolute position)
                         actual_position = self.queue_manager.get_queue_position_by_id(request.id)
-                        wait_time, processing_time = self.queue_manager.get_estimated_wait_time_by_id(
-                            request.id, settings.progress_rtf
+                        wait_time, processing_time = (
+                            self.queue_manager.get_estimated_wait_time_by_id(
+                                request.id, settings.progress_rtf
+                            )
                         )
 
                         # Format wait time nicely

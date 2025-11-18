@@ -78,7 +78,9 @@ class QueueManager:
 
         # For tracking queue items and their durations
         self._pending_requests: list[TranscriptionRequest] = []
-        self._processing_requests: list[TranscriptionRequest] = []  # Requests currently being processed
+        self._processing_requests: list[TranscriptionRequest] = (
+            []
+        )  # Requests currently being processed
         self._lock: asyncio.Lock = asyncio.Lock()
         self._on_queue_changed: Optional[Callable[[], Awaitable[None]]] = None
 
