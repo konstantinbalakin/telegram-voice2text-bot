@@ -38,7 +38,7 @@ class LLMProvider(ABC):
         pass
 
     @abstractmethod
-    async def close(self):
+    async def close(self) -> None:
         """Cleanup resources."""
         pass
 
@@ -140,7 +140,7 @@ class DeepSeekProvider(LLMProvider):
             response.raise_for_status()
             data = response.json()
 
-            refined = data["choices"][0]["message"]["content"]
+            refined: str = data["choices"][0]["message"]["content"]
 
             # Log token usage
             usage = data.get("usage", {})
@@ -165,7 +165,7 @@ class DeepSeekProvider(LLMProvider):
             logger.error(f"DeepSeek unexpected error: {e}")
             raise LLMAPIError(f"DeepSeek error: {e}") from e
 
-    async def close(self):
+    async def close(self) -> None:
         """Close HTTP client."""
         await self.client.aclose()
 
@@ -256,7 +256,7 @@ class LLMService:
             logger.error(f"Unexpected LLM error: {e}, using draft as final")
             return draft_text
 
-    async def close(self):
+    async def close(self) -> None:
         """Cleanup resources."""
         if self.provider:
             await self.provider.close()

@@ -785,10 +785,12 @@ class BotHandlers:
             await progress.stop()
 
             # === HYBRID STRATEGY: Check if LLM refinement needed ===
-            is_hybrid = isinstance(self.transcription_router.strategy, HybridStrategy)
-            needs_refinement = is_hybrid and self.transcription_router.strategy.requires_refinement(
-                request.duration_seconds
-            )
+            needs_refinement = False
+            if isinstance(self.transcription_router.strategy, HybridStrategy):
+                # Type narrow: we know it's HybridStrategy here
+                needs_refinement = self.transcription_router.strategy.requires_refinement(
+                    request.duration_seconds
+                )
 
             final_text = result.text
 

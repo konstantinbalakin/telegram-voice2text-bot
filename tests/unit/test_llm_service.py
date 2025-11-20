@@ -8,7 +8,6 @@ from src.services.llm_service import (
     DeepSeekProvider,
     LLMFactory,
     LLMService,
-    LLMError,
     LLMTimeoutError,
     LLMAPIError,
 )

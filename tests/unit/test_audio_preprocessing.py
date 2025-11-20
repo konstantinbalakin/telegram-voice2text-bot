@@ -1,8 +1,7 @@
 """Unit tests for audio preprocessing."""
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 import subprocess
 
 from src.transcription.audio_handler import AudioHandler
