@@ -4,6 +4,7 @@ import asyncio
 import logging
 import uuid
 from datetime import timedelta
+from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -11,10 +12,12 @@ from src.config import settings
 from src.storage.database import get_session
 from src.storage.repositories import UserRepository, UsageRepository
 from src.transcription.routing.router import TranscriptionRouter
+from src.transcription.routing.strategies import HybridStrategy
 from src.transcription.audio_handler import AudioHandler
 from src.transcription.models import TranscriptionContext, TranscriptionResult
 from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.progress_tracker import ProgressTracker
+from src.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,7 @@ class BotHandlers:
         whisper_service: TranscriptionRouter,
         audio_handler: AudioHandler,
         queue_manager: QueueManager,
+        llm_service: Optional[LLMService] = None,
     ):
         """Initialize bot handlers.
 
@@ -104,10 +108,12 @@ class BotHandlers:
             whisper_service: Transcription router for transcription
             audio_handler: Audio handler for file operations
             queue_manager: Queue manager for request handling
+            llm_service: Optional LLM service for text refinement
         """
         self.transcription_router = whisper_service
         self.audio_handler = audio_handler
         self.queue_manager = queue_manager
+        self.llm_service = llm_service
 
         # Register callback for queue updates
         self.queue_manager.set_on_queue_changed(self._update_queue_messages)
@@ -759,50 +765,125 @@ class BotHandlers:
         await progress.start()
 
         try:
-            # Transcribe audio
+            # === PREPROCESSING: Apply audio transformations ===
+            processed_path = request.file_path
+            try:
+                processed_path = self.audio_handler.preprocess_audio(request.file_path)
+                if processed_path != request.file_path:
+                    logger.info(f"Audio preprocessed: {processed_path.name}")
+            except Exception as e:
+                logger.warning(f"Audio preprocessing failed: {e}, using original")
+                processed_path = request.file_path
+
+            # === TRANSCRIPTION: Get draft or final transcription ===
             result = await self.transcription_router.transcribe(
-                request.file_path,
+                processed_path,
                 request.context,
             )
 
             # Stop progress updates
             await progress.stop()
 
-            # Update database (Stage 3: after transcription)
+            # === HYBRID STRATEGY: Check if LLM refinement needed ===
+            is_hybrid = isinstance(self.transcription_router.strategy, HybridStrategy)
+            needs_refinement = (
+                is_hybrid
+                and self.transcription_router.strategy.requires_refinement(
+                    request.duration_seconds
+                )
+            )
+
+            final_text = result.text
+
+            if needs_refinement and self.llm_service:
+                # === STAGE 1: Send draft ===
+                draft_text = result.text
+                try:
+                    await request.status_message.edit_text(
+                        f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст..."
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send draft message: {e}")
+
+                # === STAGE 2: Refine with LLM ===
+                try:
+                    refined_text = await self.llm_service.refine_transcription(draft_text)
+
+                    # === STAGE 3: Send final refined text ===
+                    final_text = refined_text
+
+                    # Split if needed
+                    text_chunks = split_text(refined_text)
+
+                    if len(text_chunks) == 1:
+                        await request.status_message.edit_text(f"✨ Готово!\n\n{refined_text}")
+                    else:
+                        # Delete status message and send in chunks
+                        try:
+                            await request.status_message.delete()
+                        except Exception as e:
+                            logger.warning(f"Failed to delete status message: {e}")
+
+                        for i, chunk in enumerate(text_chunks, 1):
+                            prefix = "✨ Готово!\n\n" if i == 1 else ""
+                            header = (
+                                f"📝 Часть {i}/{len(text_chunks)}\n\n"
+                                if len(text_chunks) > 1
+                                else ""
+                            )
+                            await request.user_message.reply_text(prefix + header + chunk)
+                            if i < len(text_chunks):
+                                await asyncio.sleep(0.1)
+
+                except Exception as e:
+                    logger.error(f"LLM refinement failed: {e}")
+                    # Fallback: draft is final
+                    try:
+                        await request.status_message.edit_text(
+                            f"✅ Готово:\n\n{draft_text}\n\nℹ️ (улучшение текста недоступно)"
+                        )
+                    except Exception:
+                        pass
+                    final_text = draft_text
+
+            else:
+                # === Direct result (short audio or non-hybrid) ===
+                text_chunks = split_text(result.text)
+
+                if len(text_chunks) == 1:
+                    await request.status_message.edit_text(f"✅ Готово!\n\n{result.text}")
+                else:
+                    # Multiple messages needed
+                    try:
+                        await request.status_message.delete()
+                    except Exception as e:
+                        logger.warning(f"Failed to delete status message: {e}")
+
+                    for i, chunk in enumerate(text_chunks, 1):
+                        prefix = "✅ Готово!\n\n" if i == 1 else ""
+                        header = (
+                            f"📝 Часть {i}/{len(text_chunks)}\n\n"
+                            if len(text_chunks) > 1
+                            else ""
+                        )
+                        await request.user_message.reply_text(prefix + header + chunk)
+                        if i < len(text_chunks):
+                            await asyncio.sleep(0.1)
+
+            # === Update database with final text ===
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
                 await usage_repo.update(
                     usage_id=request.usage_id,
                     model_size=result.model_name,
                     processing_time_seconds=result.processing_time,
-                    transcription_length=len(result.text),
+                    transcription_length=len(final_text),
                 )
 
-            # Send final result (clean text for easy copying)
-            # Split long text into multiple messages if needed
-            text_chunks = split_text(result.text)
-
-            if len(text_chunks) == 1:
-                # Single message - edit existing status message
-                await request.status_message.edit_text(result.text)
-            else:
-                # Multiple messages needed
-                # First, delete the status message
-                try:
-                    await request.status_message.delete()
-                except Exception as e:
-                    logger.warning(f"Failed to delete status message: {e}")
-
-                # Send text in chunks
-                for i, chunk in enumerate(text_chunks, 1):
-                    header = f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
-                    await request.user_message.reply_text(header + chunk)
-                    # Small delay to avoid rate limits
-                    if i < len(text_chunks):
-                        await asyncio.sleep(0.1)
-
-            # Cleanup temporary file
+            # Cleanup temporary files (both original and preprocessed)
             self.audio_handler.cleanup_file(request.file_path)
+            if processed_path != request.file_path:
+                self.audio_handler.cleanup_file(processed_path)
 
             logger.info(
                 f"Request {request.id} completed successfully "
@@ -823,8 +904,10 @@ class BotHandlers:
             except Exception:
                 pass
 
-            # Cleanup file
+            # Cleanup files
             self.audio_handler.cleanup_file(request.file_path)
+            if processed_path != request.file_path:
+                self.audio_handler.cleanup_file(processed_path)
 
             logger.error(f"Request {request.id} failed: {e}", exc_info=True)
             raise

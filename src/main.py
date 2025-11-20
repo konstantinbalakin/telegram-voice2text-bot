@@ -16,6 +16,7 @@ from src.storage.database import init_db, close_db
 from src.transcription import get_transcription_router, shutdown_transcription_router, AudioHandler
 from src.bot.handlers import BotHandlers
 from src.services.queue_manager import QueueManager
+from src.services.llm_service import LLMFactory, LLMService
 from src.utils.logging_config import setup_logging, log_deployment_event, get_config_summary
 
 # Setup centralized logging
@@ -76,11 +77,34 @@ async def main() -> None:
         f"Queue manager initialized (max_queue={settings.max_queue_size}, max_concurrent={settings.max_concurrent_workers})"
     )
 
+    # Initialize LLM service for text refinement
+    llm_service = None
+    if settings.llm_refinement_enabled:
+        try:
+            llm_provider = LLMFactory.create_provider(settings)
+            if llm_provider:
+                llm_service = LLMService(
+                    provider=llm_provider,
+                    prompt=settings.llm_refinement_prompt,
+                )
+                logger.info(
+                    f"LLM service initialized (provider={settings.llm_provider}, "
+                    f"model={settings.llm_model})"
+                )
+            else:
+                logger.warning("LLM refinement enabled but no provider available (missing API key?)")
+        except Exception as e:
+            logger.error(f"Failed to initialize LLM service: {e}")
+            logger.warning("Continuing without LLM refinement")
+    else:
+        logger.info("LLM refinement disabled")
+
     # Create bot handlers
     bot_handlers = BotHandlers(
         whisper_service=transcription_router,
         audio_handler=audio_handler,
         queue_manager=queue_manager,
+        llm_service=llm_service,
     )
 
     # Build telegram bot application
@@ -145,6 +169,11 @@ async def main() -> None:
 
         # Stop queue worker
         await queue_manager.stop_worker()
+
+        # Close LLM service
+        if llm_service:
+            await llm_service.close()
+            logger.info("LLM service closed")
 
         await shutdown_transcription_router()
         await close_db()
