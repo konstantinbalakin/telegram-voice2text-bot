@@ -18,6 +18,7 @@ pydantic-settings = "^2.6"
 httpx = "^0.28"
 psutil = "^6.1"
 python-json-logger = "^4.0.0"
+tenacity = "^9.0.0"
 
 # Optional transcription providers
 faster-whisper = {version = "^1.2.0", optional = true}
