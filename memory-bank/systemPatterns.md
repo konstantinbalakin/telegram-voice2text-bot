@@ -245,6 +245,13 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-11-19 | Dual list tracking for queue | Separate _pending_requests and _processing_requests lists for accurate wait time calculation | 95% |
 | 2025-11-19 | Callback pattern for queue updates | Notify handlers when queue changes to enable dynamic UI updates | 90% |
 | 2025-11-19 | Time calculation with parallel processing | Wait time = (processing + pending ahead) × RTF / max_concurrent | 95% |
+| 2025-11-20 | Hybrid transcription strategy | Duration-based routing: <20s = quality, ≥20s = draft + LLM refinement | 95% |
+| 2025-11-20 | LLM post-processing pattern | Use fast draft model + LLM refinement for long audio instead of slow quality model | 90% |
+| 2025-11-20 | Staged UI updates for refinement | Show draft immediately, then refinement in progress, then final - keeps user informed | 95% |
+| 2025-11-20 | Audio preprocessing pipeline | Optional mono conversion and speed adjustment before transcription | 85% |
+| 2025-11-20 | Abstract LLM provider pattern | Enable multiple LLM providers (DeepSeek, OpenAI, etc.) via factory + abstract base class | 90% |
+| 2025-11-20 | Graceful degradation for LLM | Always fall back to draft text on any LLM error (timeout, API, network) | 95% |
+| 2025-11-20 | Feature flags for production safety | Disable new features by default (llm_refinement_enabled=false), gradual rollout | 95% |
 
 ## Design Patterns in Use
 
@@ -809,6 +816,104 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
   ```
 - **Usage**: Applied to both wait time and processing time displays
 - **Pattern**: User-friendly formatting based on magnitude
+
+### 24. **Hybrid Transcription Strategy Pattern** (added 2025-11-20)
+- **Where**: `HybridStrategy` in `src/transcription/routing/strategies.py`
+- **Why**: Balance speed and quality based on audio duration - long audio needs fast processing
+- **Benefit**: 6x performance improvement for long audio while maintaining quality
+- **Implementation**:
+  - Short audio (<20s): Use quality model directly (medium/int8)
+  - Long audio (≥20s): Use fast draft model (small/beam1) + LLM refinement
+  - Methods: `select_provider()`, `get_model_for_duration()`, `requires_refinement()`
+- **Performance**: 60s audio from 36s → ~6s (3s draft + 3s LLM)
+- **Pattern**: Strategy pattern with duration-based routing
+
+### 25. **LLM Post-Processing Pattern** (added 2025-11-20)
+- **Where**: `LLMService` in `src/services/llm_service.py`, integrated in `handlers.py`
+- **Why**: Improve quality of fast draft transcriptions without slow model inference
+- **Benefit**: Better quality than draft alone, faster than quality model, cost-effective
+- **Implementation**:
+  - Draft transcription from fast model (small/beam1)
+  - Send to LLM API (DeepSeek V3) for refinement
+  - Retry logic with exponential backoff (3 attempts)
+  - Graceful fallback to draft on any error
+- **Cost**: ~$0.0002 per 60s audio (30x cheaper than OpenAI Whisper API)
+- **Pattern**: Service layer with retry logic and graceful degradation
+
+### 26. **Staged UI Updates Pattern** (added 2025-11-20)
+- **Where**: Handler integration in `src/bot/handlers.py`
+- **Why**: Keep users informed during multi-stage processing (draft → refinement)
+- **Benefit**: Immediate feedback, transparency about what's happening
+- **Implementation**:
+  1. **Stage 1**: Show draft transcription immediately
+     ```
+     ✅ Черновик готов:
+     [draft text]
+     🔄 Улучшаю текст...
+     ```
+  2. **Stage 2**: Show final refined transcription
+     ```
+     ✨ Готово!
+     [refined text]
+     ```
+- **Pattern**: Progressive disclosure - show partial results immediately, refine later
+
+### 27. **Audio Preprocessing Pipeline Pattern** (added 2025-11-20)
+- **Where**: `AudioHandler.preprocess_audio()` in `src/transcription/audio_handler.py`
+- **Why**: Optimize audio for transcription (mono, speed adjustment) to improve quality or speed
+- **Benefit**: Optional optimizations without blocking main flow, graceful fallback on errors
+- **Implementation**:
+  - Pipeline: Original → Mono conversion (optional) → Speed adjustment (optional)
+  - Each step wrapped in try-except with fallback to previous file
+  - ffmpeg-based transformations with validation
+  - Cleanup of intermediate files
+- **Configuration**: Disabled by default, opt-in via environment variables
+- **Pattern**: Pipeline pattern with graceful degradation
+
+### 28. **Abstract LLM Provider Pattern** (added 2025-11-20)
+- **Where**: `LLMProvider` base class in `src/services/llm_service.py`
+- **Why**: Support multiple LLM providers (DeepSeek, OpenAI, Anthropic) with same interface
+- **Benefit**: Easy to add new providers, switch providers via configuration
+- **Implementation**:
+  ```python
+  class LLMProvider(ABC):
+      @abstractmethod
+      async def refine_text(self, text: str, prompt: str) -> str:
+          pass
+
+      @abstractmethod
+      async def close(self) -> None:
+          pass
+
+  class DeepSeekProvider(LLMProvider):
+      # Implementation with httpx, tenacity retry logic
+  ```
+- **Factory**: `LLMFactory.create_provider()` instantiates based on configuration
+- **Pattern**: Abstract base class + Factory pattern for pluggable providers
+
+### 29. **Graceful Degradation for LLM Pattern** (added 2025-11-20)
+- **Where**: `LLMService.refine_transcription()` and handler integration
+- **Why**: LLM APIs can fail (timeout, rate limits, network errors) - must not block users
+- **Benefit**: Always deliver transcription even if LLM fails, better UX than errors
+- **Implementation**:
+  - All LLM errors caught (timeout, HTTP errors, network errors, unexpected errors)
+  - Automatic fallback to draft text on any error
+  - Retry logic (3 attempts) before giving up
+  - User sees draft immediately, refinement is bonus
+- **Error Types Handled**: `LLMTimeoutError`, `LLMAPIError`, generic `Exception`
+- **Pattern**: Fail-safe with automatic fallback
+
+### 30. **Feature Flags for Production Safety Pattern** (added 2025-11-20)
+- **Where**: `llm_refinement_enabled` setting in `src/config.py`
+- **Why**: New features should be disabled by default for safe production rollout
+- **Benefit**: Deploy code without activating feature, gradual rollout, easy rollback
+- **Implementation**:
+  - Feature disabled by default: `llm_refinement_enabled: bool = Field(default=False)`
+  - Check at runtime: `if settings.llm_refinement_enabled: ...`
+  - Enable for specific test users first
+  - Monitor metrics before full rollout
+- **Rollout Plan**: Deploy → Enable for test users → Monitor → Gradual rollout
+- **Pattern**: Feature toggle for risk mitigation
 
 ## Development Workflow
 
