@@ -60,14 +60,10 @@ class TestDeepSeekProvider:
             },
         }
 
-        with patch.object(
-            deepseek_provider.client, "post", new_callable=AsyncMock
-        ) as mock_post:
+        with patch.object(deepseek_provider.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value = mock_response
 
-            result = await deepseek_provider.refine_text(
-                "draft text here", "Improve this text"
-            )
+            result = await deepseek_provider.refine_text("draft text here", "Improve this text")
 
             assert result == "Refined text here."
             mock_post.assert_called_once()
@@ -91,9 +87,7 @@ class TestDeepSeekProvider:
             "usage": {"total_tokens": 100},
         }
 
-        with patch.object(
-            deepseek_provider.client, "post", new_callable=AsyncMock
-        ) as mock_post:
+        with patch.object(deepseek_provider.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value = mock_response
 
             await deepseek_provider.refine_text(long_text, "test prompt")
@@ -106,9 +100,7 @@ class TestDeepSeekProvider:
     @pytest.mark.asyncio
     async def test_refine_text_timeout(self, deepseek_provider):
         """Test timeout handling."""
-        with patch.object(
-            deepseek_provider.client, "post", new_callable=AsyncMock
-        ) as mock_post:
+        with patch.object(deepseek_provider.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.side_effect = httpx.TimeoutException("Request timed out")
 
             with pytest.raises(LLMTimeoutError, match="timeout after"):
@@ -121,13 +113,9 @@ class TestDeepSeekProvider:
         mock_response.status_code = 401
         mock_response.text = "Unauthorized"
 
-        error = httpx.HTTPStatusError(
-            "Unauthorized", request=Mock(), response=mock_response
-        )
+        error = httpx.HTTPStatusError("Unauthorized", request=Mock(), response=mock_response)
 
-        with patch.object(
-            deepseek_provider.client, "post", new_callable=AsyncMock
-        ) as mock_post:
+        with patch.object(deepseek_provider.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.side_effect = error
 
             with pytest.raises(LLMAPIError, match="API error: 401"):
@@ -136,9 +124,7 @@ class TestDeepSeekProvider:
     @pytest.mark.asyncio
     async def test_refine_text_unexpected_error(self, deepseek_provider):
         """Test handling of unexpected errors."""
-        with patch.object(
-            deepseek_provider.client, "post", new_callable=AsyncMock
-        ) as mock_post:
+        with patch.object(deepseek_provider.client, "post", new_callable=AsyncMock) as mock_post:
             mock_post.side_effect = Exception("Unexpected error")
 
             with pytest.raises(LLMAPIError, match="DeepSeek error"):
@@ -147,9 +133,7 @@ class TestDeepSeekProvider:
     @pytest.mark.asyncio
     async def test_close(self, deepseek_provider):
         """Test provider cleanup."""
-        with patch.object(
-            deepseek_provider.client, "aclose", new_callable=AsyncMock
-        ) as mock_close:
+        with patch.object(deepseek_provider.client, "aclose", new_callable=AsyncMock) as mock_close:
             await deepseek_provider.close()
             mock_close.assert_called_once()
 

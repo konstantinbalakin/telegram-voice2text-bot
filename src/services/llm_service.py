@@ -155,14 +155,10 @@ class DeepSeekProvider(LLMProvider):
 
         except httpx.TimeoutException as e:
             logger.error(f"DeepSeek timeout: {e}")
-            raise LLMTimeoutError(
-                f"DeepSeek request timeout after {self.timeout}s"
-            ) from e
+            raise LLMTimeoutError(f"DeepSeek request timeout after {self.timeout}s") from e
 
         except httpx.HTTPStatusError as e:
-            logger.error(
-                f"DeepSeek API error: {e.response.status_code} - {e.response.text}"
-            )
+            logger.error(f"DeepSeek API error: {e.response.status_code} - {e.response.text}")
             raise LLMAPIError(f"DeepSeek API error: {e.response.status_code}") from e
 
         except Exception as e:

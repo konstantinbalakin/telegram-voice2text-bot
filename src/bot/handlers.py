@@ -786,11 +786,8 @@ class BotHandlers:
 
             # === HYBRID STRATEGY: Check if LLM refinement needed ===
             is_hybrid = isinstance(self.transcription_router.strategy, HybridStrategy)
-            needs_refinement = (
-                is_hybrid
-                and self.transcription_router.strategy.requires_refinement(
-                    request.duration_seconds
-                )
+            needs_refinement = is_hybrid and self.transcription_router.strategy.requires_refinement(
+                request.duration_seconds
             )
 
             final_text = result.text
@@ -862,9 +859,7 @@ class BotHandlers:
                     for i, chunk in enumerate(text_chunks, 1):
                         prefix = "✅ Готово!\n\n" if i == 1 else ""
                         header = (
-                            f"📝 Часть {i}/{len(text_chunks)}\n\n"
-                            if len(text_chunks) > 1
-                            else ""
+                            f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
                         )
                         await request.user_message.reply_text(prefix + header + chunk)
                         if i < len(text_chunks):

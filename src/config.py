@@ -91,17 +91,13 @@ class Settings(BaseSettings):
     )
 
     # LLM Refinement Configuration
-    llm_refinement_enabled: bool = Field(
-        default=False, description="Enable LLM text refinement"
-    )
+    llm_refinement_enabled: bool = Field(default=False, description="Enable LLM text refinement")
     llm_provider: str = Field(
         default="deepseek", description="LLM provider: deepseek, openai, gigachat"
     )
     llm_api_key: str | None = Field(default=None, description="LLM API key")
     llm_model: str = Field(default="deepseek-chat", description="LLM model name")
-    llm_base_url: str = Field(
-        default="https://api.deepseek.com", description="LLM API base URL"
-    )
+    llm_base_url: str = Field(default="https://api.deepseek.com", description="LLM API base URL")
     llm_refinement_prompt: str = Field(
         default="""Улучши транскрипцию голосового сообщения:
 - Исправь орфографические и пунктуационные ошибки

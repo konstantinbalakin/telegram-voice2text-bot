@@ -37,9 +37,7 @@ class TestHybridStrategyRouting:
     @pytest.mark.asyncio
     async def test_short_audio_uses_quality_provider(self, hybrid_strategy):
         """Test short audio (<20s) routes to quality provider."""
-        context = TranscriptionContext(
-            user_id=123, duration_seconds=15.0, file_size_bytes=1024
-        )
+        context = TranscriptionContext(user_id=123, duration_seconds=15.0, file_size_bytes=1024)
         providers = {"faster-whisper": Mock()}
 
         provider = await hybrid_strategy.select_provider(context, providers)
@@ -49,9 +47,7 @@ class TestHybridStrategyRouting:
     @pytest.mark.asyncio
     async def test_long_audio_uses_draft_provider(self, hybrid_strategy):
         """Test long audio (>=20s) routes to draft provider."""
-        context = TranscriptionContext(
-            user_id=123, duration_seconds=60.0, file_size_bytes=5120
-        )
+        context = TranscriptionContext(user_id=123, duration_seconds=60.0, file_size_bytes=5120)
         providers = {"faster-whisper": Mock()}
 
         provider = await hybrid_strategy.select_provider(context, providers)
@@ -61,9 +57,7 @@ class TestHybridStrategyRouting:
     @pytest.mark.asyncio
     async def test_threshold_boundary_exact(self, hybrid_strategy):
         """Test audio exactly at threshold routes to draft provider."""
-        context = TranscriptionContext(
-            user_id=123, duration_seconds=20.0, file_size_bytes=2048
-        )
+        context = TranscriptionContext(user_id=123, duration_seconds=20.0, file_size_bytes=2048)
         providers = {"faster-whisper": Mock()}
 
         provider = await hybrid_strategy.select_provider(context, providers)
@@ -73,9 +67,7 @@ class TestHybridStrategyRouting:
     @pytest.mark.asyncio
     async def test_threshold_boundary_just_below(self, hybrid_strategy):
         """Test audio just below threshold routes to quality provider."""
-        context = TranscriptionContext(
-            user_id=123, duration_seconds=19.9, file_size_bytes=2048
-        )
+        context = TranscriptionContext(user_id=123, duration_seconds=19.9, file_size_bytes=2048)
         providers = {"faster-whisper": Mock()}
 
         provider = await hybrid_strategy.select_provider(context, providers)
@@ -85,9 +77,7 @@ class TestHybridStrategyRouting:
     @pytest.mark.asyncio
     async def test_threshold_boundary_just_above(self, hybrid_strategy):
         """Test audio just above threshold routes to draft provider."""
-        context = TranscriptionContext(
-            user_id=123, duration_seconds=20.1, file_size_bytes=2048
-        )
+        context = TranscriptionContext(user_id=123, duration_seconds=20.1, file_size_bytes=2048)
         providers = {"faster-whisper": Mock()}
 
         provider = await hybrid_strategy.select_provider(context, providers)
@@ -185,9 +175,7 @@ class TestHybridStrategyWithDifferentProviders:
             quality_model="large",
         )
 
-        context_25s = TranscriptionContext(
-            user_id=123, duration_seconds=25.0, file_size_bytes=2048
-        )
+        context_25s = TranscriptionContext(user_id=123, duration_seconds=25.0, file_size_bytes=2048)
 
         providers = {"faster-whisper": Mock()}
 

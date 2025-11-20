@@ -92,7 +92,9 @@ async def main() -> None:
                     f"model={settings.llm_model})"
                 )
             else:
-                logger.warning("LLM refinement enabled but no provider available (missing API key?)")
+                logger.warning(
+                    "LLM refinement enabled but no provider available (missing API key?)"
+                )
         except Exception as e:
             logger.error(f"Failed to initialize LLM service: {e}")
             logger.warning("Continuing without LLM refinement")

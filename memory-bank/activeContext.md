@@ -17,14 +17,12 @@
 
 After comprehensive manual analysis of benchmark transcripts (30+ configurations tested across 7s, 24s, 163s audio samples):
 
-- **Performance**: RTF ~0.3x (3x faster than audio duration)
-  - 7s audio → ~2s processing
-  - 30s audio → ~10s processing
-  - 60s audio → ~20s processing
+- **Performance on Production VPS (4 CPU + 3GB RAM)**:
+  - RTF ~0.6x for medium model (60s audio → ~36s processing)
+  - RTF ~0.45x achievable with optimization
 - **Quality**: Excellent for Russian language, good accuracy on long informal speech
-- **Resources**: ~2GB RAM peak (actual production testing, not 3.5GB as initially measured)
+- **Resources**: ~2GB RAM peak for medium model
 - **Tradeoff**: Prioritized quality over speed for better user experience
-- **Note**: Initial benchmark memory measurements were incorrect (3.5GB); real-world testing shows ~2GB peak
 
 Alternative faster configurations (tiny, small) showed unacceptable quality degradation (22-78% similarity on some samples).
 
@@ -916,6 +914,45 @@ processing_time = current_request.duration_seconds * rtf
 
 **Status**: ✅ Implemented and tested, ready for production deployment
 
+## Phase 8: Hybrid Transcription Acceleration 📋 PLANNED (2025-11-20)
+
+**Goal**: Dramatically reduce processing time for long audio files (6x-9x speedup) through hybrid strategy
+
+**Approved Approach**: Option 3 (Balanced)
+- Duration-based routing (<20s: quality, ≥20s: draft + LLM refinement)
+- Draft provider selection (faster-whisper small OR openai)
+- DeepSeek LLM integration for text refinement
+- Audio preprocessing (mono + speed adjustment)
+- Staged message updates (draft → refining → final)
+
+**Expected Results**:
+- 60s audio: 36s → ~6s (3s draft + 3s refinement)
+- 120s audio: 72s → ~9s
+- 300s audio: 180s → ~20s
+- Cost: ~$0.0002 per 60s audio (vs $0.006 OpenAI Whisper)
+
+**Implementation Timeline**: 3-4 days
+- Day 1: LLM Service (DeepSeek integration)
+- Day 2: Hybrid Strategy + Audio preprocessing
+- Day 3: Handler integration + staged messages
+- Day 4: Testing + documentation
+
+**Configuration Decisions**:
+- LLM: DeepSeek V3 only (initially)
+- Draft model: small/beam1 (faster-whisper)
+- Speed multiplier: Target 1.5x (after testing)
+- ffmpeg: Add to Docker
+- API key: Will be added later
+
+**Documentation**:
+- ✅ Implementation plan: `memory-bank/plans/2025-11-20-hybrid-transcription-acceleration.md`
+- ✅ Configuration: `.env.example` updated
+- ⏳ Ready for implementation in separate session
+
+**Status**: 📋 Planning complete, ready for implementation
+
+---
+
 ## Next Steps (Current Priority)
 
 ### 1. Production Monitoring (High Priority) ⏳
@@ -976,9 +1013,9 @@ grep "queue_depth" logs/bot.log
 ## Current Infrastructure
 
 **VPS Configuration**:
-- Provider: Russian VPS (~$3-5/month)
-- RAM: 1GB + 1GB swap
-- CPU: 1 vCPU
+- Provider: Russian VPS (~$10-15/month)
+- RAM: 3GB
+- CPU: 4 CPU cores
 - OS: Ubuntu (clean)
 - Docker: Installed and operational
 

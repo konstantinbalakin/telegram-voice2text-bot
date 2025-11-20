@@ -250,9 +250,7 @@ class AudioHandler:
         if settings.audio_speed_multiplier != 1.0:
             try:
                 path = self._adjust_speed(path)
-                logger.info(
-                    f"Adjusted speed {settings.audio_speed_multiplier}x: {path.name}"
-                )
+                logger.info(f"Adjusted speed {settings.audio_speed_multiplier}x: {path.name}")
             except Exception as e:
                 logger.warning(f"Speed adjustment failed: {e}, using original")
                 path = audio_path if path == audio_path else path

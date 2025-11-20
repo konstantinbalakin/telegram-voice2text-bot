@@ -76,11 +76,12 @@ class TestPreprocessAudio:
             mock_settings.audio_speed_multiplier = 1.5
             mock_settings.audio_target_sample_rate = 16000
 
-            with patch.object(
-                audio_handler, "_convert_to_mono", return_value=mono_file
-            ) as mock_mono, patch.object(
-                audio_handler, "_adjust_speed", return_value=speed_file
-            ) as mock_speed:
+            with (
+                patch.object(
+                    audio_handler, "_convert_to_mono", return_value=mono_file
+                ) as mock_mono,
+                patch.object(audio_handler, "_adjust_speed", return_value=speed_file) as mock_speed,
+            ):
                 result = audio_handler.preprocess_audio(sample_audio_file)
 
                 mock_mono.assert_called_once_with(sample_audio_file)
