@@ -1,10 +1,13 @@
 """Routing strategies for transcription provider selection."""
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Optional
 
 from src.transcription.models import BenchmarkConfig, TranscriptionContext
 from src.transcription.providers.base import TranscriptionProvider
+
+logger = logging.getLogger(__name__)
 
 
 class RoutingStrategy(ABC):
@@ -149,3 +152,96 @@ class BenchmarkStrategy(RoutingStrategy):
     def is_benchmark_mode(self) -> bool:
         """This is benchmark strategy."""
         return True
+
+
+class HybridStrategy(RoutingStrategy):
+    """
+    Hybrid transcription strategy with duration-based routing.
+
+    - Short audio (<threshold): Use quality model directly
+    - Long audio (>=threshold): Use fast draft model, then LLM refinement
+
+    Supports different providers for draft (faster-whisper OR openai).
+    """
+
+    def __init__(
+        self,
+        short_threshold: int,
+        draft_provider_name: str,
+        draft_model: str,
+        quality_provider_name: str,
+        quality_model: str,
+    ):
+        """
+        Initialize hybrid strategy.
+
+        Args:
+            short_threshold: Duration threshold in seconds
+            draft_provider_name: Provider for draft (faster-whisper, openai)
+            draft_model: Model for draft (e.g., small, tiny)
+            quality_provider_name: Provider for quality (usually faster-whisper)
+            quality_model: Model for quality (e.g., medium)
+        """
+        self.short_threshold = short_threshold
+        self.draft_provider = draft_provider_name
+        self.draft_model = draft_model
+        self.quality_provider = quality_provider_name
+        self.quality_model = quality_model
+
+    async def select_provider(
+        self,
+        context: TranscriptionContext,
+        providers: dict[str, TranscriptionProvider],
+    ) -> str:
+        """
+        Select provider based on audio duration.
+
+        Args:
+            context: Transcription context with duration
+            providers: Available providers
+
+        Returns:
+            Provider name to use
+        """
+        duration = context.duration_seconds
+
+        if duration < self.short_threshold:
+            # Short audio: use quality provider
+            logger.info(
+                f"Short audio ({duration}s < {self.short_threshold}s), "
+                f"using quality provider: {self.quality_provider}/{self.quality_model}"
+            )
+            return self.quality_provider
+        else:
+            # Long audio: use draft provider
+            logger.info(
+                f"Long audio ({duration}s >= {self.short_threshold}s), "
+                f"using draft provider: {self.draft_provider}/{self.draft_model}"
+            )
+            return self.draft_provider
+
+    def get_model_for_duration(self, duration: float) -> str:
+        """
+        Get model name based on duration.
+
+        Args:
+            duration: Audio duration in seconds
+
+        Returns:
+            Model name (e.g., small, medium)
+        """
+        if duration < self.short_threshold:
+            return self.quality_model
+        return self.draft_model
+
+    def requires_refinement(self, duration: float) -> bool:
+        """
+        Check if transcription result needs LLM refinement.
+
+        Args:
+            duration: Audio duration in seconds
+
+        Returns:
+            True if refinement needed (long audio)
+        """
+        return duration >= self.short_threshold
