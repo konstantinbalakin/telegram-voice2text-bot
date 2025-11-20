@@ -89,8 +89,11 @@ pydantic-settings = "^2.6"           # Settings management
 # Logging
 python-json-logger = "^4.0.0"        # JSON log formatting
 
-# Async HTTP (if needed)
-httpx = "^0.28"                      # Async HTTP client
+# Async HTTP & LLM Integration (NEW - 2025-11-20)
+httpx = "^0.28"                      # Async HTTP client (for LLM APIs)
+tenacity = "^9.0.0"                  # Retry logic for LLM API calls
+
+# System Monitoring
 psutil = "^6.1"                      # System monitoring
 
 [tool.poetry.group.dev.dependencies]
@@ -102,13 +105,19 @@ ruff = "^0.8"                        # Linter/formatter
 mypy = "^1.13"                       # Type checking
 ```
 
+**Dependency Update Notes**:
+- `tenacity ^9.0.0` added (2025-11-20): Provides exponential backoff retry logic for LLM API calls
+  - Used in `DeepSeekProvider` for resilient API integration
+  - Retry strategy: 3 attempts, exponential backoff (2-10s), retries on timeout/network errors
+- `httpx ^0.28` now also used for LLM API communication (previously just for internal services)
+
 ## Project Structure (Updated 2025-10-29)
 
-### Services Layer (NEW)
+### Services Layer
 
 **Location**: `src/services/`
 
-**Purpose**: Business logic components for request management and user experience
+**Purpose**: Business logic components for request management, user experience, and LLM integration
 
 **Modules**:
 
@@ -132,8 +141,22 @@ mypy = "^1.13"                       # Type checking
      - Telegram rate limit handling (RetryAfter, TimedOut)
    - **Pattern**: Observer pattern - tracks progress without blocking
 
-3. **__init__.py**
-   - Module exports: `QueueManager`, `TranscriptionRequest`, `TranscriptionResponse`, `ProgressTracker`
+3. **llm_service.py** (263 lines) - NEW (2025-11-20)
+   - `LLMProvider`: Abstract base class for LLM providers
+   - `DeepSeekProvider`: DeepSeek V3 API integration
+   - `LLMFactory`: Provider instantiation
+   - `LLMService`: High-level LLM API
+   - **Features**:
+     - Async HTTP client (httpx) for API calls
+     - Retry logic with exponential backoff (tenacity)
+     - Text truncation (10,000 char limit)
+     - Graceful error handling (timeout, API errors, network errors)
+     - Automatic fallback to draft text on any failure
+   - **Pattern**: Abstract provider pattern + Factory pattern + Service layer
+   - **Integration**: Used for hybrid transcription refinement
+
+4. **__init__.py**
+   - Module exports: `QueueManager`, `TranscriptionRequest`, `TranscriptionResponse`, `ProgressTracker`, `LLMService`
 
 **Usage**:
 ```python
@@ -185,9 +208,9 @@ await progress.stop()
 
 **Migration**: `alembic/versions/a9f3b2c8d1e4_add_updated_at_and_transcription_length.py`
 
-### Configuration Updates (2025-10-29)
+### Configuration Updates
 
-**New Settings** (`src/config.py`):
+**Queue & Progress Settings** (2025-10-29):
 ```python
 # Queue Configuration
 max_queue_size: int = 50  # Changed from 100
@@ -195,20 +218,63 @@ max_concurrent_workers: int = 1  # Changed from 3
 transcription_timeout: int = 120
 
 # Progress Tracking
-progress_update_interval: int = 5  # NEW
-progress_rtf: float = 0.3  # NEW
+progress_update_interval: int = 5
+progress_rtf: float = 0.3
 
 # Quotas
 max_voice_duration_seconds: int = 120  # Changed from 300 (2 minutes)
 ```
 
-**Environment Variables Required**:
+**LLM & Hybrid Settings** (NEW - 2025-11-20):
+```python
+# LLM Refinement Configuration
+llm_refinement_enabled: bool = Field(default=False)  # Disabled by default
+llm_provider: str = Field(default="deepseek")
+llm_api_key: str | None = Field(default=None)
+llm_model: str = Field(default="deepseek-chat")
+llm_base_url: str = Field(default="https://api.deepseek.com")
+llm_refinement_prompt: str = Field(default="Улучши транскрипцию...")
+llm_timeout: int = Field(default=30)
+
+# Hybrid Strategy Configuration
+hybrid_short_threshold: int = Field(default=20)  # seconds
+hybrid_draft_provider: str = Field(default="faster-whisper")
+hybrid_draft_model: str = Field(default="small")
+hybrid_quality_provider: str = Field(default="faster-whisper")
+hybrid_quality_model: str = Field(default="medium")
+
+# Audio Preprocessing Configuration
+audio_convert_to_mono: bool = Field(default=False)
+audio_target_sample_rate: int = Field(default=16000)
+audio_speed_multiplier: float = Field(default=1.0)
+```
+
+**Environment Variables**:
 ```bash
+# Existing
 MAX_VOICE_DURATION_SECONDS=120
 MAX_QUEUE_SIZE=50
 MAX_CONCURRENT_WORKERS=1
 PROGRESS_UPDATE_INTERVAL=5
 PROGRESS_RTF=0.3
+
+# NEW - Hybrid Transcription (2025-11-20)
+LLM_REFINEMENT_ENABLED=false
+LLM_PROVIDER=deepseek
+LLM_API_KEY=your_api_key_here
+LLM_MODEL=deepseek-chat
+LLM_BASE_URL=https://api.deepseek.com
+LLM_TIMEOUT=30
+
+HYBRID_SHORT_THRESHOLD=20
+HYBRID_DRAFT_PROVIDER=faster-whisper
+HYBRID_DRAFT_MODEL=small
+HYBRID_QUALITY_PROVIDER=faster-whisper
+HYBRID_QUALITY_MODEL=medium
+
+AUDIO_CONVERT_TO_MONO=false
+AUDIO_TARGET_SAMPLE_RATE=16000
+AUDIO_SPEED_MULTIPLIER=1.0
 ```
 
 ### Logging Configuration (2025-11-03)
