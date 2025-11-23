@@ -881,9 +881,7 @@ class BotHandlers:
                                     f"<code>{refined_text[:1500]}...</code>\n\n"
                                     f"ℹ️ Тексты слишком длинные, показаны первые 1500 символов"
                                 )
-                            await request.user_message.reply_text(
-                                debug_message, parse_mode="HTML"
-                            )
+                            await request.user_message.reply_text(debug_message, parse_mode="HTML")
                         except Exception as e:
                             logger.warning(f"Failed to send LLM debug comparison: {e}")
 

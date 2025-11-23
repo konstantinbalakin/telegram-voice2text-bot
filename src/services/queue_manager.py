@@ -375,7 +375,9 @@ class QueueManager:
                 break
 
         if request_index < 0 or current_request is None:
-            logger.debug(f"get_estimated_wait_time: request_id={request_id} not found in pending queue")
+            logger.debug(
+                f"get_estimated_wait_time: request_id={request_id} not found in pending queue"
+            )
             return (0.0, 0.0)
 
         # Calculate total duration of items currently being processed

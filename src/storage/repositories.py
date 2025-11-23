@@ -42,7 +42,9 @@ class UserRepository:
         daily_quota_seconds: int = 60,
     ) -> User:
         """Create a new user."""
-        logger.debug(f"UserRepository.create(telegram_id={telegram_id}, quota={daily_quota_seconds}s)")
+        logger.debug(
+            f"UserRepository.create(telegram_id={telegram_id}, quota={daily_quota_seconds}s)"
+        )
         user = User(
             telegram_id=telegram_id,
             username=username,
@@ -63,12 +65,16 @@ class UserRepository:
 
     async def update_usage(self, user: User, duration_seconds: int) -> User:
         """Update user's usage statistics."""
-        logger.debug(f"UserRepository.update_usage(user_id={user.id}, duration={duration_seconds}s)")
+        logger.debug(
+            f"UserRepository.update_usage(user_id={user.id}, duration={duration_seconds}s)"
+        )
         user.today_usage_seconds += duration_seconds
         user.total_usage_seconds += duration_seconds
         user.updated_at = datetime.utcnow()
         await self.session.flush()
-        logger.debug(f"Usage updated: today={user.today_usage_seconds}s, total={user.total_usage_seconds}s")
+        logger.debug(
+            f"Usage updated: today={user.today_usage_seconds}s, total={user.total_usage_seconds}s"
+        )
         return user
 
     async def reset_daily_quota(self, user: User) -> User:
