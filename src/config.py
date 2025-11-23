@@ -107,6 +107,10 @@ class Settings(BaseSettings):
         description="System prompt for text refinement",
     )
     llm_timeout: int = Field(default=30, description="LLM request timeout in seconds")
+    llm_debug_mode: bool = Field(
+        default=False,
+        description="Send draft and refined text comparison in separate message for debugging",
+    )
 
     # Hybrid Strategy Configuration
     hybrid_short_threshold: int = Field(

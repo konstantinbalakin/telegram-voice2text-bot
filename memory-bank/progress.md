@@ -1048,6 +1048,204 @@ AUDIO_SPEED_MULTIPLIER=1.0
 
 **Status**: ✅ Implementation complete, PR #44 created, ready for testing and deployment
 
+### Phase 8.1: DEBUG Logging Enhancement ✅ COMPLETE (2025-11-24)
+**Achievement**: Comprehensive DEBUG logging system for local development and troubleshooting
+
+**Problem Solved**:
+- Limited DEBUG logs throughout codebase (only 7 logger.debug() calls)
+- No visibility into SQL queries, method parameters, execution flow
+- Hardcoded log levels prevented DEBUG mode from showing detailed information
+- Difficult to debug issues during local development
+
+**Implementation** (3 phases):
+
+**Phase 1: Logging Infrastructure Updates**
+- Updated `src/utils/logging_config.py`:
+  - Made all handlers respect configured `log_level` (was hardcoded to INFO)
+  - Added separate `debug.log` file (5MB, 3 backups) - **only created when LOG_LEVEL=DEBUG**
+  - Ensures production stays clean while DEBUG provides maximum detail
+- Updated `src/storage/database.py`:
+  - Made SQLAlchemy `echo` parameter dynamic based on LOG_LEVEL
+  - Shows all SQL queries and connection pool activity in DEBUG mode
+
+**Phase 2: Strategic DEBUG Logs Added**
+- **Bot Handlers** (`src/bot/handlers.py`):
+  - Command invocations with user IDs
+  - Voice/audio message metadata (file_id, duration, size)
+  - Queue checks and positions
+  - Transcription request creation details
+- **Storage Repositories** (`src/storage/repositories.py`):
+  - User lookup/creation with telegram_id
+  - Usage record creation and updates
+  - Database field values before/after changes
+- **Queue Manager** (`src/services/queue_manager.py`):
+  - Request enqueue with position, duration, queue depth
+  - Semaphore waits and processing starts
+  - Wait time calculations with RTF details
+- **Audio Handler** (`src/transcription/audio_handler.py`):
+  - File download details (size, path, extension)
+  - Preprocessing steps (mono conversion, speed adjustment)
+- **Transcription Providers**:
+  - FasterWhisper: Model init timing, memory usage, segment counts
+  - OpenAI: API request params, masked API keys, retry attempts
+- **LLM Service** (`src/services/llm_service.py`):
+  - Draft/refined text lengths, token usage
+  - Masked API keys for security
+
+**Phase 3: Documentation**
+- Updated `.env.example` with comprehensive DEBUG mode details:
+  - 8 categories of DEBUG logging documented
+  - Log file purposes and sizes
+  - Usage instructions and security warnings
+- Updated `.env.example.short` with concise reference
+
+**Log Files**:
+| File | Level | Size | Backups | When Created |
+|------|-------|------|---------|--------------|
+| `logs/app.log` | INFO+ | 10MB | 5 | Always |
+| `logs/errors.log` | ERROR+ | 5MB | 5 | Always |
+| `logs/debug.log` | DEBUG+ | 5MB | 3 | **Only when LOG_LEVEL=DEBUG** |
+
+**Key Features**:
+- ✅ SQL queries logged with parameters and results
+- ✅ Method entry points with all parameters logged
+- ✅ Queue operations with positions and timings
+- ✅ API calls with masked keys (first 8 chars + "...")
+- ✅ File operations with paths and sizes
+- ✅ Transcription details with memory usage
+- ✅ Separate debug.log only created in DEBUG mode
+- ✅ Production unaffected (INFO/WARNING modes work as before)
+
+**Usage**:
+```bash
+# Enable DEBUG mode
+LOG_LEVEL=DEBUG
+
+# Restart bot
+docker-compose restart
+
+# Monitor debug logs
+tail -f logs/debug.log
+
+# Analyze with jq
+cat logs/debug.log | jq '.'
+```
+
+**Security Notes**:
+- API keys automatically masked in logs
+- Never use DEBUG in production
+- Contains sensitive data (SQL queries with values)
+- DEBUG significantly increases log file sizes
+
+**Files Modified**:
+- `src/utils/logging_config.py` - Dynamic log levels + debug handler
+- `src/storage/database.py` - Dynamic SQL echo
+- `src/bot/handlers.py` - Handler DEBUG logs
+- `src/storage/repositories.py` - Repository DEBUG logs
+- `src/services/queue_manager.py` - Queue DEBUG logs
+- `src/transcription/audio_handler.py` - Audio DEBUG logs
+- `src/transcription/providers/faster_whisper_provider.py` - Provider DEBUG logs
+- `src/transcription/providers/openai_provider.py` - API DEBUG logs
+- `src/services/llm_service.py` - LLM DEBUG logs
+- `.env.example` - Comprehensive DEBUG documentation
+- `.env.example.short` - Concise DEBUG reference
+
+**Key Pattern Established**: Comprehensive DEBUG logging is essential for local development. Use dynamic log levels and separate log files to avoid impacting production. Always mask sensitive data (API keys) in logs.
+
+**Impact**:
+- ✅ Full visibility into execution flow
+- ✅ SQL queries visible for debugging
+- ✅ Method parameters logged
+- ✅ API calls traceable
+- ✅ Easy to enable/disable
+- ✅ Production unaffected
+
+**Status**: ✅ Complete, ready for local debugging use
+
+### Phase 8.2: LLM Debug Mode ✅ COMPLETE (2025-11-24)
+**Achievement**: Side-by-side comparison of draft and refined transcriptions for LLM quality evaluation
+
+**Problem Solved**:
+- No way to compare draft transcription with LLM-refined version
+- Difficult to evaluate LLM refinement quality
+- Hard to tune LLM prompts and settings
+- No visibility into what LLM changed
+
+**Implementation**:
+
+**1. Configuration Flag** (`src/config.py`)
+```python
+llm_debug_mode: bool = Field(
+    default=False,
+    description="Send draft and refined text comparison in separate message",
+)
+```
+
+**2. Handler Integration** (`src/bot/handlers.py`)
+- After successful LLM refinement, sends additional debug message
+- Shows both draft and refined text side-by-side
+- HTML formatting for better readability
+- Automatic truncation for long texts (>4000 chars)
+- Graceful error handling
+
+**Debug Message Format**:
+```
+🔍 Сравнение (LLM_DEBUG_MODE=true)
+
+📝 Черновик (small):
+привет это тестовое сообщение без пунктуации
+
+✨ После LLM (deepseek-chat):
+Привет! Это тестовое сообщение без пунктуации.
+```
+
+**3. Documentation** (`.env.example`, `.env.example.short`)
+- Added `LLM_DEBUG_MODE` flag documentation
+- Usage instructions and warnings
+- Added to hybrid mode examples
+
+**Configuration**:
+```bash
+# Enable debug mode
+LLM_DEBUG_MODE=true
+
+# Must have LLM enabled
+LLM_REFINEMENT_ENABLED=true
+LLM_API_KEY=sk-your-key
+WHISPER_ROUTING_STRATEGY=hybrid
+```
+
+**Key Features**:
+- ✅ Shows both draft and refined text
+- ✅ Indicates which models were used
+- ✅ HTML formatting with `<code>` blocks
+- ✅ Auto-truncation for long texts
+- ✅ Only works when LLM refinement succeeds
+- ✅ Disabled by default (no extra messages)
+- ✅ Safe - doesn't break main functionality if fails
+
+**Use Cases**:
+- ✅ Testing LLM quality
+- ✅ Comparing different models (`LLM_MODEL`)
+- ✅ Tuning refinement prompts (`LLM_REFINEMENT_PROMPT`)
+- ✅ Evaluating punctuation/capitalization improvements
+
+**Files Modified**:
+- `src/config.py` - Added `llm_debug_mode` flag
+- `src/bot/handlers.py` - Added debug comparison message (lines 864-888)
+- `.env.example` - Added `LLM_DEBUG_MODE` documentation
+- `.env.example.short` - Added inline comment
+
+**Impact**:
+- ✅ Easy quality evaluation
+- ✅ Visible LLM improvements
+- ✅ Helps with prompt tuning
+- ✅ Useful for testing different models
+
+**Status**: ✅ Complete, ready for LLM quality testing
+
+**Branch**: `feature/hybrid-transcription` (will be included in PR #44 when merged)
+
 ### Phase 9: Performance Optimization ⏳ DEFERRED
 **Goal**: Achieve RTF ~0.3x (match local benchmark performance) with hardware upgrade
 

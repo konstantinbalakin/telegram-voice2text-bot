@@ -116,7 +116,14 @@ class DeepSeekProvider(LLMProvider):
             LLMAPIError: API error
         """
         if not text or not text.strip():
+            logger.debug("refine_text: empty text, returning as-is")
             return text
+
+        api_key_masked = self.api_key[:8] + "..." if self.api_key else "None"
+        logger.debug(
+            f"refine_text: model={self.model}, text_length={len(text)}, "
+            f"prompt_length={len(prompt)}, api_key={api_key_masked}"
+        )
 
         # Truncate if too long (max 10,000 chars)
         if len(text) > 10000:
@@ -124,6 +131,7 @@ class DeepSeekProvider(LLMProvider):
             text = text[:10000]
 
         try:
+            logger.debug(f"Sending request to {self.base_url}/v1/chat/completions")
             response = await self.client.post(
                 "/v1/chat/completions",
                 json={
@@ -144,6 +152,12 @@ class DeepSeekProvider(LLMProvider):
 
             # Log token usage
             usage = data.get("usage", {})
+            logger.debug(
+                f"DeepSeek response: refined_length={len(refined)}, "
+                f"prompt_tokens={usage.get('prompt_tokens', 0)}, "
+                f"completion_tokens={usage.get('completion_tokens', 0)}, "
+                f"total_tokens={usage.get('total_tokens', 0)}"
+            )
             logger.info(
                 f"DeepSeek refinement: "
                 f"input={usage.get('prompt_tokens', 0)} tokens, "
@@ -239,8 +253,10 @@ class LLMService:
             return draft_text
 
         try:
+            logger.debug(f"refine_transcription: draft_length={len(draft_text)}")
             logger.info(f"Refining text ({len(draft_text)} chars)...")
             refined = await self.provider.refine_text(draft_text, self.prompt)
+            logger.debug(f"Refinement result: refined_length={len(refined)}")
             logger.info("Text refinement successful")
             return refined
 

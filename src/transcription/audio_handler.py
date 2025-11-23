@@ -55,6 +55,11 @@ class AudioHandler:
             ValueError: If file format not supported or duration exceeds limit
             RuntimeError: If download fails
         """
+        logger.debug(
+            f"download_voice_message: file_id={file_id}, "
+            f"file_size={telegram_file.file_size}, file_path={telegram_file.file_path}"
+        )
+
         # Validate file
         if (
             telegram_file.file_size is not None and telegram_file.file_size > 20 * 1024 * 1024
@@ -73,6 +78,7 @@ class AudioHandler:
         unique_suffix = uuid.uuid4().hex[:8]
         audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
 
+        logger.debug(f"Generated audio file path: {audio_file}")
         logger.info(f"Downloading voice message: {file_id} ({telegram_file.file_size} bytes)")
 
         try:
@@ -235,6 +241,12 @@ class AudioHandler:
         Raises:
             subprocess.CalledProcessError: If preprocessing fails
         """
+        logger.debug(
+            f"preprocess_audio: input={audio_path.name}, "
+            f"mono={settings.audio_convert_to_mono}, "
+            f"speed={settings.audio_speed_multiplier}x"
+        )
+
         path = audio_path
 
         # Mono conversion
@@ -242,6 +254,7 @@ class AudioHandler:
             try:
                 path = self._convert_to_mono(path)
                 logger.info(f"Converted to mono: {path.name}")
+                logger.debug(f"Mono conversion output: {path}")
             except Exception as e:
                 logger.warning(f"Mono conversion failed: {e}, using original")
                 path = audio_path
@@ -251,10 +264,12 @@ class AudioHandler:
             try:
                 path = self._adjust_speed(path)
                 logger.info(f"Adjusted speed {settings.audio_speed_multiplier}x: {path.name}")
+                logger.debug(f"Speed adjustment output: {path}")
             except Exception as e:
                 logger.warning(f"Speed adjustment failed: {e}, using original")
                 path = audio_path if path == audio_path else path
 
+        logger.debug(f"preprocess_audio: final output={path}")
         return path
 
     def _convert_to_mono(self, input_path: Path) -> Path:

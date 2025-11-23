@@ -2,13 +2,13 @@
 
 ## Current Status
 
-**Phase**: Phase 8 - Hybrid Transcription Acceleration ✅ COMPLETE (2025-11-20)
-**Date**: 2025-11-20
-**Stage**: Production operational with hybrid transcription acceleration feature
-**Branch**: feature/hybrid-transcription (PR #44 created, ready for merge)
-**Production Version**: v0.0.3+ (hybrid feature in PR, pending merge and deployment)
-**Production Status**: ✅ OPERATIONAL - All systems stable, hybrid transcription feature ready for deployment
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**, **hybrid transcription acceleration ✅**
+**Phase**: Phase 8.2 - LLM Debug Mode ✅ COMPLETE (2025-11-24)
+**Date**: 2025-11-24
+**Stage**: Production operational with hybrid transcription + debugging features ready
+**Branch**: feature/hybrid-transcription (PR #44 updated with debug features)
+**Production Version**: v0.0.3+ (hybrid + debug features in PR, pending merge and deployment)
+**Production Status**: ✅ OPERATIONAL - All systems stable, hybrid transcription + debugging features ready
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**, **hybrid transcription acceleration ✅**, **DEBUG logging enhancement ✅**, **LLM debug mode ✅**
 **Next Phase**: Manual testing, gradual rollout, performance monitoring
 
 ## Production Configuration Finalized ✅
@@ -1057,6 +1057,59 @@ LLM_API_KEY=sk-your-deepseek-key
 
 **Status**: ✅ Implementation complete, PR created, ready for testing and deployment
 **Pull Request**: https://github.com/konstantinbalakin/telegram-voice2text-bot/pull/44
+
+## Recent Changes (2025-11-24)
+
+### Phase 8.1: DEBUG Logging Enhancement ✅
+**Achievement**: Comprehensive DEBUG logging system for local development
+
+**Problem**: Limited visibility into SQL queries, method parameters, and execution flow during local debugging
+
+**Solution**: Added extensive DEBUG logging across all components:
+- Dynamic log levels (handlers respect LOG_LEVEL setting)
+- Separate `debug.log` file (only created when LOG_LEVEL=DEBUG)
+- SQL query logging via SQLAlchemy echo parameter
+- Method entry points with parameters
+- Queue operations with positions and timings
+- API calls with masked keys (first 8 chars + "...")
+- File operations with paths and sizes
+- Transcription details with memory usage
+
+**Files Modified**: 11 files updated with DEBUG logs + comprehensive documentation
+
+**Impact**: Full visibility for local debugging without affecting production
+
+**Status**: ✅ Complete, ready for use
+
+### Phase 8.2: LLM Debug Mode ✅
+**Achievement**: Side-by-side comparison of draft and refined transcriptions
+
+**Problem**: No way to evaluate LLM refinement quality or see what changed
+
+**Solution**: Added `LLM_DEBUG_MODE` flag that sends comparison message:
+- Shows draft transcription from Whisper model
+- Shows refined transcription from LLM
+- Indicates which models were used
+- HTML formatting for readability
+- Auto-truncation for long texts (>4000 chars)
+- Graceful error handling
+
+**Configuration**:
+```bash
+LLM_DEBUG_MODE=true  # Default: false
+```
+
+**Files Modified**:
+- `src/config.py` - Added `llm_debug_mode` flag
+- `src/bot/handlers.py` - Added comparison message (lines 864-888)
+- `.env.example` - Added comprehensive documentation
+- `.env.example.short` - Added inline comment
+
+**Use Cases**: Testing LLM quality, comparing models, tuning prompts, evaluating improvements
+
+**Status**: ✅ Complete, ready for LLM quality testing
+
+**Branch**: Both features committed to `feature/hybrid-transcription` (PR #44)
 
 ---
 

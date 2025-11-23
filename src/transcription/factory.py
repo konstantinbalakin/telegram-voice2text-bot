@@ -12,6 +12,7 @@ from src.transcription.routing.router import TranscriptionRouter
 from src.transcription.routing.strategies import (
     BenchmarkStrategy,
     FallbackStrategy,
+    HybridStrategy,
     RoutingStrategy,
     SingleProviderStrategy,
 )
@@ -34,43 +35,103 @@ def create_transcription_router() -> TranscriptionRouter:
     # Initialize enabled providers
     providers: dict[str, TranscriptionProvider] = {}
 
-    for provider_name in settings.whisper_providers:
-        try:
-            if provider_name == "faster-whisper":
-                providers["faster-whisper"] = FastWhisperProvider(
-                    model_size=settings.faster_whisper_model_size,
-                    device=settings.faster_whisper_device,
-                    compute_type=settings.faster_whisper_compute_type,
-                    beam_size=settings.faster_whisper_beam_size,
-                    vad_filter=settings.faster_whisper_vad_filter,
-                )
-                logger.info(
-                    f"✓ Configured provider: faster-whisper "
-                    f"(model={settings.faster_whisper_model_size})"
-                )
+    # Check if we need special hybrid strategy providers
+    is_hybrid_strategy = settings.whisper_routing_strategy == "hybrid"
 
-            elif provider_name == "openai":
-                if not settings.openai_api_key:
-                    logger.warning(
-                        "OpenAI provider enabled but OPENAI_API_KEY not set. "
-                        "Provider will fail at initialization."
+    # For hybrid strategy, we need to create providers based on hybrid config
+    # not on WHISPER_PROVIDERS list
+    if is_hybrid_strategy:
+        # Create draft provider
+        if settings.hybrid_draft_provider == "faster-whisper":
+            providers["faster-whisper-draft"] = FastWhisperProvider(
+                model_size=settings.hybrid_draft_model,
+                device=settings.faster_whisper_device,
+                compute_type=settings.faster_whisper_compute_type,
+                beam_size=settings.faster_whisper_beam_size,
+                vad_filter=settings.faster_whisper_vad_filter,
+            )
+            logger.info(
+                f"✓ Configured provider: faster-whisper-draft "
+                f"(model={settings.hybrid_draft_model})"
+            )
+        elif settings.hybrid_draft_provider == "openai":
+            if not settings.openai_api_key:
+                logger.warning(
+                    "OpenAI draft provider enabled but OPENAI_API_KEY not set. "
+                    "Provider will fail at initialization."
+                )
+            providers["openai-draft"] = OpenAIProvider(
+                api_key=settings.openai_api_key,
+                model=settings.openai_model,
+                timeout=settings.openai_timeout,
+            )
+            logger.info(f"✓ Configured provider: openai-draft (model={settings.openai_model})")
+
+        # Create quality provider
+        if settings.hybrid_quality_provider == "faster-whisper":
+            providers["faster-whisper-quality"] = FastWhisperProvider(
+                model_size=settings.hybrid_quality_model,
+                device=settings.faster_whisper_device,
+                compute_type=settings.faster_whisper_compute_type,
+                beam_size=settings.faster_whisper_beam_size,
+                vad_filter=settings.faster_whisper_vad_filter,
+            )
+            logger.info(
+                f"✓ Configured provider: faster-whisper-quality "
+                f"(model={settings.hybrid_quality_model})"
+            )
+        elif settings.hybrid_quality_provider == "openai":
+            if not settings.openai_api_key:
+                logger.warning(
+                    "OpenAI quality provider enabled but OPENAI_API_KEY not set. "
+                    "Provider will fail at initialization."
+                )
+            providers["openai-quality"] = OpenAIProvider(
+                api_key=settings.openai_api_key,
+                model=settings.openai_model,
+                timeout=settings.openai_timeout,
+            )
+            logger.info(f"✓ Configured provider: openai-quality (model={settings.openai_model})")
+
+    # For non-hybrid strategies, create providers from WHISPER_PROVIDERS list
+    else:
+        for provider_name in settings.whisper_providers:
+            try:
+                if provider_name == "faster-whisper":
+                    providers["faster-whisper"] = FastWhisperProvider(
+                        model_size=settings.faster_whisper_model_size,
+                        device=settings.faster_whisper_device,
+                        compute_type=settings.faster_whisper_compute_type,
+                        beam_size=settings.faster_whisper_beam_size,
+                        vad_filter=settings.faster_whisper_vad_filter,
                     )
-                providers["openai"] = OpenAIProvider(
-                    api_key=settings.openai_api_key,
-                    model=settings.openai_model,
-                    timeout=settings.openai_timeout,
-                )
-                logger.info(f"✓ Configured provider: openai (model={settings.openai_model})")
+                    logger.info(
+                        f"✓ Configured provider: faster-whisper "
+                        f"(model={settings.faster_whisper_model_size})"
+                    )
 
-            else:
-                logger.warning(f"Unknown provider: {provider_name}")
+                elif provider_name == "openai":
+                    if not settings.openai_api_key:
+                        logger.warning(
+                            "OpenAI provider enabled but OPENAI_API_KEY not set. "
+                            "Provider will fail at initialization."
+                        )
+                    providers["openai"] = OpenAIProvider(
+                        api_key=settings.openai_api_key,
+                        model=settings.openai_model,
+                        timeout=settings.openai_timeout,
+                    )
+                    logger.info(f"✓ Configured provider: openai (model={settings.openai_model})")
 
-        except ImportError as e:
-            logger.warning(f"Skipping provider '{provider_name}': {e}")
-            continue
-        except Exception as e:
-            logger.error(f"Failed to configure provider '{provider_name}': {e}")
-            raise
+                else:
+                    logger.warning(f"Unknown provider: {provider_name}")
+
+            except ImportError as e:
+                logger.warning(f"Skipping provider '{provider_name}': {e}")
+                continue
+            except Exception as e:
+                logger.error(f"Failed to configure provider '{provider_name}': {e}")
+                raise
 
     if not providers:
         raise ValueError("No providers configured. Check WHISPER_PROVIDERS setting.")
@@ -192,9 +253,56 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
         strategy = BenchmarkStrategy(benchmark_configs=benchmark_configs)
         logger.info(f"✓ Benchmark strategy: {len(benchmark_configs)} configurations")
 
+    elif strategy_name == "hybrid":
+        # Hybrid strategy: duration-based routing
+        # Map logical provider names to actual provider instances
+        draft_provider_base = settings.hybrid_draft_provider
+        quality_provider_base = settings.hybrid_quality_provider
+        short_threshold = settings.hybrid_short_threshold
+
+        # Determine actual provider names based on configuration
+        if draft_provider_base == "faster-whisper":
+            draft_provider_name = "faster-whisper-draft"
+        else:
+            draft_provider_name = draft_provider_base
+
+        if quality_provider_base == "faster-whisper":
+            quality_provider_name = "faster-whisper-quality"
+        else:
+            quality_provider_name = quality_provider_base
+
+        # Validate quality provider exists (required)
+        if quality_provider_name not in providers:
+            raise ValueError(
+                f"Quality provider '{quality_provider_name}' not available. "
+                f"Available: {list(providers.keys())}"
+            )
+
+        # Check if draft provider is available
+        if draft_provider_name not in providers:
+            logger.warning(
+                f"Draft provider '{draft_provider_name}' not available. "
+                f"Using quality provider '{quality_provider_name}' for all audio."
+            )
+            # Fallback: use quality provider for both short and long audio
+            draft_provider_name = quality_provider_name
+
+        strategy = HybridStrategy(
+            short_threshold=short_threshold,
+            draft_provider_name=draft_provider_name,
+            draft_model=settings.hybrid_draft_model,
+            quality_provider_name=quality_provider_name,
+            quality_model=settings.hybrid_quality_model,
+        )
+        logger.info(
+            f"✓ Hybrid strategy: short(<{short_threshold}s)={quality_provider_name}/{settings.hybrid_quality_model}, "
+            f"long(>={short_threshold}s)={draft_provider_name}/{settings.hybrid_draft_model}"
+        )
+
     else:
         raise ValueError(
-            f"Unknown routing strategy: {strategy_name}. " f"Supported: single, fallback, benchmark"
+            f"Unknown routing strategy: {strategy_name}. "
+            f"Supported: single, fallback, benchmark, hybrid"
         )
 
     return strategy

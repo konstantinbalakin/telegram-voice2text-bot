@@ -176,6 +176,8 @@ class BotHandlers:
         if not user:
             return
 
+        logger.debug(f"start_command: user_id={user.id}, username={user.username}")
+
         # Register or get existing user from database
         async with get_session() as session:
             user_repo = UserRepository(session)
@@ -183,6 +185,7 @@ class BotHandlers:
             # Check if user exists
             db_user = await user_repo.get_by_telegram_id(user.id)
             if not db_user:
+                logger.debug(f"Creating new user: telegram_id={user.id}")
                 # Create new user
                 await user_repo.create(
                     telegram_id=user.id,
@@ -190,6 +193,8 @@ class BotHandlers:
                     first_name=user.first_name,
                     last_name=user.last_name,
                 )
+            else:
+                logger.debug(f"Existing user: id={db_user.id}, telegram_id={user.id}")
 
         welcome_message = (
             f"Привет, {user.first_name}!\n\n"
@@ -229,6 +234,7 @@ class BotHandlers:
         if update.message:
             await update.message.reply_text(help_message)
         if update.effective_user:
+            logger.debug(f"help_command: user_id={update.effective_user.id}")
             logger.info(f"User {update.effective_user.id} requested help")
 
     async def stats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -241,6 +247,8 @@ class BotHandlers:
         user = update.effective_user
         if not user:
             return
+
+        logger.debug(f"stats_command: user_id={user.id}")
 
         async with get_session() as session:
             user_repo = UserRepository(session)
@@ -306,6 +314,11 @@ class BotHandlers:
             else:
                 duration_seconds = int(voice.duration)
 
+        logger.debug(
+            f"voice_message_handler: user_id={user.id}, file_id={voice.file_id}, "
+            f"duration={duration_seconds}s, file_size={voice.file_size}"
+        )
+
         # 1. VALIDATE DURATION
         if duration_seconds > settings.max_voice_duration_seconds:
             await update.message.reply_text(
@@ -320,6 +333,7 @@ class BotHandlers:
 
         # 2. CHECK QUEUE CAPACITY
         queue_depth = self.queue_manager.get_queue_depth()
+        logger.debug(f"Queue check: depth={queue_depth}, max={settings.max_queue_size}")
         if queue_depth >= settings.max_queue_size:
             await update.message.reply_text(
                 "⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.\n\n"
@@ -442,9 +456,15 @@ class BotHandlers:
                     usage_id=usage.id,
                 )
 
+                logger.debug(
+                    f"Transcription request created: id={request.id}, user_id={user.id}, "
+                    f"duration={duration_seconds}s, file_path={file_path}"
+                )
+
                 # Enqueue request
                 try:
                     queue_position = await self.queue_manager.enqueue(request)
+                    logger.debug(f"Request enqueued: id={request.id}, position={queue_position}")
                     active_workers = self.queue_manager.get_processing_count()
 
                     # Show queue position or immediate start
@@ -547,6 +567,7 @@ class BotHandlers:
 
         # 2. CHECK QUEUE CAPACITY
         queue_depth = self.queue_manager.get_queue_depth()
+        logger.debug(f"Queue check: depth={queue_depth}, max={settings.max_queue_size}")
         if queue_depth >= settings.max_queue_size:
             await update.message.reply_text(
                 "⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.\n\n"
@@ -669,9 +690,15 @@ class BotHandlers:
                     usage_id=usage.id,
                 )
 
+                logger.debug(
+                    f"Transcription request created: id={request.id}, user_id={user.id}, "
+                    f"duration={duration_seconds}s, file_path={file_path}"
+                )
+
                 # Enqueue request
                 try:
                     queue_position = await self.queue_manager.enqueue(request)
+                    logger.debug(f"Request enqueued: id={request.id}, position={queue_position}")
                     active_workers = self.queue_manager.get_processing_count()
 
                     # Show queue position or immediate start
@@ -833,6 +860,32 @@ class BotHandlers:
                             await request.user_message.reply_text(prefix + header + chunk)
                             if i < len(text_chunks):
                                 await asyncio.sleep(0.1)
+
+                    # === DEBUG MODE: Send comparison ===
+                    if settings.llm_debug_mode:
+                        try:
+                            debug_message = (
+                                "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
+                                f"📝 <b>Черновик ({result.model_name}):</b>\n"
+                                f"<code>{draft_text}</code>\n\n"
+                                f"✨ <b>После LLM ({settings.llm_model}):</b>\n"
+                                f"<code>{refined_text}</code>"
+                            )
+                            # Split if too long (Telegram limit is 4096 chars)
+                            if len(debug_message) > 4000:
+                                debug_message = (
+                                    "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
+                                    f"📝 <b>Черновик:</b> {len(draft_text)} символов\n"
+                                    f"<code>{draft_text[:1500]}...</code>\n\n"
+                                    f"✨ <b>После LLM:</b> {len(refined_text)} символов\n"
+                                    f"<code>{refined_text[:1500]}...</code>\n\n"
+                                    f"ℹ️ Тексты слишком длинные, показаны первые 1500 символов"
+                                )
+                            await request.user_message.reply_text(
+                                debug_message, parse_mode="HTML"
+                            )
+                        except Exception as e:
+                            logger.warning(f"Failed to send LLM debug comparison: {e}")
 
                 except Exception as e:
                     logger.error(f"LLM refinement failed: {e}")

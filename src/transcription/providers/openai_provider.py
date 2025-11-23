@@ -101,6 +101,12 @@ class OpenAIProvider(TranscriptionProvider):
         if file_size_mb > 25:
             raise ValueError(f"Audio file too large: {file_size_mb:.1f}MB (max 25MB)")
 
+        api_key_masked = self.api_key[:8] + "..." if self.api_key else "None"
+        logger.debug(
+            f"transcribe: audio_path={audio_path}, model={self.model}, "
+            f"language={context.language}, file_size={file_size_mb:.1f}MB, "
+            f"api_key={api_key_masked}, max_retries={self.max_retries}"
+        )
         logger.info(
             f"Starting OpenAI transcription: {audio_path.name}, "
             f"language={context.language}, size={file_size_mb:.1f}MB"
@@ -140,6 +146,10 @@ class OpenAIProvider(TranscriptionProvider):
                 text = result.get("text", "")
                 language = result.get("language", context.language or "unknown")
 
+                logger.debug(
+                    f"OpenAI API response: text_length={len(text)}, language={language}, "
+                    f"processing_time={processing_time:.2f}s, attempt={attempt}"
+                )
                 logger.info(
                     f"OpenAI transcription complete: {len(text)} chars, "
                     f"{processing_time:.2f}s processing"

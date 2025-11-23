@@ -207,16 +207,26 @@ class HybridStrategy(RoutingStrategy):
 
         if duration < self.short_threshold:
             # Short audio: use quality provider
+            if self.quality_provider not in providers:
+                raise ValueError(
+                    f"Quality provider '{self.quality_provider}' not available. "
+                    f"Available: {list(providers.keys())}"
+                )
             logger.info(
                 f"Short audio ({duration}s < {self.short_threshold}s), "
-                f"using quality provider: {self.quality_provider}/{self.quality_model}"
+                f"using quality provider: {self.quality_provider} (model={self.quality_model})"
             )
             return self.quality_provider
         else:
             # Long audio: use draft provider
+            if self.draft_provider not in providers:
+                raise ValueError(
+                    f"Draft provider '{self.draft_provider}' not available. "
+                    f"Available: {list(providers.keys())}"
+                )
             logger.info(
                 f"Long audio ({duration}s >= {self.short_threshold}s), "
-                f"using draft provider: {self.draft_provider}/{self.draft_model}"
+                f"using draft provider: {self.draft_provider} (model={self.draft_model})"
             )
             return self.draft_provider
 
