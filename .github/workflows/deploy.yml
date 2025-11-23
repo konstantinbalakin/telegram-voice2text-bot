@@ -297,7 +297,7 @@ jobs:
             MAX_CONCURRENT_WORKERS=1
             MAX_VOICE_DURATION_SECONDS=7200
             TRANSCRIPTION_TIMEOUT=7200
-            PROGRESS_RTF=0.6
+            PROGRESS_RTF=0.1
             PROGRESS_UPDATE_INTERVAL=5
 
             # Quota
