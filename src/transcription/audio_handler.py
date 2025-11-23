@@ -3,6 +3,7 @@ Audio file handler for downloading and processing Telegram voice messages
 """
 
 import logging
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import Optional
 
 import httpx
 from telegram import File as TelegramFile
+
+from src.config import settings
 
 
 logger = logging.getLogger(__name__)
@@ -52,6 +55,11 @@ class AudioHandler:
             ValueError: If file format not supported or duration exceeds limit
             RuntimeError: If download fails
         """
+        logger.debug(
+            f"download_voice_message: file_id={file_id}, "
+            f"file_size={telegram_file.file_size}, file_path={telegram_file.file_path}"
+        )
+
         # Validate file
         if (
             telegram_file.file_size is not None and telegram_file.file_size > 20 * 1024 * 1024
@@ -70,6 +78,7 @@ class AudioHandler:
         unique_suffix = uuid.uuid4().hex[:8]
         audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
 
+        logger.debug(f"Generated audio file path: {audio_file}")
         logger.info(f"Downloading voice message: {file_id} ({telegram_file.file_size} bytes)")
 
         try:
@@ -214,3 +223,126 @@ class AudioHandler:
             return False
 
         return True
+
+    def preprocess_audio(self, audio_path: Path) -> Path:
+        """
+        Apply audio preprocessing pipeline.
+
+        Applies transformations in order:
+        1. Mono conversion (if enabled)
+        2. Speed adjustment (if enabled)
+
+        Args:
+            audio_path: Original audio file
+
+        Returns:
+            Path to preprocessed audio (or original if no preprocessing)
+
+        Raises:
+            subprocess.CalledProcessError: If preprocessing fails
+        """
+        logger.debug(
+            f"preprocess_audio: input={audio_path.name}, "
+            f"mono={settings.audio_convert_to_mono}, "
+            f"speed={settings.audio_speed_multiplier}x"
+        )
+
+        path = audio_path
+
+        # Mono conversion
+        if settings.audio_convert_to_mono:
+            try:
+                path = self._convert_to_mono(path)
+                logger.info(f"Converted to mono: {path.name}")
+                logger.debug(f"Mono conversion output: {path}")
+            except Exception as e:
+                logger.warning(f"Mono conversion failed: {e}, using original")
+                path = audio_path
+
+        # Speed adjustment
+        if settings.audio_speed_multiplier != 1.0:
+            try:
+                path = self._adjust_speed(path)
+                logger.info(f"Adjusted speed {settings.audio_speed_multiplier}x: {path.name}")
+                logger.debug(f"Speed adjustment output: {path}")
+            except Exception as e:
+                logger.warning(f"Speed adjustment failed: {e}, using original")
+                path = audio_path if path == audio_path else path
+
+        logger.debug(f"preprocess_audio: final output={path}")
+        return path
+
+    def _convert_to_mono(self, input_path: Path) -> Path:
+        """
+        Convert audio to mono.
+
+        Args:
+            input_path: Input audio file
+
+        Returns:
+            Path to mono audio file
+
+        Raises:
+            subprocess.CalledProcessError: If ffmpeg fails
+        """
+        output_path = input_path.parent / f"{input_path.stem}_mono.wav"
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",  # Overwrite
+                "-i",
+                str(input_path),
+                "-ac",
+                "1",  # Mono channel
+                "-ar",
+                str(settings.audio_target_sample_rate),
+                "-acodec",
+                "pcm_s16le",  # Uncompressed PCM
+                str(output_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        return output_path
+
+    def _adjust_speed(self, input_path: Path) -> Path:
+        """
+        Adjust audio playback speed.
+
+        Args:
+            input_path: Input audio file
+
+        Returns:
+            Path to speed-adjusted audio file
+
+        Raises:
+            subprocess.CalledProcessError: If ffmpeg fails
+            ValueError: If speed multiplier out of range
+        """
+        multiplier = settings.audio_speed_multiplier
+        output_path = input_path.parent / f"{input_path.stem}_speed{multiplier}x.wav"
+
+        # Note: atempo filter only supports 0.5-2.0 range
+        # For values outside, need to chain multiple filters
+        if not (0.5 <= multiplier <= 2.0):
+            raise ValueError(f"Speed multiplier must be 0.5-2.0, got {multiplier}")
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(input_path),
+                "-filter:a",
+                f"atempo={multiplier}",
+                str(output_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        return output_path

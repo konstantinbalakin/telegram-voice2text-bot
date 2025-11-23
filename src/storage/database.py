@@ -24,9 +24,12 @@ def get_engine() -> AsyncEngine:
     """Get or create the async database engine."""
     global _engine
     if _engine is None:
+        # Enable SQL logging in DEBUG mode
+        is_debug = settings.log_level.upper() == "DEBUG"
         _engine = create_async_engine(
             settings.database_url,
-            echo=False,  # Set to True for SQL query logging
+            echo=is_debug,  # Show SQL queries in DEBUG mode
+            echo_pool=is_debug,  # Show connection pool activity in DEBUG mode
             future=True,
             pool_pre_ping=True,  # Verify connections before using
         )

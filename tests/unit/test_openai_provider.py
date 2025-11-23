@@ -2,10 +2,9 @@
 
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
 
 from src.transcription.providers.openai_provider import OpenAIProvider
-from src.transcription.models import TranscriptionContext, TranscriptionResult
+from src.transcription.models import TranscriptionContext
 
 
 @pytest.fixture

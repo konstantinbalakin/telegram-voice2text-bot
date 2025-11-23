@@ -66,8 +66,13 @@ class FastWhisperProvider(TranscriptionProvider):
             logger.warning("FastWhisperProvider already initialized")
             return
 
+        logger.debug(
+            f"initialize: model_size={self.model_size}, device={self.device}, "
+            f"compute_type={self.compute_type}, max_workers={self.max_workers}"
+        )
         logger.info(f"Initializing FasterWhisper model: {self.model_size}...")
         try:
+            start_time = time.time()
             self._model = WhisperModel(
                 self.model_size,
                 device=self.device,
@@ -75,6 +80,8 @@ class FastWhisperProvider(TranscriptionProvider):
             )
             self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
             self._initialized = True
+            init_time = time.time() - start_time
+            logger.debug(f"Model initialization took {init_time:.2f}s")
             logger.info("FasterWhisper model initialized successfully")
         except Exception as e:
             logger.error(f"Failed to initialize FasterWhisper model: {e}")
@@ -106,6 +113,11 @@ class FastWhisperProvider(TranscriptionProvider):
 
         timeout_seconds = settings.transcription_timeout
 
+        logger.debug(
+            f"transcribe: audio_path={audio_path}, language={context.language}, "
+            f"beam_size={self.beam_size}, vad_filter={self.vad_filter}, "
+            f"timeout={timeout_seconds}s"
+        )
         logger.info(
             f"Starting transcription: {audio_path.name}, "
             f"language={context.language}, model={self.model_size}"
@@ -114,6 +126,7 @@ class FastWhisperProvider(TranscriptionProvider):
         # Track resource usage
         start_memory = self._process.memory_info().rss / 1024 / 1024  # MB
         start_time = time.time()
+        logger.debug(f"Memory before transcription: {start_memory:.2f} MB")
 
         try:
             # Run transcription in thread pool to avoid blocking event loop
@@ -138,6 +151,11 @@ class FastWhisperProvider(TranscriptionProvider):
             end_memory = self._process.memory_info().rss / 1024 / 1024  # MB
             peak_memory = max(start_memory, end_memory)
 
+            logger.debug(
+                f"Transcription result: text_length={len(text)}, segments={len(segments)}, "
+                f"audio_duration={audio_duration:.2f}s, processing_time={processing_time:.2f}s, "
+                f"detected_language={info.language}, memory_delta={end_memory-start_memory:.2f} MB"
+            )
             logger.info(
                 f"Transcription complete: {len(text)} chars, "
                 f"{audio_duration:.2f}s audio, {processing_time:.2f}s processing, "

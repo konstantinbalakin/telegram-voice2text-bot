@@ -3,7 +3,7 @@ Tests for database repositories
 """
 
 import pytest
-from datetime import date, datetime
+from datetime import date
 
 from src.storage.repositories import UserRepository, UsageRepository, TransactionRepository
 

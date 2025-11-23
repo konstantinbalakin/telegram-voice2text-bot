@@ -120,7 +120,7 @@ def setup_logging(
         backupCount=backup_count,
         encoding="utf-8",
     )
-    app_handler.setLevel(logging.INFO)
+    app_handler.setLevel(getattr(logging, log_level.upper()))  # Respect configured log level
     app_handler.setFormatter(json_formatter)
     app_handler.addFilter(version_filter)
     root_logger.addHandler(app_handler)
@@ -140,10 +140,24 @@ def setup_logging(
 
     # Console handler for development (human-readable)
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(getattr(logging, log_level.upper()))  # Respect configured log level
     console_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
+
+    # Debug handler for detailed logging (only in DEBUG mode)
+    if log_level.upper() == "DEBUG":
+        debug_log_file = log_dir / "debug.log"
+        debug_handler = logging.handlers.RotatingFileHandler(
+            debug_log_file,
+            maxBytes=5 * 1024 * 1024,  # 5MB
+            backupCount=3,
+            encoding="utf-8",
+        )
+        debug_handler.setLevel(logging.DEBUG)
+        debug_handler.setFormatter(json_formatter)
+        debug_handler.addFilter(version_filter)
+        root_logger.addHandler(debug_handler)
 
     # Optional: Remote syslog handler
     if enable_syslog and syslog_host:

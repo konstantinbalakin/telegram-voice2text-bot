@@ -87,7 +87,57 @@ class Settings(BaseSettings):
         default=60, description="Default daily quota in seconds"
     )
     max_voice_duration_seconds: int = Field(
-        default=120, description="Maximum voice message duration (2 minutes)"
+        default=300, description="Maximum voice message duration (5 minutes)"
+    )
+
+    # LLM Refinement Configuration
+    llm_refinement_enabled: bool = Field(default=False, description="Enable LLM text refinement")
+    llm_provider: str = Field(
+        default="deepseek", description="LLM provider: deepseek, openai, gigachat"
+    )
+    llm_api_key: str | None = Field(default=None, description="LLM API key")
+    llm_model: str = Field(default="deepseek-chat", description="LLM model name")
+    llm_base_url: str = Field(default="https://api.deepseek.com", description="LLM API base URL")
+    llm_refinement_prompt: str = Field(
+        default="""Улучши транскрипцию голосового сообщения:
+- Исправь орфографические и пунктуационные ошибки
+- Добавь правильную пунктуацию и заглавные буквы
+- Сохрани исходный смысл и стиль речи
+- Верни только исправленный текст без комментариев""",
+        description="System prompt for text refinement",
+    )
+    llm_timeout: int = Field(default=30, description="LLM request timeout in seconds")
+    llm_debug_mode: bool = Field(
+        default=False,
+        description="Send draft and refined text comparison in separate message for debugging",
+    )
+
+    # Hybrid Strategy Configuration
+    hybrid_short_threshold: int = Field(
+        default=20, description="Duration threshold for hybrid strategy (seconds)"
+    )
+    hybrid_draft_provider: str = Field(
+        default="faster-whisper", description="Provider for draft: faster-whisper, openai"
+    )
+    hybrid_draft_model: str = Field(
+        default="small", description="Model for draft (e.g., tiny, small)"
+    )
+    hybrid_quality_provider: str = Field(
+        default="faster-whisper", description="Provider for quality transcription"
+    )
+    hybrid_quality_model: str = Field(
+        default="medium", description="Model for quality transcription"
+    )
+
+    # Audio Preprocessing Configuration
+    audio_convert_to_mono: bool = Field(
+        default=False, description="Convert audio to mono before transcription"
+    )
+    audio_target_sample_rate: int = Field(
+        default=16000, description="Target sample rate for mono conversion (Hz)"
+    )
+    audio_speed_multiplier: float = Field(
+        default=1.0, description="Audio speed multiplier (0.5-2.0, 1.0=original)"
     )
 
     # Logging

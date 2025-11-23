@@ -1,9 +1,7 @@
 """Unit tests for AudioHandler."""
 
 import pytest
-from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
-import tempfile
 
 from src.transcription.audio_handler import AudioHandler
 

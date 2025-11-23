@@ -2,6 +2,7 @@
 Repository pattern for database access
 """
 
+import logging
 from datetime import date, datetime
 from typing import Optional
 
@@ -9,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.models import User, Usage, Transaction
+
+logger = logging.getLogger(__name__)
 
 
 class UserRepository:
@@ -19,8 +22,11 @@ class UserRepository:
 
     async def get_by_telegram_id(self, telegram_id: int) -> Optional[User]:
         """Get user by Telegram ID."""
+        logger.debug(f"UserRepository.get_by_telegram_id(telegram_id={telegram_id})")
         result = await self.session.execute(select(User).where(User.telegram_id == telegram_id))
-        return result.scalar_one_or_none()
+        user = result.scalar_one_or_none()
+        logger.debug(f"Result: {'found' if user else 'not found'}")
+        return user
 
     async def get_by_id(self, user_id: int) -> Optional[User]:
         """Get user by internal ID."""
@@ -36,6 +42,9 @@ class UserRepository:
         daily_quota_seconds: int = 60,
     ) -> User:
         """Create a new user."""
+        logger.debug(
+            f"UserRepository.create(telegram_id={telegram_id}, quota={daily_quota_seconds}s)"
+        )
         user = User(
             telegram_id=telegram_id,
             username=username,
@@ -51,14 +60,21 @@ class UserRepository:
         )
         self.session.add(user)
         await self.session.flush()
+        logger.debug(f"User created: id={user.id}, telegram_id={telegram_id}")
         return user
 
     async def update_usage(self, user: User, duration_seconds: int) -> User:
         """Update user's usage statistics."""
+        logger.debug(
+            f"UserRepository.update_usage(user_id={user.id}, duration={duration_seconds}s)"
+        )
         user.today_usage_seconds += duration_seconds
         user.total_usage_seconds += duration_seconds
         user.updated_at = datetime.utcnow()
         await self.session.flush()
+        logger.debug(
+            f"Usage updated: today={user.today_usage_seconds}s, total={user.total_usage_seconds}s"
+        )
         return user
 
     async def reset_daily_quota(self, user: User) -> User:
@@ -111,6 +127,7 @@ class UsageRepository:
         Minimal required fields: user_id, voice_file_id
         Other fields can be updated later via update()
         """
+        logger.debug(f"UsageRepository.create(user_id={user_id}, file_id={voice_file_id})")
         usage = Usage(
             user_id=user_id,
             voice_file_id=voice_file_id,
@@ -125,6 +142,7 @@ class UsageRepository:
         self.session.add(usage)
         await self.session.flush()
         await self.session.refresh(usage)  # Ensure all defaults are loaded
+        logger.debug(f"Usage created: id={usage.id}")
         return usage
 
     async def get_by_id(self, usage_id: int) -> Optional[Usage]:
@@ -145,6 +163,11 @@ class UsageRepository:
 
         Only updates provided fields. Returns updated usage record.
         """
+        logger.debug(
+            f"UsageRepository.update(usage_id={usage_id}, duration={voice_duration_seconds}, "
+            f"model={model_size}, processing_time={processing_time_seconds}, "
+            f"text_length={transcription_length})"
+        )
         usage = await self.get_by_id(usage_id)
         if not usage:
             raise ValueError(f"Usage record {usage_id} not found")
@@ -163,6 +186,7 @@ class UsageRepository:
         usage.updated_at = datetime.utcnow()
         await self.session.flush()
         await self.session.refresh(usage)
+        logger.debug(f"Usage updated: id={usage_id}")
         return usage
 
     async def get_by_user_id(self, user_id: int, limit: int = 10) -> list[Usage]:

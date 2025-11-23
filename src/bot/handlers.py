@@ -4,6 +4,7 @@ import asyncio
 import logging
 import uuid
 from datetime import timedelta
+from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -11,10 +12,12 @@ from src.config import settings
 from src.storage.database import get_session
 from src.storage.repositories import UserRepository, UsageRepository
 from src.transcription.routing.router import TranscriptionRouter
+from src.transcription.routing.strategies import HybridStrategy
 from src.transcription.audio_handler import AudioHandler
 from src.transcription.models import TranscriptionContext, TranscriptionResult
 from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.progress_tracker import ProgressTracker
+from src.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +100,7 @@ class BotHandlers:
         whisper_service: TranscriptionRouter,
         audio_handler: AudioHandler,
         queue_manager: QueueManager,
+        llm_service: Optional[LLMService] = None,
     ):
         """Initialize bot handlers.
 
@@ -104,10 +108,12 @@ class BotHandlers:
             whisper_service: Transcription router for transcription
             audio_handler: Audio handler for file operations
             queue_manager: Queue manager for request handling
+            llm_service: Optional LLM service for text refinement
         """
         self.transcription_router = whisper_service
         self.audio_handler = audio_handler
         self.queue_manager = queue_manager
+        self.llm_service = llm_service
 
         # Register callback for queue updates
         self.queue_manager.set_on_queue_changed(self._update_queue_messages)
@@ -170,6 +176,8 @@ class BotHandlers:
         if not user:
             return
 
+        logger.debug(f"start_command: user_id={user.id}, username={user.username}")
+
         # Register or get existing user from database
         async with get_session() as session:
             user_repo = UserRepository(session)
@@ -177,6 +185,7 @@ class BotHandlers:
             # Check if user exists
             db_user = await user_repo.get_by_telegram_id(user.id)
             if not db_user:
+                logger.debug(f"Creating new user: telegram_id={user.id}")
                 # Create new user
                 await user_repo.create(
                     telegram_id=user.id,
@@ -184,6 +193,8 @@ class BotHandlers:
                     first_name=user.first_name,
                     last_name=user.last_name,
                 )
+            else:
+                logger.debug(f"Existing user: id={db_user.id}, telegram_id={user.id}")
 
         welcome_message = (
             f"Привет, {user.first_name}!\n\n"
@@ -223,6 +234,7 @@ class BotHandlers:
         if update.message:
             await update.message.reply_text(help_message)
         if update.effective_user:
+            logger.debug(f"help_command: user_id={update.effective_user.id}")
             logger.info(f"User {update.effective_user.id} requested help")
 
     async def stats_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -235,6 +247,8 @@ class BotHandlers:
         user = update.effective_user
         if not user:
             return
+
+        logger.debug(f"stats_command: user_id={user.id}")
 
         async with get_session() as session:
             user_repo = UserRepository(session)
@@ -300,6 +314,11 @@ class BotHandlers:
             else:
                 duration_seconds = int(voice.duration)
 
+        logger.debug(
+            f"voice_message_handler: user_id={user.id}, file_id={voice.file_id}, "
+            f"duration={duration_seconds}s, file_size={voice.file_size}"
+        )
+
         # 1. VALIDATE DURATION
         if duration_seconds > settings.max_voice_duration_seconds:
             await update.message.reply_text(
@@ -314,6 +333,7 @@ class BotHandlers:
 
         # 2. CHECK QUEUE CAPACITY
         queue_depth = self.queue_manager.get_queue_depth()
+        logger.debug(f"Queue check: depth={queue_depth}, max={settings.max_queue_size}")
         if queue_depth >= settings.max_queue_size:
             await update.message.reply_text(
                 "⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.\n\n"
@@ -436,9 +456,15 @@ class BotHandlers:
                     usage_id=usage.id,
                 )
 
+                logger.debug(
+                    f"Transcription request created: id={request.id}, user_id={user.id}, "
+                    f"duration={duration_seconds}s, file_path={file_path}"
+                )
+
                 # Enqueue request
                 try:
                     queue_position = await self.queue_manager.enqueue(request)
+                    logger.debug(f"Request enqueued: id={request.id}, position={queue_position}")
                     active_workers = self.queue_manager.get_processing_count()
 
                     # Show queue position or immediate start
@@ -541,6 +567,7 @@ class BotHandlers:
 
         # 2. CHECK QUEUE CAPACITY
         queue_depth = self.queue_manager.get_queue_depth()
+        logger.debug(f"Queue check: depth={queue_depth}, max={settings.max_queue_size}")
         if queue_depth >= settings.max_queue_size:
             await update.message.reply_text(
                 "⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.\n\n"
@@ -663,9 +690,15 @@ class BotHandlers:
                     usage_id=usage.id,
                 )
 
+                logger.debug(
+                    f"Transcription request created: id={request.id}, user_id={user.id}, "
+                    f"duration={duration_seconds}s, file_path={file_path}"
+                )
+
                 # Enqueue request
                 try:
                     queue_position = await self.queue_manager.enqueue(request)
+                    logger.debug(f"Request enqueued: id={request.id}, position={queue_position}")
                     active_workers = self.queue_manager.get_processing_count()
 
                     # Show queue position or immediate start
@@ -759,50 +792,146 @@ class BotHandlers:
         await progress.start()
 
         try:
-            # Transcribe audio
+            # === PREPROCESSING: Apply audio transformations ===
+            processed_path = request.file_path
+            try:
+                processed_path = self.audio_handler.preprocess_audio(request.file_path)
+                if processed_path != request.file_path:
+                    logger.info(f"Audio preprocessed: {processed_path.name}")
+            except Exception as e:
+                logger.warning(f"Audio preprocessing failed: {e}, using original")
+                processed_path = request.file_path
+
+            # === TRANSCRIPTION: Get draft or final transcription ===
             result = await self.transcription_router.transcribe(
-                request.file_path,
+                processed_path,
                 request.context,
             )
 
             # Stop progress updates
             await progress.stop()
 
-            # Update database (Stage 3: after transcription)
+            # === HYBRID STRATEGY: Check if LLM refinement needed ===
+            needs_refinement = False
+            if isinstance(self.transcription_router.strategy, HybridStrategy):
+                # Type narrow: we know it's HybridStrategy here
+                needs_refinement = self.transcription_router.strategy.requires_refinement(
+                    request.duration_seconds
+                )
+
+            final_text = result.text
+
+            if needs_refinement and self.llm_service:
+                # === STAGE 1: Send draft ===
+                draft_text = result.text
+                try:
+                    await request.status_message.edit_text(
+                        f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст..."
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send draft message: {e}")
+
+                # === STAGE 2: Refine with LLM ===
+                try:
+                    refined_text = await self.llm_service.refine_transcription(draft_text)
+
+                    # === STAGE 3: Send final refined text ===
+                    final_text = refined_text
+
+                    # Split if needed
+                    text_chunks = split_text(refined_text)
+
+                    if len(text_chunks) == 1:
+                        await request.status_message.edit_text(f"✨ Готово!\n\n{refined_text}")
+                    else:
+                        # Delete status message and send in chunks
+                        try:
+                            await request.status_message.delete()
+                        except Exception as e:
+                            logger.warning(f"Failed to delete status message: {e}")
+
+                        for i, chunk in enumerate(text_chunks, 1):
+                            prefix = "✨ Готово!\n\n" if i == 1 else ""
+                            header = (
+                                f"📝 Часть {i}/{len(text_chunks)}\n\n"
+                                if len(text_chunks) > 1
+                                else ""
+                            )
+                            await request.user_message.reply_text(prefix + header + chunk)
+                            if i < len(text_chunks):
+                                await asyncio.sleep(0.1)
+
+                    # === DEBUG MODE: Send comparison ===
+                    if settings.llm_debug_mode:
+                        try:
+                            debug_message = (
+                                "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
+                                f"📝 <b>Черновик ({result.model_name}):</b>\n"
+                                f"<code>{draft_text}</code>\n\n"
+                                f"✨ <b>После LLM ({settings.llm_model}):</b>\n"
+                                f"<code>{refined_text}</code>"
+                            )
+                            # Split if too long (Telegram limit is 4096 chars)
+                            if len(debug_message) > 4000:
+                                debug_message = (
+                                    "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
+                                    f"📝 <b>Черновик:</b> {len(draft_text)} символов\n"
+                                    f"<code>{draft_text[:1500]}...</code>\n\n"
+                                    f"✨ <b>После LLM:</b> {len(refined_text)} символов\n"
+                                    f"<code>{refined_text[:1500]}...</code>\n\n"
+                                    f"ℹ️ Тексты слишком длинные, показаны первые 1500 символов"
+                                )
+                            await request.user_message.reply_text(debug_message, parse_mode="HTML")
+                        except Exception as e:
+                            logger.warning(f"Failed to send LLM debug comparison: {e}")
+
+                except Exception as e:
+                    logger.error(f"LLM refinement failed: {e}")
+                    # Fallback: draft is final
+                    try:
+                        await request.status_message.edit_text(
+                            f"✅ Готово:\n\n{draft_text}\n\nℹ️ (улучшение текста недоступно)"
+                        )
+                    except Exception:
+                        pass
+                    final_text = draft_text
+
+            else:
+                # === Direct result (short audio or non-hybrid) ===
+                text_chunks = split_text(result.text)
+
+                if len(text_chunks) == 1:
+                    await request.status_message.edit_text(f"✅ Готово!\n\n{result.text}")
+                else:
+                    # Multiple messages needed
+                    try:
+                        await request.status_message.delete()
+                    except Exception as e:
+                        logger.warning(f"Failed to delete status message: {e}")
+
+                    for i, chunk in enumerate(text_chunks, 1):
+                        prefix = "✅ Готово!\n\n" if i == 1 else ""
+                        header = (
+                            f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
+                        )
+                        await request.user_message.reply_text(prefix + header + chunk)
+                        if i < len(text_chunks):
+                            await asyncio.sleep(0.1)
+
+            # === Update database with final text ===
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
                 await usage_repo.update(
                     usage_id=request.usage_id,
                     model_size=result.model_name,
                     processing_time_seconds=result.processing_time,
-                    transcription_length=len(result.text),
+                    transcription_length=len(final_text),
                 )
 
-            # Send final result (clean text for easy copying)
-            # Split long text into multiple messages if needed
-            text_chunks = split_text(result.text)
-
-            if len(text_chunks) == 1:
-                # Single message - edit existing status message
-                await request.status_message.edit_text(result.text)
-            else:
-                # Multiple messages needed
-                # First, delete the status message
-                try:
-                    await request.status_message.delete()
-                except Exception as e:
-                    logger.warning(f"Failed to delete status message: {e}")
-
-                # Send text in chunks
-                for i, chunk in enumerate(text_chunks, 1):
-                    header = f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
-                    await request.user_message.reply_text(header + chunk)
-                    # Small delay to avoid rate limits
-                    if i < len(text_chunks):
-                        await asyncio.sleep(0.1)
-
-            # Cleanup temporary file
+            # Cleanup temporary files (both original and preprocessed)
             self.audio_handler.cleanup_file(request.file_path)
+            if processed_path != request.file_path:
+                self.audio_handler.cleanup_file(processed_path)
 
             logger.info(
                 f"Request {request.id} completed successfully "
@@ -823,8 +952,10 @@ class BotHandlers:
             except Exception:
                 pass
 
-            # Cleanup file
+            # Cleanup files
             self.audio_handler.cleanup_file(request.file_path)
+            if processed_path != request.file_path:
+                self.audio_handler.cleanup_file(processed_path)
 
             logger.error(f"Request {request.id} failed: {e}", exc_info=True)
             raise

@@ -137,6 +137,11 @@ class QueueManager:
                 position = self._total_pending
                 self._pending_requests.append(request)
                 await self._queue.put(request)
+            logger.debug(
+                f"Enqueued: request_id={request.id}, position={position}, "
+                f"user_id={request.user_id}, duration={request.duration_seconds}s, "
+                f"queue_depth={self.get_queue_depth()}, total_pending={self._total_pending}"
+            )
             logger.info(f"Request {request.id} enqueued at position {position}")
             return position
         except asyncio.QueueFull:
@@ -248,6 +253,8 @@ class QueueManager:
         """
         request_id = request.id
 
+        logger.debug(f"Request {request_id} waiting for semaphore...")
+
         # Wait for semaphore (concurrency limit)
         async with self._semaphore:
             self._processing.add(request_id)
@@ -258,6 +265,11 @@ class QueueManager:
                 if request in self._pending_requests:
                     self._pending_requests.remove(request)
                 self._processing_requests.append(request)
+
+            logger.debug(
+                f"Processing started: request_id={request_id}, user_id={request.user_id}, "
+                f"pending={len(self._pending_requests)}, processing={len(self._processing_requests)}"
+            )
 
             # Notify about queue change (for updating other users' messages)
             if self._on_queue_changed:
@@ -363,6 +375,9 @@ class QueueManager:
                 break
 
         if request_index < 0 or current_request is None:
+            logger.debug(
+                f"get_estimated_wait_time: request_id={request_id} not found in pending queue"
+            )
             return (0.0, 0.0)
 
         # Calculate total duration of items currently being processed
@@ -383,6 +398,13 @@ class QueueManager:
 
         # Processing time of current request
         processing_time = current_request.duration_seconds * rtf
+
+        logger.debug(
+            f"get_estimated_wait_time: request_id={request_id}, position={request_index+1}, "
+            f"rtf={rtf:.2f}, processing_duration={processing_duration}s, "
+            f"pending_duration_ahead={pending_duration_ahead}s, "
+            f"wait_time={wait_time:.1f}s, processing_time={processing_time:.1f}s"
+        )
 
         return (wait_time, processing_time)
 
