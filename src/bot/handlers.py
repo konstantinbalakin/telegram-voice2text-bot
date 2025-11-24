@@ -762,6 +762,51 @@ class BotHandlers:
             except Exception:
                 pass
 
+    async def _send_draft_messages(
+        self,
+        request: TranscriptionRequest,
+        draft_text: str,
+    ) -> None:
+        """Send draft text in multiple messages if needed.
+
+        Args:
+            request: Transcription request (will populate draft_messages)
+            draft_text: Draft transcription text to send
+        """
+        text_chunks = split_text(draft_text)
+
+        if len(text_chunks) == 1:
+            # Short draft: use status_message as before
+            logger.debug(f"Sending short draft: request_id={request.id}, length={len(draft_text)}")
+            await request.status_message.edit_text(
+                f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст..."
+            )
+        else:
+            # Long draft: send multiple messages
+            logger.debug(
+                f"Sending long draft: request_id={request.id}, chunks={len(text_chunks)}, "
+                f"length={len(draft_text)}"
+            )
+
+            # Delete status message first
+            try:
+                await request.status_message.delete()
+            except Exception as e:
+                logger.warning(f"Failed to delete status message: {e}")
+
+            # Send each chunk
+            for i, chunk in enumerate(text_chunks, 1):
+                header = f"📝 Черновик - Часть {i}/{len(text_chunks)}\n\n"
+                footer = "\n\n🔄 Улучшаю текст..."
+                message = await request.user_message.reply_text(header + chunk + footer)
+                request.draft_messages.append(message)
+                logger.debug(
+                    f"Sent draft chunk {i}/{len(text_chunks)}: request_id={request.id}, "
+                    f"chunk_length={len(chunk)}"
+                )
+                if i < len(text_chunks):
+                    await asyncio.sleep(0.1)  # Rate limit protection
+
     async def _process_transcription(self, request: TranscriptionRequest) -> TranscriptionResult:
         """Process transcription request (called by queue worker).
 
@@ -822,44 +867,49 @@ class BotHandlers:
             final_text = result.text
 
             if needs_refinement and self.llm_service:
-                # === STAGE 1: Send draft ===
+                # === STAGE 1: Send draft (handles both short and long) ===
                 draft_text = result.text
-                try:
-                    await request.status_message.edit_text(
-                        f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст..."
-                    )
-                except Exception as e:
-                    logger.warning(f"Failed to send draft message: {e}")
+                await self._send_draft_messages(request, draft_text)
 
                 # === STAGE 2: Refine with LLM ===
                 try:
                     refined_text = await self.llm_service.refine_transcription(draft_text)
-
-                    # === STAGE 3: Send final refined text ===
                     final_text = refined_text
 
-                    # Split if needed
-                    text_chunks = split_text(refined_text)
+                    # === STAGE 3: Delete draft messages and send refined ===
+                    # Delete all draft messages (if any)
+                    for msg in request.draft_messages:
+                        try:
+                            await msg.delete()
+                            logger.debug(f"Deleted draft message: request_id={request.id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to delete draft message: {e}")
 
-                    if len(text_chunks) == 1:
-                        await request.status_message.edit_text(f"✨ Готово!\n\n{refined_text}")
-                    else:
-                        # Delete status message and send in chunks
+                    # If short draft was in status_message, need to handle it too
+                    if not request.draft_messages:
                         try:
                             await request.status_message.delete()
+                            logger.debug(
+                                f"Deleted status message (short draft): request_id={request.id}"
+                            )
                         except Exception as e:
                             logger.warning(f"Failed to delete status message: {e}")
 
-                        for i, chunk in enumerate(text_chunks, 1):
-                            prefix = "✨ Готово!\n\n" if i == 1 else ""
-                            header = (
-                                f"📝 Часть {i}/{len(text_chunks)}\n\n"
-                                if len(text_chunks) > 1
-                                else ""
-                            )
-                            await request.user_message.reply_text(prefix + header + chunk)
-                            if i < len(text_chunks):
-                                await asyncio.sleep(0.1)
+                    # Send refined in parts
+                    text_chunks = split_text(refined_text)
+                    logger.debug(
+                        f"Sending refined text: request_id={request.id}, chunks={len(text_chunks)}, "
+                        f"length={len(refined_text)}"
+                    )
+
+                    for i, chunk in enumerate(text_chunks, 1):
+                        prefix = "✨ Готово!\n\n" if i == 1 else ""
+                        header = (
+                            f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
+                        )
+                        await request.user_message.reply_text(prefix + header + chunk)
+                        if i < len(text_chunks):
+                            await asyncio.sleep(0.1)
 
                     # === DEBUG MODE: Send comparison ===
                     if settings.llm_debug_mode:
@@ -887,13 +937,20 @@ class BotHandlers:
 
                 except Exception as e:
                     logger.error(f"LLM refinement failed: {e}")
-                    # Fallback: draft is final
-                    try:
-                        await request.status_message.edit_text(
-                            f"✅ Готово:\n\n{draft_text}\n\nℹ️ (улучшение текста недоступно)"
+                    # Fallback: draft already visible, just notify completion
+                    if request.draft_messages:
+                        # Draft is in multiple messages, send final message
+                        await request.user_message.reply_text(
+                            "✅ Готово\n\nℹ️ (улучшение текста недоступно)"
                         )
-                    except Exception:
-                        pass
+                    else:
+                        # Draft is in status_message, update it
+                        try:
+                            await request.status_message.edit_text(
+                                f"✅ Готово:\n\n{draft_text}\n\nℹ️ (улучшение текста недоступно)"
+                            )
+                        except Exception:
+                            pass
                     final_text = draft_text
 
             else:
