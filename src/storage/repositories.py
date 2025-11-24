@@ -106,7 +106,8 @@ class UsageRepository:
     Lifecycle stages:
     1. create() - Stage 1: Create record on file download
     2. update() - Stage 2: Update with duration after download
-    3. update() - Stage 3: Update with transcription results
+    3. update() - Stage 3: Update with transcription results and LLM model (if applicable)
+    4. update() - Stage 4: Update with LLM processing time (hybrid mode only)
     """
 
     def __init__(self, session: AsyncSession):
@@ -121,6 +122,8 @@ class UsageRepository:
         processing_time_seconds: Optional[float] = None,
         transcription_length: Optional[int] = None,
         language: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        llm_processing_time_seconds: Optional[float] = None,
     ) -> Usage:
         """Create a new usage record (Stage 1: on file download).
 
@@ -136,6 +139,8 @@ class UsageRepository:
             processing_time_seconds=processing_time_seconds,
             transcription_length=transcription_length,
             language=language,
+            llm_model=llm_model,
+            llm_processing_time_seconds=llm_processing_time_seconds,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
@@ -158,15 +163,18 @@ class UsageRepository:
         processing_time_seconds: Optional[float] = None,
         transcription_length: Optional[int] = None,
         language: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        llm_processing_time_seconds: Optional[float] = None,
     ) -> Usage:
-        """Update usage record with new data (Stage 2 or 3).
+        """Update usage record with new data (Stage 2, 3, or 4).
 
         Only updates provided fields. Returns updated usage record.
         """
         logger.debug(
             f"UsageRepository.update(usage_id={usage_id}, duration={voice_duration_seconds}, "
             f"model={model_size}, processing_time={processing_time_seconds}, "
-            f"text_length={transcription_length})"
+            f"text_length={transcription_length}, llm_model={llm_model}, "
+            f"llm_time={llm_processing_time_seconds})"
         )
         usage = await self.get_by_id(usage_id)
         if not usage:
@@ -182,6 +190,10 @@ class UsageRepository:
             usage.transcription_length = transcription_length
         if language is not None:
             usage.language = language
+        if llm_model is not None:
+            usage.llm_model = llm_model
+        if llm_processing_time_seconds is not None:
+            usage.llm_processing_time_seconds = llm_processing_time_seconds
 
         usage.updated_at = datetime.utcnow()
         await self.session.flush()

@@ -62,7 +62,8 @@ class Usage(Base):
     Lifecycle stages:
     1. Created on file download: user_id, voice_file_id, created_at
     2. Updated after download: voice_duration_seconds, updated_at
-    3. Updated after transcription: model_size, processing_time_seconds, transcription_length, updated_at
+    3. Updated after transcription: model_size, processing_time_seconds, transcription_length, llm_model, updated_at
+    4. Updated after LLM refinement (hybrid mode only): llm_processing_time_seconds, updated_at
     """
 
     __tablename__ = "usage"
@@ -86,6 +87,10 @@ class Usage(Base):
     # Whisper settings used
     model_size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Stage 3
     language: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+
+    # LLM refinement tracking (hybrid mode)
+    llm_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Stage 3
+    llm_processing_time_seconds: Mapped[Optional[float]] = mapped_column(nullable=True)  # Stage 4
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

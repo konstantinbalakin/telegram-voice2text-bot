@@ -331,8 +331,10 @@ This is a **transitional architecture** that balances MVP speed with future scal
 - **Implementation**:
   - **Stage 1** (download start): Create record with `user_id`, `voice_file_id`, `created_at`
   - **Stage 2** (download complete): Update with `voice_duration_seconds`, `updated_at`
-  - **Stage 3** (transcription complete): Update with `model_size`, `processing_time_seconds`, `transcription_length`, `updated_at`
+  - **Stage 3** (transcription complete): Update with `model_size`, `processing_time_seconds`, `transcription_length`, `llm_model`, `updated_at`
+  - **Stage 4** (LLM refinement, hybrid mode only): Update with `llm_processing_time_seconds`, `updated_at`
 - **Privacy Feature**: Stores `transcription_length` (int) instead of `transcription_text` (string)
+- **Performance Tracking**: Separate fields for Whisper and LLM timing enable detailed analytics
 - **Usage**: Enables tracking failed downloads, failed transcriptions, and full lifecycle timing
 - **Pattern**: State pattern - records progress through lifecycle stages
 

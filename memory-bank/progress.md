@@ -16,9 +16,13 @@
 - **Phase 7.2**: ✅ Complete (2025-11-04) - Fully automatic deployment pipeline
 - **Phase 7.3**: ✅ Complete (2025-11-19) - Queue position & file naming bug fixes
 - **Phase 7.4**: ✅ Complete (2025-11-19) - Dynamic queue notifications with accurate time calculation
+- **Phase 8**: ✅ Complete (2025-11-20) - Hybrid transcription acceleration
+- **Phase 8.1**: ✅ Complete (2025-11-24) - DEBUG logging enhancement
+- **Phase 8.2**: ✅ Complete (2025-11-24) - LLM debug mode
+- **Phase 8.3**: ✅ Complete (2025-11-24) - LLM performance tracking
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- **Current Version**: v0.0.3+ (queue notifications pending deployment)
-- Current focus (2025-11-19): Deploy dynamic queue notifications and continue monitoring
+- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking in PR)
+- Current focus (2025-11-24): Deploy LLM tracking (PR #49), performance monitoring
 
 ## Delivered Milestones
 
@@ -1307,3 +1311,107 @@ WHISPER_ROUTING_STRATEGY=hybrid
 - Bottleneck: 1 vCPU + swap usage
 - User Experience: ✅ Acceptable with live progress bar
 - Next: Monitor real-world usage, optimize only if needed
+
+---
+
+### Phase 8.3: LLM Performance Tracking ✅ COMPLETE (2025-11-24)
+
+**Goal**: Track LLM processing time and model in database for performance analytics
+
+**Problem**:
+- Hybrid mode only tracked Whisper transcription time
+- No visibility into LLM refinement performance
+- Impossible to analyze LLM costs or compare models
+- Missing data for optimization decisions
+
+**Solution Implemented**:
+
+1. **Database Schema Changes**
+   - New field: `llm_model` (VARCHAR(100), nullable)
+   - New field: `llm_processing_time_seconds` (FLOAT, nullable)
+   - Migration: `0fde9e5effe5_add_llm_tracking_fields.py`
+   - Backward compatible: nullable fields
+
+2. **Lifecycle Extension**
+   - **Stage 3** (after Whisper): Save Whisper results + `llm_model`
+   - **Stage 4** (NEW, after LLM): Save `llm_processing_time_seconds`
+
+3. **Implementation**
+   ```python
+   # Stage 3: After Whisper
+   await usage_repo.update(
+       model_size=result.model_name,
+       processing_time_seconds=result.processing_time,
+       llm_model=settings.llm_model,  # NEW
+   )
+
+   # Stage 4: After LLM
+   llm_start = time.time()
+   refined = await llm_service.refine_transcription(draft)
+   llm_time = time.time() - llm_start
+
+   await usage_repo.update(
+       llm_processing_time_seconds=llm_time,  # NEW
+   )
+   ```
+
+4. **Model & Repository Updates**
+   - `Usage` model: Added 2 new fields
+   - `UsageRepository.create()`: Extended signature
+   - `UsageRepository.update()`: Extended signature
+
+**Technical Details**:
+
+**Files Modified**:
+- `alembic/versions/0fde9e5effe5_add_llm_tracking_fields.py` - NEW
+- `src/storage/models.py` - Added LLM tracking fields
+- `src/storage/repositories.py` - Extended methods
+- `src/bot/handlers.py` - Added time tracking and Stage 4
+
+**Data Examples**:
+```
+# Long audio with LLM
+model_size: "medium"
+processing_time_seconds: 10.5
+llm_model: "deepseek-chat"
+llm_processing_time_seconds: 3.2
+
+# Short audio without LLM
+model_size: "medium"
+processing_time_seconds: 3.0
+llm_model: NULL
+llm_processing_time_seconds: NULL
+```
+
+**Benefits**:
+- 📊 Performance visibility: Separate Whisper/LLM metrics
+- 💰 Cost analysis: Calculate per-request LLM costs
+- 🔍 Model comparison: A/B test different LLM providers
+- ⚡ Optimization: Identify pipeline bottlenecks
+- 📈 Analytics: RTF for both processing stages
+
+**Testing & Quality**:
+- ✅ All 93 unit tests pass
+- ✅ Manual validation (4-stage lifecycle verified)
+- ✅ Database schema confirmed
+- ✅ Type checking (mypy): 0 errors
+- ✅ Code formatting (black): applied
+
+**Deployment Plan**:
+1. Merge PR #49
+2. Deploy to production
+3. Apply migration: `alembic upgrade head`
+4. Monitor logs for "LLM refinement took X.XXs"
+5. Query analytics:
+   ```sql
+   SELECT
+     AVG(processing_time_seconds) as avg_whisper,
+     AVG(llm_processing_time_seconds) as avg_llm
+   FROM usage WHERE llm_model IS NOT NULL;
+   ```
+
+**Impact**: Full visibility into hybrid transcription performance, enabling data-driven optimization
+
+**Status**: ✅ Complete, PR #49 created
+**Branch**: `feature/llm-tracking`
+**PR**: https://github.com/konstantinbalakin/telegram-voice2text-bot/pull/49

@@ -2,14 +2,14 @@
 
 ## Current Status
 
-**Phase**: Phase 8.2 - LLM Debug Mode ✅ COMPLETE (2025-11-24)
+**Phase**: Phase 8.3 - LLM Performance Tracking ✅ COMPLETE (2025-11-24)
 **Date**: 2025-11-24
-**Stage**: Production operational with hybrid transcription + debugging features ready
-**Branch**: feature/hybrid-transcription (PR #44 updated with debug features)
-**Production Version**: v0.0.3+ (hybrid + debug features in PR, pending merge and deployment)
-**Production Status**: ✅ OPERATIONAL - All systems stable, hybrid transcription + debugging features ready
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**, **hybrid transcription acceleration ✅**, **DEBUG logging enhancement ✅**, **LLM debug mode ✅**
-**Next Phase**: Manual testing, gradual rollout, performance monitoring
+**Stage**: Production operational with hybrid transcription + LLM tracking
+**Branch**: feature/llm-tracking (PR #49)
+**Production Version**: v0.0.3+ (LLM tracking in PR, pending merge and deployment)
+**Production Status**: ✅ OPERATIONAL - All systems stable, hybrid transcription with performance analytics ready
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**, **hybrid transcription acceleration ✅**, **DEBUG logging enhancement ✅**, **LLM debug mode ✅**, **LLM performance tracking ✅**
+**Next Phase**: Deploy LLM tracking, performance monitoring, data analysis
 
 ## Production Configuration Finalized ✅
 
@@ -1110,6 +1110,109 @@ LLM_DEBUG_MODE=true  # Default: false
 **Status**: ✅ Complete, ready for LLM quality testing
 
 **Branch**: Both features committed to `feature/hybrid-transcription` (PR #44)
+
+### Phase 8.3: LLM Performance Tracking ✅ COMPLETE (2025-11-24)
+**Achievement**: Database tracking of LLM processing time and model for performance analytics
+
+**Problem**:
+- In hybrid mode, only Whisper transcription time was tracked
+- No way to analyze LLM performance or cost
+- Impossible to compare LLM models or track refinement overhead
+- No data for optimization decisions
+
+**Solution**: Added dedicated database fields and tracking logic
+
+**Database Changes** (Migration: `0fde9e5effe5_add_llm_tracking_fields`):
+```sql
+ALTER TABLE usage ADD COLUMN llm_model VARCHAR(100) NULL;
+ALTER TABLE usage ADD COLUMN llm_processing_time_seconds FLOAT NULL;
+```
+
+**Lifecycle Updates**:
+- **Stage 3** (after Whisper): Save `llm_model` to database
+- **Stage 4** (after LLM, NEW): Track and save `llm_processing_time_seconds`
+
+**Implementation Details**:
+```python
+# Stage 3: After Whisper transcription
+await usage_repo.update(
+    usage_id=request.usage_id,
+    model_size=result.model_name,              # Whisper: "medium"
+    processing_time_seconds=result.processing_time,  # Whisper: 10.5s
+    llm_model=settings.llm_model,              # NEW: "deepseek-chat"
+)
+
+# Stage 4: After LLM refinement
+llm_start = time.time()
+refined_text = await llm_service.refine_transcription(draft_text)
+llm_time = time.time() - llm_start
+
+await usage_repo.update(
+    usage_id=request.usage_id,
+    llm_processing_time_seconds=llm_time,     # NEW: 3.2s
+)
+logger.info(f"LLM refinement took {llm_time:.2f}s")
+```
+
+**Data Examples**:
+
+*Long audio (≥20s with LLM)*:
+```
+model_size: "medium"
+processing_time_seconds: 10.5
+llm_model: "deepseek-chat"       ← NEW
+llm_processing_time_seconds: 3.2  ← NEW
+```
+
+*Short audio (<20s without LLM)*:
+```
+model_size: "medium"
+processing_time_seconds: 3.0
+llm_model: NULL
+llm_processing_time_seconds: NULL
+```
+
+**Files Modified**:
+- `alembic/versions/0fde9e5effe5_add_llm_tracking_fields.py` - NEW migration
+- `src/storage/models.py` - Added `llm_model`, `llm_processing_time_seconds` fields
+- `src/storage/repositories.py` - Extended `create()` and `update()` methods
+- `src/bot/handlers.py` - Added time tracking and Stage 4 database update
+
+**Testing**:
+- ✅ All 93 unit tests pass
+- ✅ Manual validation script verified all 4 lifecycle stages
+- ✅ Database schema confirmed (SQLite inspection)
+- ✅ Type checking (mypy): 0 errors
+- ✅ Code formatted with black
+
+**Benefits**:
+- 📊 Full performance visibility: Whisper time vs LLM time
+- 💰 Cost analysis: Can calculate per-request LLM costs
+- 🔍 Model comparison: Easy to A/B test different LLM models
+- ⚡ Optimization: Identify bottlenecks in hybrid pipeline
+- 📈 Analytics: RTF calculations for both stages
+
+**Migration Safety**:
+- Nullable fields: existing records remain valid
+- Backward compatible: no breaking changes
+- Rollback supported: `alembic downgrade` available
+
+**Next Steps After Deployment**:
+1. Apply migration on production: `alembic upgrade head`
+2. Monitor logs for "LLM refinement took X.XXs" messages
+3. Query database for performance analytics:
+   ```sql
+   SELECT
+     AVG(processing_time_seconds) as avg_whisper_time,
+     AVG(llm_processing_time_seconds) as avg_llm_time,
+     COUNT(*) as total_llm_requests
+   FROM usage
+   WHERE llm_model IS NOT NULL;
+   ```
+
+**Status**: ✅ Complete, PR #49 created, ready for merge and deployment
+
+**Branch**: `feature/llm-tracking` (PR #49)
 
 ---
 
