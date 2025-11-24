@@ -65,7 +65,9 @@ def create_transcription_router() -> TranscriptionRouter:
                 model=settings.hybrid_draft_model,
                 timeout=settings.openai_timeout,
             )
-            logger.info(f"✓ Configured provider: openai-draft (model={settings.hybrid_draft_model})")
+            logger.info(
+                f"✓ Configured provider: openai-draft (model={settings.hybrid_draft_model})"
+            )
 
         # Create quality provider
         if settings.hybrid_quality_provider == "faster-whisper":
@@ -91,7 +93,9 @@ def create_transcription_router() -> TranscriptionRouter:
                 model=settings.hybrid_quality_model,
                 timeout=settings.openai_timeout,
             )
-            logger.info(f"✓ Configured provider: openai-quality (model={settings.hybrid_quality_model})")
+            logger.info(
+                f"✓ Configured provider: openai-quality (model={settings.hybrid_quality_model})"
+            )
 
     # For non-hybrid strategies, create providers from WHISPER_PROVIDERS list
     else:
