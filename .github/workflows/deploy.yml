@@ -245,7 +245,7 @@ jobs:
             BENCHMARK_MODE=false
 
             # FasterWhisper Production Configuration (medium/int8/beam1)
-            FASTER_WHISPER_MODEL_SIZE=medium
+            FASTER_WHISPER_MODEL_SIZE=base
             FASTER_WHISPER_DEVICE=cpu
             FASTER_WHISPER_COMPUTE_TYPE=int8
             FASTER_WHISPER_BEAM_SIZE=1
@@ -264,11 +264,11 @@ jobs:
             DURATION_THRESHOLD_SECONDS=30
 
             # Hybrid Strategy Configuration (disabled in production)
-            HYBRID_SHORT_THRESHOLD=20
+            HYBRID_SHORT_THRESHOLD=0
             HYBRID_DRAFT_PROVIDER=faster-whisper
             HYBRID_DRAFT_MODEL=base
             HYBRID_QUALITY_PROVIDER=faster-whisper
-            HYBRID_QUALITY_MODEL=medium
+            HYBRID_QUALITY_MODEL=base
 
             # LLM Text Refinement (disabled in production)
             LLM_REFINEMENT_ENABLED=true
@@ -276,8 +276,8 @@ jobs:
             LLM_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
             LLM_MODEL=deepseek-chat
             LLM_BASE_URL=https://api.deepseek.com
-            LLM_REFINEMENT_PROMPT=Улучши транскрипцию голосового сообщения: исправь орфографические и пунктуационные ошибки, добавь правильную пунктуацию и заглавные буквы, сохрани исходный смысл и стиль речи, верни только исправленный текст без комментариев
-            LLM_TIMEOUT=30
+            LLM_REFINEMENT_PROMPT=Ниже приведён текст из расшифровки аудиозаписи. Некоторые слова могут быть неточными. Если слово нормальное, то не нужно его изменять. А если не очень, то попробуй подобрать наиболее правильный по смыслу исправленный вариант. Отвечай только итоговым исправленным вариантом. Без другого лишнего текста. Вот исходный текст:
+            LLM_TIMEOUT=60
             LLM_DEBUG_MODE=false
 
             # Audio Preprocessing
@@ -295,9 +295,9 @@ jobs:
             # Processing
             MAX_QUEUE_SIZE=1
             MAX_CONCURRENT_WORKERS=1
-            MAX_VOICE_DURATION_SECONDS=7200
-            TRANSCRIPTION_TIMEOUT=7200
-            PROGRESS_RTF=0.1
+            MAX_VOICE_DURATION_SECONDS=10800
+            TRANSCRIPTION_TIMEOUT=10800
+            PROGRESS_RTF=0.15
             PROGRESS_UPDATE_INTERVAL=5
 
             # Quota
