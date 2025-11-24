@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 import uuid
 from datetime import timedelta
 from typing import Optional
@@ -873,10 +874,22 @@ class BotHandlers:
 
                 # === STAGE 2: Refine with LLM ===
                 try:
+                    llm_start = time.time()
                     refined_text = await self.llm_service.refine_transcription(draft_text)
+                    llm_time = time.time() - llm_start
                     final_text = refined_text
+                    logger.info(f"LLM refinement took {llm_time:.2f}s")
 
-                    # === STAGE 3: Delete draft messages and send refined ===
+                    # === STAGE 4: Update database with LLM processing time ===
+                    async with get_session() as session:
+                        usage_repo = UsageRepository(session)
+                        await usage_repo.update(
+                            usage_id=request.usage_id,
+                            llm_processing_time_seconds=llm_time,
+                        )
+                        logger.debug(f"LLM processing time saved to database: {llm_time:.2f}s")
+
+                    # === Delete draft messages and send refined ===
                     # Delete all draft messages (if any)
                     for msg in request.draft_messages:
                         try:
@@ -975,14 +988,17 @@ class BotHandlers:
                         if i < len(text_chunks):
                             await asyncio.sleep(0.1)
 
-            # === Update database with final text ===
+            # === STAGE 3: Update database with Whisper results ===
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
                 await usage_repo.update(
                     usage_id=request.usage_id,
                     model_size=result.model_name,
                     processing_time_seconds=result.processing_time,
-                    transcription_length=len(final_text),
+                    transcription_length=len(draft_text if needs_refinement else final_text),
+                    llm_model=(
+                        settings.llm_model if (needs_refinement and self.llm_service) else None
+                    ),
                 )
 
             # Cleanup temporary files (both original and preprocessed)
