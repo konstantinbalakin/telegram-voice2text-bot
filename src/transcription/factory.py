@@ -62,10 +62,12 @@ def create_transcription_router() -> TranscriptionRouter:
                 )
             providers["openai-draft"] = OpenAIProvider(
                 api_key=settings.openai_api_key,
-                model=settings.openai_model,
+                model=settings.hybrid_draft_model,
                 timeout=settings.openai_timeout,
             )
-            logger.info(f"✓ Configured provider: openai-draft (model={settings.openai_model})")
+            logger.info(
+                f"✓ Configured provider: openai-draft (model={settings.hybrid_draft_model})"
+            )
 
         # Create quality provider
         if settings.hybrid_quality_provider == "faster-whisper":
@@ -88,10 +90,12 @@ def create_transcription_router() -> TranscriptionRouter:
                 )
             providers["openai-quality"] = OpenAIProvider(
                 api_key=settings.openai_api_key,
-                model=settings.openai_model,
+                model=settings.hybrid_quality_model,
                 timeout=settings.openai_timeout,
             )
-            logger.info(f"✓ Configured provider: openai-quality (model={settings.openai_model})")
+            logger.info(
+                f"✓ Configured provider: openai-quality (model={settings.hybrid_quality_model})"
+            )
 
     # For non-hybrid strategies, create providers from WHISPER_PROVIDERS list
     else:
@@ -263,11 +267,15 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
         # Determine actual provider names based on configuration
         if draft_provider_base == "faster-whisper":
             draft_provider_name = "faster-whisper-draft"
+        elif draft_provider_base == "openai":
+            draft_provider_name = "openai-draft"
         else:
             draft_provider_name = draft_provider_base
 
         if quality_provider_base == "faster-whisper":
             quality_provider_name = "faster-whisper-quality"
+        elif quality_provider_base == "openai":
+            quality_provider_name = "openai-quality"
         else:
             quality_provider_name = quality_provider_base
 
