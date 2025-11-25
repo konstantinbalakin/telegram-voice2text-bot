@@ -11,6 +11,31 @@ from telegram.error import TelegramError, RetryAfter, TimedOut
 logger = logging.getLogger(__name__)
 
 
+def _format_time(seconds: int) -> str:
+    """Format seconds into human-readable time string.
+
+    Args:
+        seconds: Time in seconds
+
+    Returns:
+        Formatted string like "1м 23с" or "45с"
+
+    Examples:
+        >>> _format_time(45)
+        '45с'
+        >>> _format_time(90)
+        '1м 30с'
+        >>> _format_time(125)
+        '2м 5с'
+    """
+    if seconds < 60:
+        return f"{seconds}с"
+
+    minutes = seconds // 60
+    remaining_seconds = seconds % 60
+    return f"{minutes}м {remaining_seconds}с"
+
+
 class ProgressTracker:
     """Tracks and displays transcription progress with live updates.
 
@@ -99,7 +124,7 @@ class ProgressTracker:
                 bar = self._generate_bar(progress_pct)
                 text = (
                     f"🔄 Обработка {bar} {progress_pct}%\n"
-                    f"⏱️ Прошло: {int(elapsed)}с | Осталось: ~{remaining}с"
+                    f"⏱️ Прошло: {_format_time(int(elapsed))} | Осталось: ~{_format_time(remaining)}"
                 )
 
                 # Update message
