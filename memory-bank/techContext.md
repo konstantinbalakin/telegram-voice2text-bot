@@ -40,9 +40,9 @@
 - ✅ **4x faster** than openai-whisper
 - ✅ **75% less memory** usage (int8 quantization)
 - ✅ Same accuracy as original Whisper
-- ✅ No ffmpeg dependency (uses PyAV)
 - ✅ CPU-optimized with CTranslate2
 - ✅ GPU support available
+- ⚠️ **ffmpeg required** for audio preprocessing (mono conversion, speed adjustment)
 
 **Production Configuration** (finalized 2025-10-24): `medium / int8 / beam1`
 - **Performance**: RTF ~0.3x (3x faster than audio duration)
@@ -110,6 +110,19 @@ mypy = "^1.13"                       # Type checking
   - Used in `DeepSeekProvider` for resilient API integration
   - Retry strategy: 3 attempts, exponential backoff (2-10s), retries on timeout/network errors
 - `httpx ^0.28` now also used for LLM API communication (previously just for internal services)
+
+## System Dependencies
+
+**ffmpeg** (Required for audio preprocessing):
+- **Purpose**: Audio format conversion (mono, speed adjustment)
+- **Installation**:
+  - macOS: `brew install ffmpeg`
+  - Ubuntu/Debian: `apt-get install -y ffmpeg`
+  - Docker: Already included in Dockerfile
+- **Features using ffmpeg**:
+  - `AUDIO_CONVERT_TO_MONO=true` - Convert stereo to mono for faster processing
+  - `AUDIO_SPEED_MULTIPLIER` - Adjust playback speed (0.5x-2.0x)
+- **Fallback**: Bot works without ffmpeg, but preprocessing features are disabled with warnings
 
 ## Project Structure (Updated 2025-10-29)
 
