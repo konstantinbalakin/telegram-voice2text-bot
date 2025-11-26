@@ -6,12 +6,28 @@
 
 - **Python 3.11+**
 - **Git**
+- **ffmpeg** (required for audio processing features like mono conversion and speed adjustment)
 - **2GB+ RAM** (for Whisper medium model)
 - **10GB+ disk space** (for models and dependencies)
 
 ## Method 1: Local Development (Poetry)
 
-### 1. Install Python 3.11+
+### 1. Install System Dependencies
+
+#### ffmpeg (Required)
+
+```bash
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y ffmpeg
+
+# Verify installation
+ffmpeg -version
+```
+
+### 2. Install Python 3.11+
 
 ```bash
 # Check current version
@@ -27,14 +43,14 @@ hash -r
 python3 --version  # Should be 3.11+
 ```
 
-### 2. Clone Repository
+### 3. Clone Repository
 
 ```bash
 git clone https://github.com/konstantinbalakin/telegram-voice2text-bot.git
 cd telegram-voice2text-bot
 ```
 
-### 3. Install Poetry
+### 4. Install Poetry
 
 ```bash
 # Install Poetry
@@ -48,7 +64,7 @@ export PATH="$HOME/.local/bin:$PATH"
 poetry --version
 ```
 
-### 4. Setup Python Environment
+### 5. Setup Python Environment
 
 ```bash
 # Configure Poetry to use Python 3.11
@@ -66,6 +82,10 @@ poetry shell
 ## Method 2: Local Development (pip)
 
 ```bash
+# Install ffmpeg first (see Method 1 for instructions)
+# macOS: brew install ffmpeg
+# Ubuntu/Debian: sudo apt-get install -y ffmpeg
+
 # Clone repository
 git clone https://github.com/konstantinbalakin/telegram-voice2text-bot.git
 cd telegram-voice2text-bot
@@ -161,6 +181,27 @@ poetry self update
 poetry cache clear pypi --all
 poetry install
 ```
+
+### ffmpeg not found
+
+If you see warnings about "Mono conversion failed" or "ffmpeg: command not found":
+
+```bash
+# Check if ffmpeg is installed
+which ffmpeg
+
+# If not found, install:
+# macOS
+brew install ffmpeg
+
+# Ubuntu/Debian
+sudo apt-get update && sudo apt-get install -y ffmpeg
+
+# Verify
+ffmpeg -version
+```
+
+**Note**: Some audio processing features (mono conversion, speed adjustment) require ffmpeg. The bot will work without it but those features will be disabled.
 
 ### Docker installation fails
 
