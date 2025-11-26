@@ -253,7 +253,6 @@ class AudioHandler:
         if settings.audio_convert_to_mono:
             try:
                 path = self._convert_to_mono(path)
-                logger.info(f"Converted to mono: {path.name}")
                 logger.debug(f"Mono conversion output: {path}")
             except Exception as e:
                 logger.warning(f"Mono conversion failed: {e}, using original")
@@ -280,12 +279,41 @@ class AudioHandler:
             input_path: Input audio file
 
         Returns:
-            Path to mono audio file
+            Path to mono audio file (or original if already mono)
 
         Raises:
             subprocess.CalledProcessError: If ffmpeg fails
         """
-        output_path = input_path.parent / f"{input_path.stem}_mono.wav"
+        # Check if file is already mono
+        probe_result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=channels",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(input_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        channels = int(probe_result.stdout.strip())
+
+        if channels == 1:
+            logger.info(f"File already mono, skipping conversion: {input_path.name}")
+            return input_path
+
+        # Get original file size
+        original_size = input_path.stat().st_size
+        original_size_mb = original_size / (1024 * 1024)
+
+        output_path = input_path.parent / f"{input_path.stem}_mono.opus"
 
         subprocess.run(
             [
@@ -295,15 +323,27 @@ class AudioHandler:
                 str(input_path),
                 "-ac",
                 "1",  # Mono channel
-                "-ar",
-                str(settings.audio_target_sample_rate),
                 "-acodec",
-                "pcm_s16le",  # Uncompressed PCM
+                "libopus",  # Opus codec (same as Telegram)
+                "-b:a",
+                "32k",  # 32 kbps bitrate (same as Telegram voice)
+                "-vbr",
+                "on",  # Variable bitrate for better quality
                 str(output_path),
             ],
             check=True,
             capture_output=True,
             text=True,
+        )
+
+        # Get converted file size
+        converted_size = output_path.stat().st_size
+        converted_size_mb = converted_size / (1024 * 1024)
+        size_ratio = (converted_size / original_size * 100) if original_size > 0 else 0
+
+        logger.info(
+            f"Mono conversion: original={original_size_mb:.2f}MB, "
+            f"converted={converted_size_mb:.2f}MB ({size_ratio:.1f}% of original)"
         )
 
         return output_path
