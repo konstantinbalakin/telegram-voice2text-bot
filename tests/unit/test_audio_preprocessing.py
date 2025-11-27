@@ -121,26 +121,47 @@ class TestConvertToMono:
 
     def test_convert_to_mono_success(self, audio_handler, sample_audio_file):
         """Test successful mono conversion."""
-        with patch("src.transcription.audio_handler.settings") as mock_settings:
-            mock_settings.audio_target_sample_rate = 16000
+        with patch("subprocess.run") as mock_run:
+            # Mock ffprobe to return stereo audio (2 channels)
+            probe_result = MagicMock()
+            probe_result.stdout.strip.return_value = "2"
 
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock()
+            # Mock ffmpeg
+            ffmpeg_result = MagicMock()
 
-                result = audio_handler._convert_to_mono(sample_audio_file)
+            # Create the output file so stat() works
+            output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.opus"
 
-                # Verify output path
-                assert result.name.endswith("_mono.wav")
-                assert result.parent == sample_audio_file.parent
+            def side_effect_handler(*args, **kwargs):
+                # On second call (ffmpeg), create the output file
+                if mock_run.call_count == 2:
+                    output_path.write_bytes(b"fake audio data")
+                    return ffmpeg_result
+                # On first call (ffprobe), return probe result
+                return probe_result
 
-                # Verify ffmpeg was called correctly
-                mock_run.assert_called_once()
-                call_args = mock_run.call_args[0][0]
-                assert call_args[0] == "ffmpeg"
-                assert "-ac" in call_args
-                assert "1" in call_args  # Mono channel
-                assert "-ar" in call_args
-                assert "16000" in call_args
+            mock_run.side_effect = side_effect_handler
+
+            result = audio_handler._convert_to_mono(sample_audio_file)
+
+            # Verify output path uses opus format
+            assert result.name.endswith("_mono.opus")
+            assert result.parent == sample_audio_file.parent
+
+            # Verify both ffprobe and ffmpeg were called
+            assert mock_run.call_count == 2
+
+            # Verify ffprobe was called to check channels
+            probe_call = mock_run.call_args_list[0][0][0]
+            assert probe_call[0] == "ffprobe"
+
+            # Verify ffmpeg was called correctly
+            ffmpeg_call = mock_run.call_args_list[1][0][0]
+            assert ffmpeg_call[0] == "ffmpeg"
+            assert "-ac" in ffmpeg_call
+            assert "1" in ffmpeg_call  # Mono channel
+            assert "-acodec" in ffmpeg_call
+            assert "libopus" in ffmpeg_call
 
     def test_convert_to_mono_ffmpeg_failure(self, audio_handler, sample_audio_file):
         """Test ffmpeg failure during mono conversion."""
