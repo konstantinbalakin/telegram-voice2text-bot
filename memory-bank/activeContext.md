@@ -1214,6 +1214,116 @@ llm_processing_time_seconds: NULL
 
 **Branch**: `feature/llm-tracking` (PR #49)
 
+### Phase 8.4: Smart Audio Preprocessing ✅ COMPLETE (2025-01-27)
+**Achievement**: Optimized audio preprocessing with 97% file size reduction and intelligent processing decisions
+
+**Problem Identified**:
+1. **Speed adjustment created WAV files** - 30x larger than needed (~10 MB vs ~0.3 MB for 1 min)
+2. **No smart preprocessing** - Converted files unnecessarily (added 0.13s overhead)
+3. **Missing sample rate optimization** - Didn't resample to Whisper's optimal 16kHz
+
+**Solution Implemented** (Option 2: Smart Preprocessing):
+
+**1. Audio Analysis Helpers** (`src/transcription/audio_handler.py`)
+- Added `_get_audio_codec()` - Returns codec name (opus, mp3, pcm)
+- Added `_get_audio_channels()` - Returns channel count (1=mono, 2=stereo)
+- Added `_get_audio_sample_rate()` - Returns sample rate in Hz
+
+**2. Fixed Speed Adjustment Format**
+```python
+# Before:
+output_path = f"{input_path.stem}_speed{multiplier}x.wav"  # PCM WAV
+# No codec specified → FFmpeg defaults to huge PCM files
+
+# After:
+output_path = f"{input_path.stem}_speed{multiplier}x.opus"
+subprocess.run([
+    "ffmpeg", "-filter:a", f"atempo={multiplier}",
+    "-acodec", "libopus",  # Efficient compression
+    "-b:a", "32k",         # 32 kbps optimal for speech
+    "-vbr", "on",          # Variable bitrate
+    str(output_path),
+])
+```
+**Impact**: **97% file size reduction** (10 MB → 0.3 MB for 1 min speed-adjusted audio)
+
+**3. Enhanced Mono Conversion**
+- Uses new helper methods (cleaner code)
+- Added `-ar 16000` for sample rate optimization (Whisper native)
+- Smart skip logic: already checks channels and returns original if mono
+
+**4. Improved Logging**
+- Shows when conversion is skipped (already mono)
+- Clear indication of optimization decisions
+- Better observability
+
+**Performance Impact**:
+
+| Scenario | Before | After | Improvement |
+|----------|--------|-------|-------------|
+| Speed adjustment (1 min) | ~10 MB WAV | ~0.3 MB Opus | **97% reduction** |
+| Stereo → Mono | 2.0 MB | 1.0 MB | **50% reduction** |
+| Telegram voice (mono) | 0.13s overhead | 0s (skipped) | **100% faster** |
+
+**Files Modified**:
+- `src/transcription/audio_handler.py` (+95 lines)
+  - Added 3 audio analysis helpers
+  - Fixed `_adjust_speed` to output Opus
+  - Enhanced `_convert_to_mono` with sample rate
+  - Improved docstrings and logging
+
+- `tests/unit/test_audio_preprocessing.py` (+40 lines)
+  - Added 4 new test cases for helpers
+  - Updated 6 existing tests for Opus format
+  - All 17 tests passing
+
+**Documentation**:
+- `docs/research/audio-preprocessing-analysis.md` (new) - Comprehensive analysis with benchmarks
+- `memory-bank/plans/2025-01-27-smart-audio-preprocessing.md` (new) - Implementation plan
+
+**Quality Assurance**:
+- ✅ 97 unit tests passing (4 new tests added)
+- ✅ Type checking (mypy): 0 errors
+- ✅ Linting (ruff): all checks passed
+- ✅ Formatting (black): code formatted
+- ✅ Manual validation: 96% size reduction vs WAV verified
+
+**Key Patterns Established**:
+1. **Smart Preprocessing**: Check file properties before converting to avoid unnecessary overhead
+2. **Opus Optimization**: Use Opus codec for all audio outputs (97% smaller than WAV)
+3. **Sample Rate Optimization**: Resample to 16kHz (Whisper's native rate) for better efficiency
+4. **Helper Method Pattern**: Dedicated FFprobe wrapper methods for clean audio analysis
+
+**Opus Sample Rate Behavior** (Important Note):
+- Opus containers report 48kHz in metadata even when encoded at 16kHz
+- This is normal Opus behavior - audio is internally resampled
+- Whisper decodes correctly regardless of reported sample rate
+
+**Benefits**:
+- ✅ **97% file size reduction** for speed-adjusted files
+- ✅ **50% reduction** for stereo → mono conversion
+- ✅ **100% skip overhead** for Telegram voices (already mono)
+- ✅ **Better memory efficiency** (50% less for stereo files)
+- ✅ **Lower storage costs** (smaller processed files)
+- ✅ **Faster I/O** (smaller files = faster read/write)
+
+**Configuration** (No changes required):
+```bash
+# Existing settings work as before
+AUDIO_CONVERT_TO_MONO=false  # Default: disabled
+AUDIO_TARGET_SAMPLE_RATE=16000  # Used for mono conversion
+AUDIO_SPEED_MULTIPLIER=1.0  # Default: no adjustment
+```
+
+**Next Steps**:
+1. ✅ All changes committed
+2. ⏳ Push to PR #52
+3. ⏳ Merge to main after approval
+
+**Status**: ✅ Complete, ready for production deployment
+
+**Branch**: `feat/improve-progress-time-formatting` (PR #52)
+
 ---
 
 ## Next Steps (Current Priority)

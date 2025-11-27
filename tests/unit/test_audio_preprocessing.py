@@ -116,6 +116,46 @@ class TestPreprocessAudio:
                 assert result == sample_audio_file
 
 
+class TestAudioAnalysisHelpers:
+    """Tests for audio analysis helper methods."""
+
+    def test_get_audio_codec(self, audio_handler, sample_audio_file):
+        """Test getting audio codec."""
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.stdout.strip.return_value = "opus"
+            mock_run.return_value = mock_result
+
+            codec = audio_handler._get_audio_codec(sample_audio_file)
+
+            assert codec == "opus"
+            mock_run.assert_called_once()
+
+    def test_get_audio_channels(self, audio_handler, sample_audio_file):
+        """Test getting number of audio channels."""
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.stdout.strip.return_value = "2"
+            mock_run.return_value = mock_result
+
+            channels = audio_handler._get_audio_channels(sample_audio_file)
+
+            assert channels == 2
+            mock_run.assert_called_once()
+
+    def test_get_audio_sample_rate(self, audio_handler, sample_audio_file):
+        """Test getting audio sample rate."""
+        with patch("subprocess.run") as mock_run:
+            mock_result = MagicMock()
+            mock_result.stdout.strip.return_value = "48000"
+            mock_run.return_value = mock_result
+
+            sample_rate = audio_handler._get_audio_sample_rate(sample_audio_file)
+
+            assert sample_rate == 48000
+            mock_run.assert_called_once()
+
+
 class TestConvertToMono:
     """Tests for _convert_to_mono method."""
 
@@ -124,32 +164,48 @@ class TestConvertToMono:
         with patch("src.transcription.audio_handler.settings") as mock_settings:
             mock_settings.audio_target_sample_rate = 16000
 
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock()
+            with patch.object(audio_handler, "_get_audio_channels", return_value=2):
+                with patch("subprocess.run") as mock_run:
+                    # Create the output file so stat() works
+                    output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.opus"
+                    output_path.write_bytes(b"fake audio data")
 
-                result = audio_handler._convert_to_mono(sample_audio_file)
+                    result = audio_handler._convert_to_mono(sample_audio_file)
 
-                # Verify output path
-                assert result.name.endswith("_mono.wav")
-                assert result.parent == sample_audio_file.parent
+                    # Verify output path uses opus format
+                    assert result.name.endswith("_mono.opus")
+                    assert result.parent == sample_audio_file.parent
 
-                # Verify ffmpeg was called correctly
-                mock_run.assert_called_once()
-                call_args = mock_run.call_args[0][0]
-                assert call_args[0] == "ffmpeg"
-                assert "-ac" in call_args
-                assert "1" in call_args  # Mono channel
-                assert "-ar" in call_args
-                assert "16000" in call_args
+                    # Verify ffmpeg was called correctly
+                    mock_run.assert_called_once()
+                    call_args = mock_run.call_args[0][0]
+                    assert call_args[0] == "ffmpeg"
+                    assert "-ac" in call_args
+                    assert "1" in call_args  # Mono channel
+                    assert "-ar" in call_args
+                    assert "16000" in call_args  # Sample rate
+                    assert "-acodec" in call_args
+                    assert "libopus" in call_args
+
+    def test_convert_to_mono_already_mono_skips(self, audio_handler, sample_audio_file):
+        """Test that mono conversion is skipped for already mono files."""
+        with patch.object(audio_handler, "_get_audio_channels", return_value=1):
+            result = audio_handler._convert_to_mono(sample_audio_file)
+
+            # Should return original file without conversion
+            assert result == sample_audio_file
 
     def test_convert_to_mono_ffmpeg_failure(self, audio_handler, sample_audio_file):
         """Test ffmpeg failure during mono conversion."""
         with patch("src.transcription.audio_handler.settings") as mock_settings:
             mock_settings.audio_target_sample_rate = 16000
 
-            with patch("subprocess.run", side_effect=subprocess.CalledProcessError(1, "ffmpeg")):
-                with pytest.raises(subprocess.CalledProcessError):
-                    audio_handler._convert_to_mono(sample_audio_file)
+            with patch.object(audio_handler, "_get_audio_channels", return_value=2):
+                with patch(
+                    "subprocess.run", side_effect=subprocess.CalledProcessError(1, "ffmpeg")
+                ):
+                    with pytest.raises(subprocess.CalledProcessError):
+                        audio_handler._convert_to_mono(sample_audio_file)
 
 
 class TestAdjustSpeed:
@@ -165,8 +221,8 @@ class TestAdjustSpeed:
 
                 result = audio_handler._adjust_speed(sample_audio_file)
 
-                # Verify output path
-                assert result.name.endswith("_speed1.5x.wav")
+                # Verify output path uses opus format
+                assert result.name.endswith("_speed1.5x.opus")
                 assert result.parent == sample_audio_file.parent
 
                 # Verify ffmpeg was called correctly
@@ -175,6 +231,8 @@ class TestAdjustSpeed:
                 assert call_args[0] == "ffmpeg"
                 assert "-filter:a" in call_args
                 assert "atempo=1.5" in call_args
+                assert "-acodec" in call_args
+                assert "libopus" in call_args
 
     def test_adjust_speed_invalid_multiplier_low(self, audio_handler, sample_audio_file):
         """Test speed adjustment with multiplier too low."""
@@ -201,13 +259,13 @@ class TestAdjustSpeed:
             with patch("src.transcription.audio_handler.settings") as mock_settings:
                 mock_settings.audio_speed_multiplier = 0.5
                 result = audio_handler._adjust_speed(sample_audio_file)
-                assert result.name.endswith("_speed0.5x.wav")
+                assert result.name.endswith("_speed0.5x.opus")
 
             # Test maximum value
             with patch("src.transcription.audio_handler.settings") as mock_settings:
                 mock_settings.audio_speed_multiplier = 2.0
                 result = audio_handler._adjust_speed(sample_audio_file)
-                assert result.name.endswith("_speed2.0x.wav")
+                assert result.name.endswith("_speed2.0x.opus")
 
     def test_adjust_speed_ffmpeg_failure(self, audio_handler, sample_audio_file):
         """Test ffmpeg failure during speed adjustment."""
