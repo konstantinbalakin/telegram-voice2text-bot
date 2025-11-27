@@ -224,35 +224,138 @@ class AudioHandler:
 
         return True
 
+    def _get_audio_codec(self, file_path: Path) -> str:
+        """
+        Get audio codec of a file.
+
+        Args:
+            file_path: Path to audio file
+
+        Returns:
+            Codec name (e.g., 'opus', 'mp3', 'pcm_s16le')
+
+        Raises:
+            subprocess.CalledProcessError: If ffprobe fails
+        """
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=codec_name",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(file_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+
+    def _get_audio_channels(self, file_path: Path) -> int:
+        """
+        Get number of audio channels.
+
+        Args:
+            file_path: Path to audio file
+
+        Returns:
+            Number of channels (1=mono, 2=stereo, etc.)
+
+        Raises:
+            subprocess.CalledProcessError: If ffprobe fails
+        """
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=channels",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(file_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return int(result.stdout.strip())
+
+    def _get_audio_sample_rate(self, file_path: Path) -> int:
+        """
+        Get audio sample rate.
+
+        Args:
+            file_path: Path to audio file
+
+        Returns:
+            Sample rate in Hz (e.g., 16000, 48000)
+
+        Raises:
+            subprocess.CalledProcessError: If ffprobe fails
+        """
+        result = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=sample_rate",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(file_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return int(result.stdout.strip())
+
     def preprocess_audio(self, audio_path: Path) -> Path:
         """
-        Apply audio preprocessing pipeline.
+        Apply intelligent audio preprocessing pipeline.
 
         Applies transformations in order:
-        1. Mono conversion (if enabled)
+        1. Mono conversion (if enabled and file is stereo)
         2. Speed adjustment (if enabled)
+
+        Smart preprocessing:
+        - Skips mono conversion if file is already mono
+        - Uses efficient Opus codec for all outputs
+        - Optimizes sample rate for Whisper (16kHz)
 
         Args:
             audio_path: Original audio file
 
         Returns:
-            Path to preprocessed audio (or original if no preprocessing)
+            Path to preprocessed audio (or original if no preprocessing needed)
 
         Raises:
             subprocess.CalledProcessError: If preprocessing fails
         """
         logger.debug(
             f"preprocess_audio: input={audio_path.name}, "
-            f"mono={settings.audio_convert_to_mono}, "
+            f"mono_enabled={settings.audio_convert_to_mono}, "
             f"speed={settings.audio_speed_multiplier}x"
         )
 
         path = audio_path
 
-        # Mono conversion
+        # Mono conversion (smart: skips if already mono)
         if settings.audio_convert_to_mono:
             try:
                 path = self._convert_to_mono(path)
+                if path != audio_path:
+                    logger.info(f"Converted to mono: {path.name}")
                 logger.debug(f"Mono conversion output: {path}")
             except Exception as e:
                 logger.warning(f"Mono conversion failed: {e}, using original")
@@ -268,12 +371,16 @@ class AudioHandler:
                 logger.warning(f"Speed adjustment failed: {e}, using original")
                 path = audio_path if path == audio_path else path
 
-        logger.debug(f"preprocess_audio: final output={path}")
+        if path == audio_path:
+            logger.debug("No preprocessing applied, using original file")
+        else:
+            logger.debug(f"Preprocessing complete: {path}")
+
         return path
 
     def _convert_to_mono(self, input_path: Path) -> Path:
         """
-        Convert audio to mono.
+        Convert audio to mono with optimal settings for Whisper.
 
         Args:
             input_path: Input audio file
@@ -285,36 +392,19 @@ class AudioHandler:
             subprocess.CalledProcessError: If ffmpeg fails
         """
         # Check if file is already mono
-        probe_result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-select_streams",
-                "a:0",
-                "-show_entries",
-                "stream=channels",
-                "-of",
-                "default=noprint_wrappers=1:nokey=1",
-                str(input_path),
-            ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-        channels = int(probe_result.stdout.strip())
+        channels = self._get_audio_channels(input_path)
 
         if channels == 1:
             logger.info(f"File already mono, skipping conversion: {input_path.name}")
             return input_path
 
-        # Get original file size
+        # Get original file info for logging
         original_size = input_path.stat().st_size
         original_size_mb = original_size / (1024 * 1024)
 
         output_path = input_path.parent / f"{input_path.stem}_mono.opus"
 
+        # Convert to mono with Whisper-optimal settings
         subprocess.run(
             [
                 "ffmpeg",
@@ -323,10 +413,12 @@ class AudioHandler:
                 str(input_path),
                 "-ac",
                 "1",  # Mono channel
+                "-ar",
+                str(settings.audio_target_sample_rate),  # Resample (16kHz optimal for Whisper)
                 "-acodec",
-                "libopus",  # Opus codec (same as Telegram)
+                "libopus",  # Opus codec (efficient compression)
                 "-b:a",
-                "32k",  # 32 kbps bitrate (same as Telegram voice)
+                "32k",  # 32 kbps bitrate (optimal for speech)
                 "-vbr",
                 "on",  # Variable bitrate for better quality
                 str(output_path),
@@ -350,20 +442,20 @@ class AudioHandler:
 
     def _adjust_speed(self, input_path: Path) -> Path:
         """
-        Adjust audio playback speed.
+        Adjust audio playback speed with optimal output format.
 
         Args:
             input_path: Input audio file
 
         Returns:
-            Path to speed-adjusted audio file
+            Path to speed-adjusted audio file (Opus format)
 
         Raises:
             subprocess.CalledProcessError: If ffmpeg fails
             ValueError: If speed multiplier out of range
         """
         multiplier = settings.audio_speed_multiplier
-        output_path = input_path.parent / f"{input_path.stem}_speed{multiplier}x.wav"
+        output_path = input_path.parent / f"{input_path.stem}_speed{multiplier}x.opus"
 
         # Note: atempo filter only supports 0.5-2.0 range
         # For values outside, need to chain multiple filters
@@ -378,6 +470,12 @@ class AudioHandler:
                 str(input_path),
                 "-filter:a",
                 f"atempo={multiplier}",
+                "-acodec",
+                "libopus",  # Use Opus codec for efficient compression
+                "-b:a",
+                "32k",  # 32 kbps bitrate (optimal for speech)
+                "-vbr",
+                "on",  # Variable bitrate for better quality
                 str(output_path),
             ],
             check=True,
