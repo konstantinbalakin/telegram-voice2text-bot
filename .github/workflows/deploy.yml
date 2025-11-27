@@ -266,9 +266,9 @@ jobs:
             # Hybrid Strategy Configuration (disabled in production)
             HYBRID_SHORT_THRESHOLD=0
             HYBRID_DRAFT_PROVIDER=faster-whisper
-            HYBRID_DRAFT_MODEL=base
+            HYBRID_DRAFT_MODEL=small
             HYBRID_QUALITY_PROVIDER=faster-whisper
-            HYBRID_QUALITY_MODEL=base
+            HYBRID_QUALITY_MODEL=small
 
             # LLM Text Refinement (disabled in production)
             LLM_REFINEMENT_ENABLED=true
@@ -281,9 +281,9 @@ jobs:
             LLM_DEBUG_MODE=false
 
             # Audio Preprocessing
-            AUDIO_CONVERT_TO_MONO=false
+            AUDIO_CONVERT_TO_MONO=true
             AUDIO_TARGET_SAMPLE_RATE=16000
-            AUDIO_SPEED_MULTIPLIER=1.0
+            AUDIO_SPEED_MULTIPLIER=1.7
 
             # Database
             DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
