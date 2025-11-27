@@ -382,21 +382,32 @@ class AudioHandler:
         """
         Convert audio to mono with optimal settings for Whisper.
 
+        Smart preprocessing:
+        - Skips conversion only if file is BOTH mono AND opus
+        - Converts if stereo (any format) OR not opus (any channels)
+
         Args:
             input_path: Input audio file
 
         Returns:
-            Path to mono audio file (or original if already mono)
+            Path to mono opus audio file (or original if already optimal)
 
         Raises:
             subprocess.CalledProcessError: If ffmpeg fails
         """
-        # Check if file is already mono
+        # Check if file is already optimal (mono + opus)
         channels = self._get_audio_channels(input_path)
+        codec = self._get_audio_codec(input_path)
 
-        if channels == 1:
-            logger.info(f"File already mono, skipping conversion: {input_path.name}")
+        if channels == 1 and codec == "opus":
+            logger.info(f"File already mono Opus, skipping conversion: {input_path.name}")
             return input_path
+
+        # Log reason for conversion
+        if channels > 1:
+            logger.info(f"Converting to mono (current: {channels} channels): {input_path.name}")
+        elif codec != "opus":
+            logger.info(f"Converting to Opus (current codec: {codec}): {input_path.name}")
 
         # Get original file info for logging
         original_size = input_path.stat().st_size

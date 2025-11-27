@@ -160,40 +160,60 @@ class TestConvertToMono:
     """Tests for _convert_to_mono method."""
 
     def test_convert_to_mono_success(self, audio_handler, sample_audio_file):
-        """Test successful mono conversion."""
+        """Test successful mono conversion from stereo."""
         with patch("src.transcription.audio_handler.settings") as mock_settings:
             mock_settings.audio_target_sample_rate = 16000
 
             with patch.object(audio_handler, "_get_audio_channels", return_value=2):
-                with patch("subprocess.run") as mock_run:
-                    # Create the output file so stat() works
-                    output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.opus"
-                    output_path.write_bytes(b"fake audio data")
+                with patch.object(audio_handler, "_get_audio_codec", return_value="mp3"):
+                    with patch("subprocess.run") as mock_run:
+                        # Create the output file so stat() works
+                        output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.opus"
+                        output_path.write_bytes(b"fake audio data")
 
-                    result = audio_handler._convert_to_mono(sample_audio_file)
+                        result = audio_handler._convert_to_mono(sample_audio_file)
 
-                    # Verify output path uses opus format
-                    assert result.name.endswith("_mono.opus")
-                    assert result.parent == sample_audio_file.parent
+                        # Verify output path uses opus format
+                        assert result.name.endswith("_mono.opus")
+                        assert result.parent == sample_audio_file.parent
 
-                    # Verify ffmpeg was called correctly
-                    mock_run.assert_called_once()
-                    call_args = mock_run.call_args[0][0]
-                    assert call_args[0] == "ffmpeg"
-                    assert "-ac" in call_args
-                    assert "1" in call_args  # Mono channel
-                    assert "-ar" in call_args
-                    assert "16000" in call_args  # Sample rate
-                    assert "-acodec" in call_args
-                    assert "libopus" in call_args
+                        # Verify ffmpeg was called correctly
+                        mock_run.assert_called_once()
+                        call_args = mock_run.call_args[0][0]
+                        assert call_args[0] == "ffmpeg"
+                        assert "-ac" in call_args
+                        assert "1" in call_args  # Mono channel
+                        assert "-ar" in call_args
+                        assert "16000" in call_args  # Sample rate
+                        assert "-acodec" in call_args
+                        assert "libopus" in call_args
 
-    def test_convert_to_mono_already_mono_skips(self, audio_handler, sample_audio_file):
-        """Test that mono conversion is skipped for already mono files."""
+    def test_convert_to_mono_already_mono_opus_skips(self, audio_handler, sample_audio_file):
+        """Test that conversion is skipped for already optimal files (mono + opus)."""
         with patch.object(audio_handler, "_get_audio_channels", return_value=1):
-            result = audio_handler._convert_to_mono(sample_audio_file)
+            with patch.object(audio_handler, "_get_audio_codec", return_value="opus"):
+                result = audio_handler._convert_to_mono(sample_audio_file)
 
-            # Should return original file without conversion
-            assert result == sample_audio_file
+                # Should return original file without conversion
+                assert result == sample_audio_file
+
+    def test_convert_to_mono_mono_wav_converts(self, audio_handler, sample_audio_file):
+        """Test that mono WAV files are converted to Opus for efficiency."""
+        with patch("src.transcription.audio_handler.settings") as mock_settings:
+            mock_settings.audio_target_sample_rate = 16000
+
+            with patch.object(audio_handler, "_get_audio_channels", return_value=1):
+                with patch.object(audio_handler, "_get_audio_codec", return_value="pcm_s16le"):
+                    with patch("subprocess.run") as mock_run:
+                        # Create the output file so stat() works
+                        output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.opus"
+                        output_path.write_bytes(b"fake audio data")
+
+                        result = audio_handler._convert_to_mono(sample_audio_file)
+
+                        # Should convert even though already mono (WAV -> Opus optimization)
+                        assert result.name.endswith("_mono.opus")
+                        mock_run.assert_called_once()
 
     def test_convert_to_mono_ffmpeg_failure(self, audio_handler, sample_audio_file):
         """Test ffmpeg failure during mono conversion."""
@@ -201,11 +221,12 @@ class TestConvertToMono:
             mock_settings.audio_target_sample_rate = 16000
 
             with patch.object(audio_handler, "_get_audio_channels", return_value=2):
-                with patch(
-                    "subprocess.run", side_effect=subprocess.CalledProcessError(1, "ffmpeg")
-                ):
-                    with pytest.raises(subprocess.CalledProcessError):
-                        audio_handler._convert_to_mono(sample_audio_file)
+                with patch.object(audio_handler, "_get_audio_codec", return_value="mp3"):
+                    with patch(
+                        "subprocess.run", side_effect=subprocess.CalledProcessError(1, "ffmpeg")
+                    ):
+                        with pytest.raises(subprocess.CalledProcessError):
+                            audio_handler._convert_to_mono(sample_audio_file)
 
 
 class TestAdjustSpeed:
