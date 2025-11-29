@@ -2,14 +2,14 @@
 
 ## Current Status
 
-**Phase**: Phase 8.3 - LLM Performance Tracking ✅ COMPLETE (2025-11-24)
-**Date**: 2025-11-24
-**Stage**: Production operational with hybrid transcription + LLM tracking
-**Branch**: feature/llm-tracking (PR #49)
-**Production Version**: v0.0.3+ (LLM tracking in PR, pending merge and deployment)
-**Production Status**: ✅ OPERATIONAL - All systems stable, hybrid transcription with performance analytics ready
+**Phase**: Phase 9 - Large File Support (Telethon Client API) 🚀 IN PROGRESS (2025-11-30)
+**Date**: 2025-11-30
+**Stage**: Implementing hybrid download strategy for files >20 MB
+**Branch**: feature/large-file-support-telethon
+**Production Version**: v0.0.3+ (LLM tracking deployed, stable)
+**Production Status**: ✅ OPERATIONAL - All systems stable
 **Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**, **hybrid transcription acceleration ✅**, **DEBUG logging enhancement ✅**, **LLM debug mode ✅**, **LLM performance tracking ✅**
-**Next Phase**: Deploy LLM tracking, performance monitoring, data analysis
+**Next Phase**: Test large file download (24 MB), deploy to production, monitor performance
 
 ## Production Configuration Finalized ✅
 
@@ -29,6 +29,124 @@ Alternative faster configurations (tiny, small) showed unacceptable quality degr
 📄 Full analysis: `memory-bank/benchmarks/final-decision.md`
 
 ## Recent Changes
+
+### LARGE FILE SUPPORT IMPLEMENTATION 🚀 (2025-11-30)
+**Achievement**: Hybrid download strategy for files >20 MB using Telegram Client API
+
+**Problem Solved**:
+- Bot API has hard 20 MB limit for file downloads via `getFile()`
+- Users cannot process audio files larger than 20 MB
+- Need transparent solution without changing user experience
+
+**Solution Implemented**: Hybrid Download Strategy
+
+**Technical Decision**: Telethon over Pyrogram
+- **Telethon**: v1.42.0 (November 2025) - actively maintained ✅
+- **Pyrogram**: v2.0.106 (April 2023) - no updates for 20+ months ❌
+- Active forks exist (pyrofork, pyrotgfork) but official Telethon more stable
+
+**Architecture Changes**:
+
+**1. New Service Layer** (`src/services/telegram_client.py`):
+```python
+class TelegramClientService:
+    - Telethon client for MTProto Client API
+    - Supports files up to 2 GB (Telegram limit)
+    - Session-based authentication (persistent across restarts)
+    - Context manager support for lifecycle management
+```
+
+**2. Hybrid Download Logic** (`src/bot/handlers.py`):
+```python
+if file_size > 20 MB:
+    # Use Client API (Telethon)
+    file_path = await telegram_client.download_large_file(
+        message_id=update.message.message_id,
+        chat_id=update.message.chat_id,
+        output_dir=temp_dir
+    )
+else:
+    # Use Bot API (existing flow)
+    voice_file = await context.bot.get_file(voice.file_id)
+    file_path = await audio_handler.download_voice_message(...)
+```
+
+**3. Dynamic File Size Limits**:
+- **Client API Enabled**: 2 GB max (Telegram limit)
+- **Client API Disabled**: 20 MB max (Bot API limit)
+- Graceful fallback with clear user messages
+
+**4. Configuration** (`src/config.py`):
+```python
+# New settings
+telegram_api_id: int | None  # From my.telegram.org
+telegram_api_hash: str | None  # From my.telegram.org
+telethon_session_name: str = "bot_client"
+telethon_enabled: bool = False  # Feature flag
+```
+
+**5. Bot Initialization** (`src/main.py`):
+- Start Telethon client on bot startup (if enabled)
+- Automatic session creation/loading
+- Graceful shutdown with client disconnect
+- Error handling for missing credentials
+
+**Implementation Details**:
+
+**Files Created**:
+- `src/services/telegram_client.py` - Telethon client wrapper
+- `memory-bank/plans/2025-11-30-large-file-support-telethon.md` - Implementation plan
+
+**Files Modified**:
+- `pyproject.toml` - Added `telethon = "^1.42.0"`, `cryptg = "^0.4.0"` (optional)
+- `src/config.py` - Added Client API configuration fields
+- `src/services/__init__.py` - Export TelegramClientService
+- `src/bot/handlers.py` - Hybrid download logic for voice & audio handlers
+- `src/main.py` - Telethon client initialization and cleanup
+- `.env.example` - Added Client API setup instructions
+- `.gitignore` - Exclude `*.session`, `*.session-journal` files
+
+**Authentication Flow**:
+1. Obtain `api_id` and `api_hash` from https://my.telegram.org (one-time)
+2. Add to `.env`: `TELETHON_ENABLED=true`, `TELEGRAM_API_ID=...`, `TELEGRAM_API_HASH=...`
+3. Bot creates/loads session file (`bot_client.session`) automatically
+4. Session persists across restarts (no re-authentication needed)
+5. Bot tokens authenticate automatically (no phone number/SMS needed)
+
+**Security**:
+- Session files stored locally, excluded from git
+- Credentials in `.env` (never committed)
+- Session file requires secure VPS storage
+
+**User Experience**:
+- **≤20 MB files**: Fast Bot API download (existing flow)
+- **>20 MB files**: Transparent Client API fallback
+- **No user action required**: Works seamlessly
+- Clear error messages if Client API unavailable
+
+**Testing Status**:
+- ✅ Telethon installed (v1.42.0)
+- ✅ Code implemented and integrated
+- ✅ Configuration updated
+- ⏳ Pending: Test with 24 MB file
+- ⏳ Pending: Production deployment
+
+**Next Steps**:
+1. Configure Client API credentials in production `.env`
+2. Test with 24 MB audio file
+3. Verify session persistence across restarts
+4. Monitor download performance and errors
+5. Document user-facing changes
+
+**Key Benefits**:
+- ✅ Support files up to 2 GB (100x increase from 20 MB)
+- ✅ Seamless user experience (no workflow changes)
+- ✅ Graceful degradation (works without Client API)
+- ✅ Production-ready (mature Telethon library)
+
+**Documentation**: Full implementation plan in `memory-bank/plans/2025-11-30-large-file-support-telethon.md`
+
+---
 
 ### QUEUE-BASED CONCURRENCY CONTROL IMPLEMENTATION ✅ (2025-10-29)
 **Achievement**: Complete rewrite of request handling to prevent crashes and improve user experience

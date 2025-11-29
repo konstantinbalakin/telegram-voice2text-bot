@@ -252,6 +252,11 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-11-20 | Abstract LLM provider pattern | Enable multiple LLM providers (DeepSeek, OpenAI, etc.) via factory + abstract base class | 90% |
 | 2025-11-20 | Graceful degradation for LLM | Always fall back to draft text on any LLM error (timeout, API, network) | 95% |
 | 2025-11-20 | Feature flags for production safety | Disable new features by default (llm_refinement_enabled=false), gradual rollout | 95% |
+| 2025-11-30 | Hybrid download strategy for large files | Bot API (≤20MB) + Client API (>20MB), seamless fallback | 95% |
+| 2025-11-30 | Telethon over Pyrogram | Telethon actively maintained (v1.42.0, Nov 2025), Pyrogram stagnant (v2.0.106, Apr 2023) | 90% |
+| 2025-11-30 | Session-based Client API auth | Bot token auto-authenticates, session persists across restarts, no phone/SMS needed | 95% |
+| 2025-11-30 | Dynamic file size limits | 2GB when Client API enabled, 20MB fallback when disabled | 90% |
+| 2025-11-30 | Optional cryptg dependency | Performance boost for Telethon, but not required for core functionality | 80% |
 
 ## Design Patterns in Use
 
@@ -342,6 +347,33 @@ This is a **transitional architecture** that balances MVP speed with future scal
 - **Where**: Handler duration validation and queue capacity checks
 - **Why**: Provide clear feedback when system cannot process request
 - **Benefit**: Better UX than silent failures or crashes, guides users to acceptable behavior
+
+### 13. **Hybrid Download Strategy Pattern** (added 2025-11-30)
+- **Where**: File download logic in `src/bot/handlers.py` + `TelegramClientService`
+- **Why**: Overcome Bot API's 20 MB file size limit for downloads
+- **Benefit**: Support files up to 2 GB transparently, seamless user experience
+- **Implementation**:
+  - **≤20 MB files**: Use Bot API `get_file()` (fast, existing infrastructure)
+  - **>20 MB files**: Use Telethon Client API `download_media()` (MTProto, up to 2 GB)
+  - **Fallback**: If Client API unavailable/disabled, reject with clear message
+  - **Dynamic limits**: 2 GB max when enabled, 20 MB when disabled
+- **Architecture**:
+  ```python
+  class TelegramClientService:
+      - Telethon MTProto client wrapper
+      - Session-based authentication (bot_token)
+      - Async context manager for lifecycle
+      - Automatic session persistence
+
+  # Usage in handlers
+  if file_size > 20MB and client_enabled:
+      file = await telegram_client.download_large_file(...)
+  else:
+      file = await bot.get_file(...)
+  ```
+- **Session Management**: `bot_client.session` file stores auth, persists across restarts
+- **Security**: Session files excluded from git, credentials in .env only
+- **Pattern**: Strategy pattern - runtime selection of download strategy based on file size
 - **Implementation**:
   - **Duration validation**: Reject files > 120s with clear message showing user's duration vs limit
   - **Queue capacity**: Reject when queue full, show current queue depth

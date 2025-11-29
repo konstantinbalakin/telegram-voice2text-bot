@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
+from telegram.error import BadRequest
 
 from src.config import settings
 from src.storage.database import get_session
@@ -19,6 +20,7 @@ from src.transcription.models import TranscriptionContext, TranscriptionResult
 from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.progress_tracker import ProgressTracker
 from src.services.llm_service import LLMService
+from src.services.telegram_client import TelegramClientService
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +104,7 @@ class BotHandlers:
         audio_handler: AudioHandler,
         queue_manager: QueueManager,
         llm_service: Optional[LLMService] = None,
+        telegram_client: Optional[TelegramClientService] = None,
     ):
         """Initialize bot handlers.
 
@@ -110,11 +113,13 @@ class BotHandlers:
             audio_handler: Audio handler for file operations
             queue_manager: Queue manager for request handling
             llm_service: Optional LLM service for text refinement
+            telegram_client: Optional Telegram Client API service for large files
         """
         self.transcription_router = whisper_service
         self.audio_handler = audio_handler
         self.queue_manager = queue_manager
         self.llm_service = llm_service
+        self.telegram_client = telegram_client
 
         # Register callback for queue updates
         self.queue_manager.set_on_queue_changed(self._update_queue_messages)
@@ -345,6 +350,42 @@ class BotHandlers:
             )
             return
 
+        # Check file size
+        # - If Client API enabled: allow up to 2 GB
+        # - If Client API disabled: limit to 20 MB (Bot API limit)
+        if voice.file_size:
+            if settings.telethon_enabled and self.telegram_client:
+                # Client API available: allow files up to 2 GB
+                max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+                if voice.file_size > max_size:
+                    file_size_mb = voice.file_size / 1024 / 1024
+                    await update.message.reply_text(
+                        "⚠️ Файл слишком большой для обработки.\n\n"
+                        "Максимальный размер: 2 ГБ\n"
+                        f"Размер вашего файла: {file_size_mb:.1f} МБ\n\n"
+                        "Пожалуйста, отправьте файл меньшего размера."
+                    )
+                    logger.warning(
+                        f"User {user.id} sent file too large: {file_size_mb:.1f} MB (max: 2 GB)"
+                    )
+                    return
+            else:
+                # Client API not available: limit to Bot API's 20 MB
+                if voice.file_size > settings.max_file_size_bytes:
+                    max_size_mb = settings.max_file_size_bytes / 1024 / 1024
+                    file_size_mb = voice.file_size / 1024 / 1024
+                    await update.message.reply_text(
+                        "⚠️ Файл слишком большой для обработки.\n\n"
+                        f"Максимальный размер: {max_size_mb:.0f} МБ\n"
+                        f"Размер вашего файла: {file_size_mb:.1f} МБ\n\n"
+                        "Пожалуйста, отправьте более короткое голосовое сообщение."
+                    )
+                    logger.warning(
+                        f"User {user.id} sent file too large: {file_size_mb:.1f} MB "
+                        f"(max: {max_size_mb:.0f} MB, Client API disabled)"
+                    )
+                    return
+
         # Send initial status
         status_msg = await update.message.reply_text("📥 Загружаю файл...")
 
@@ -370,9 +411,43 @@ class BotHandlers:
                 )
                 logger.info(f"Usage record {usage.id} created for user {user.id}")
 
-            # Download voice file
-            voice_file = await context.bot.get_file(voice.file_id)
-            file_path = await self.audio_handler.download_voice_message(voice_file, voice.file_id)
+            # Download voice file (hybrid: Bot API for ≤20MB, Client API for >20MB)
+            if voice.file_size and voice.file_size > settings.max_file_size_bytes:
+                # Large file: use Client API if available
+                if self.telegram_client and settings.telethon_enabled:
+                    logger.info(
+                        f"File size {voice.file_size} bytes exceeds Bot API limit "
+                        f"({settings.max_file_size_bytes} bytes), using Client API"
+                    )
+                    file_path = await self.telegram_client.download_large_file(
+                        message_id=update.message.message_id,
+                        chat_id=update.message.chat_id,
+                        output_dir=self.audio_handler.temp_dir,
+                    )
+                    if not file_path:
+                        raise RuntimeError("Client API download returned None")
+                else:
+                    # Client API not available - should not reach here due to earlier check
+                    # But kept as safety fallback
+                    max_size_mb = settings.max_file_size_bytes / 1024 / 1024
+                    file_size_mb = voice.file_size / 1024 / 1024
+                    await status_msg.edit_text(
+                        "⚠️ Файл слишком большой для обработки.\n\n"
+                        f"Максимальный размер: {max_size_mb:.0f} МБ\n"
+                        f"Размер вашего файла: {file_size_mb:.1f} МБ\n\n"
+                        "Client API не настроен. Пожалуйста, отправьте более короткое сообщение."
+                    )
+                    logger.warning(
+                        f"User {user.id} sent large file but Client API unavailable"
+                    )
+                    return
+            else:
+                # Normal file: use Bot API (existing flow)
+                voice_file = await context.bot.get_file(voice.file_id)
+                file_path = await self.audio_handler.download_voice_message(
+                    voice_file, voice.file_id
+                )
+
             logger.info(f"File downloaded: {file_path}")
 
             # STAGE 2: Update with duration after download
@@ -519,6 +594,28 @@ class BotHandlers:
                 # Note: Actual processing happens in _process_transcription callback
                 # which is called by queue worker. User gets updates via status_msg.
 
+        except BadRequest as e:
+            # Handle Telegram API specific errors
+            if "File is too big" in str(e):
+                max_size_mb = settings.max_file_size_bytes / 1024 / 1024
+                logger.warning(f"User {user.id} file too big for Telegram API: {e}")
+                try:
+                    await status_msg.edit_text(
+                        "⚠️ Файл слишком большой для обработки.\n\n"
+                        f"Максимальный размер: {max_size_mb:.0f} МБ\n\n"
+                        "Пожалуйста, отправьте более короткое голосовое сообщение."
+                    )
+                except Exception:
+                    pass
+            else:
+                logger.error(f"Telegram API error: {e}", exc_info=True)
+                try:
+                    await status_msg.edit_text(
+                        "❌ Произошла ошибка Telegram API. "
+                        "Пожалуйста, попробуйте еще раз."
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             logger.error(f"Error handling voice message: {e}", exc_info=True)
             try:
@@ -579,6 +676,42 @@ class BotHandlers:
             )
             return
 
+        # 3. CHECK FILE SIZE
+        # - If Client API enabled: allow up to 2 GB
+        # - If Client API disabled: limit to 20 MB (Bot API limit)
+        if audio.file_size:
+            if settings.telethon_enabled and self.telegram_client:
+                # Client API available: allow files up to 2 GB
+                max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+                if audio.file_size > max_size:
+                    file_size_mb = audio.file_size / 1024 / 1024
+                    await update.message.reply_text(
+                        "⚠️ Файл слишком большой для обработки.\n\n"
+                        "Максимальный размер: 2 ГБ\n"
+                        f"Размер вашего файла: {file_size_mb:.1f} МБ\n\n"
+                        "Пожалуйста, отправьте файл меньшего размера."
+                    )
+                    logger.warning(
+                        f"User {user.id} sent audio file too large: {file_size_mb:.1f} MB (max: 2 GB)"
+                    )
+                    return
+            else:
+                # Client API not available: limit to Bot API's 20 MB
+                if audio.file_size > settings.max_file_size_bytes:
+                    max_size_mb = settings.max_file_size_bytes / 1024 / 1024
+                    file_size_mb = audio.file_size / 1024 / 1024
+                    await update.message.reply_text(
+                        "⚠️ Файл слишком большой для обработки.\n\n"
+                        f"Максимальный размер: {max_size_mb:.0f} МБ\n"
+                        f"Размер вашего файла: {file_size_mb:.1f} МБ\n\n"
+                        "Пожалуйста, отправьте аудиофайл меньшего размера."
+                    )
+                    logger.warning(
+                        f"User {user.id} sent audio file too large: {file_size_mb:.1f} MB "
+                        f"(max: {max_size_mb:.0f} MB, Client API disabled)"
+                    )
+                    return
+
         # Send initial status
         status_msg = await update.message.reply_text("📥 Загружаю файл...")
 
@@ -604,9 +737,43 @@ class BotHandlers:
                 )
                 logger.info(f"Usage record {usage.id} created for user {user.id}")
 
-            # Download audio file
-            audio_file = await context.bot.get_file(audio.file_id)
-            file_path = await self.audio_handler.download_voice_message(audio_file, audio.file_id)
+            # Download audio file (hybrid: Bot API for ≤20MB, Client API for >20MB)
+            if audio.file_size and audio.file_size > settings.max_file_size_bytes:
+                # Large file: use Client API if available
+                if self.telegram_client and settings.telethon_enabled:
+                    logger.info(
+                        f"File size {audio.file_size} bytes exceeds Bot API limit "
+                        f"({settings.max_file_size_bytes} bytes), using Client API"
+                    )
+                    file_path = await self.telegram_client.download_large_file(
+                        message_id=update.message.message_id,
+                        chat_id=update.message.chat_id,
+                        output_dir=self.audio_handler.temp_dir,
+                    )
+                    if not file_path:
+                        raise RuntimeError("Client API download returned None")
+                else:
+                    # Client API not available - should not reach here due to earlier check
+                    # But kept as safety fallback
+                    max_size_mb = settings.max_file_size_bytes / 1024 / 1024
+                    file_size_mb = audio.file_size / 1024 / 1024
+                    await status_msg.edit_text(
+                        "⚠️ Файл слишком большой для обработки.\n\n"
+                        f"Максимальный размер: {max_size_mb:.0f} МБ\n"
+                        f"Размер вашего файла: {file_size_mb:.1f} МБ\n\n"
+                        "Client API не настроен. Пожалуйста, отправьте файл меньшего размера."
+                    )
+                    logger.warning(
+                        f"User {user.id} sent large audio file but Client API unavailable"
+                    )
+                    return
+            else:
+                # Normal file: use Bot API (existing flow)
+                audio_file = await context.bot.get_file(audio.file_id)
+                file_path = await self.audio_handler.download_voice_message(
+                    audio_file, audio.file_id
+                )
+
             logger.info(f"File downloaded: {file_path}")
 
             # STAGE 2: Update with duration after download
@@ -753,6 +920,28 @@ class BotHandlers:
                 # Note: Actual processing happens in _process_transcription callback
                 # which is called by queue worker. User gets updates via status_msg.
 
+        except BadRequest as e:
+            # Handle Telegram API specific errors
+            if "File is too big" in str(e):
+                max_size_mb = settings.max_file_size_bytes / 1024 / 1024
+                logger.warning(f"User {user.id} audio file too big for Telegram API: {e}")
+                try:
+                    await status_msg.edit_text(
+                        "⚠️ Файл слишком большой для обработки.\n\n"
+                        f"Максимальный размер: {max_size_mb:.0f} МБ\n\n"
+                        "Пожалуйста, отправьте аудиофайл меньшего размера."
+                    )
+                except Exception:
+                    pass
+            else:
+                logger.error(f"Telegram API error: {e}", exc_info=True)
+                try:
+                    await status_msg.edit_text(
+                        "❌ Произошла ошибка Telegram API. "
+                        "Пожалуйста, попробуйте еще раз."
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             logger.error(f"Error handling audio file: {e}", exc_info=True)
             try:
