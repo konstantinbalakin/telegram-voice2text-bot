@@ -17,6 +17,7 @@ from src.transcription import get_transcription_router, shutdown_transcription_r
 from src.bot.handlers import BotHandlers
 from src.services.queue_manager import QueueManager
 from src.services.llm_service import LLMFactory, LLMService
+from src.services.telegram_client import TelegramClientService
 from src.utils.logging_config import setup_logging, log_deployment_event, get_config_summary
 
 # Setup centralized logging
@@ -101,12 +102,31 @@ async def main() -> None:
     else:
         logger.info("LLM refinement disabled")
 
+    # Initialize Telethon Client API for large files (>20 MB)
+    telegram_client = None
+    if settings.telethon_enabled:
+        try:
+            telegram_client = TelegramClientService()
+            await telegram_client.start()
+            logger.info(
+                "Telethon Client API enabled for large files "
+                f"(session: {settings.telethon_session_name}.session)"
+            )
+        except ValueError as e:
+            logger.warning(f"Telethon Client API disabled: {e}")
+        except Exception as e:
+            logger.error(f"Failed to initialize Telethon client: {e}", exc_info=True)
+            logger.warning("Large file support (>20 MB) disabled")
+    else:
+        logger.info("Telethon Client API disabled (max file size: 20 MB)")
+
     # Create bot handlers
     bot_handlers = BotHandlers(
         whisper_service=transcription_router,
         audio_handler=audio_handler,
         queue_manager=queue_manager,
         llm_service=llm_service,
+        telegram_client=telegram_client,
     )
 
     # Build telegram bot application
@@ -176,6 +196,11 @@ async def main() -> None:
         if llm_service:
             await llm_service.close()
             logger.info("LLM service closed")
+
+        # Stop Telethon client
+        if telegram_client:
+            await telegram_client.stop()
+            logger.info("Telethon client stopped")
 
         await shutdown_transcription_router()
         await close_db()

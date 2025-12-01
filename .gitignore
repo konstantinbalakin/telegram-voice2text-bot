@@ -77,3 +77,7 @@ temp/
 
 debug/
 logs/
+
+# Telethon session files (Client API)
+*.session
+*.session-journal

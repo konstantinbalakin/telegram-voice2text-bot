@@ -7,9 +7,24 @@ from pydantic import Field
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # Telegram
+    # Telegram Bot API
     telegram_bot_token: str = Field(..., description="Telegram Bot API token")
     bot_mode: str = Field(default="polling", description="Bot mode: polling or webhook")
+
+    # Telegram Client API (MTProto) - for large files >20 MB
+    telegram_api_id: int | None = Field(
+        default=None, description="Telegram API ID from my.telegram.org (required for large files)"
+    )
+    telegram_api_hash: str | None = Field(
+        default=None,
+        description="Telegram API hash from my.telegram.org (required for large files)",
+    )
+    telethon_session_name: str = Field(
+        default="bot_client", description="Telethon session file name"
+    )
+    telethon_enabled: bool = Field(
+        default=False, description="Enable Telethon Client API for files >20 MB"
+    )
 
     # Transcription Provider Configuration
     whisper_providers: list[str] = Field(
@@ -88,6 +103,10 @@ class Settings(BaseSettings):
     )
     max_voice_duration_seconds: int = Field(
         default=300, description="Maximum voice message duration (5 minutes)"
+    )
+    max_file_size_bytes: int = Field(
+        default=20 * 1024 * 1024,
+        description="Maximum file size in bytes (20 MB - Telegram Bot API limit)",
     )
 
     # LLM Refinement Configuration

@@ -237,6 +237,11 @@ jobs:
             cat > .env <<EOF
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
             BOT_MODE=polling
+            # Client API for support large files
+            TELETHON_ENABLED=false
+            TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}
+            TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}
+            TELETHON_SESSION_NAME=bot_client
 
             # Transcription Provider Configuration
             WHISPER_PROVIDERS=["faster-whisper"]
