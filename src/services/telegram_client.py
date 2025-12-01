@@ -2,10 +2,10 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from telethon import TelegramClient
-from telethon.tl.types import Message
+from telethon import TelegramClient  # type: ignore[import-untyped]
+from telethon.tl.types import Message  # type: ignore[import-untyped]
 
 from src.config import settings
 
@@ -19,7 +19,7 @@ class TelegramClientService:
     Requires api_id and api_hash from my.telegram.org.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize Telethon client with bot credentials.
 
         Raises:
@@ -114,11 +114,13 @@ class TelegramClientService:
             logger.error(f"Failed to download large file: {e}", exc_info=True)
             raise RuntimeError(f"Large file download failed: {e}") from e
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "TelegramClientService":
         """Context manager entry: start client."""
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self, exc_type: Any, exc_val: Any, exc_tb: Any
+    ) -> None:
         """Context manager exit: stop client."""
         await self.stop()

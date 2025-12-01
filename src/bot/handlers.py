@@ -1011,11 +1011,8 @@ class BotHandlers:
         """
         logger.info(f"Processing transcription request {request.id}")
 
-        # Update status message
-        try:
-            await request.status_message.edit_text("⚙️ Начинаю обработку...")
-        except Exception as e:
-            logger.warning(f"Failed to update status message: {e}")
+        # Note: Status message already updated in voice_message_handler
+        # No need to update again here to avoid "Message is not modified" error
 
         # Start progress tracker
         progress = ProgressTracker(
