@@ -1,7 +1,9 @@
 # Configuration module
 from functools import lru_cache
+from typing import Any
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
 
 
 class Settings(BaseSettings):
@@ -19,6 +21,23 @@ class Settings(BaseSettings):
         default=None,
         description="Telegram API hash from my.telegram.org (required for large files)",
     )
+
+    @field_validator("telegram_api_id", mode="before")
+    @classmethod
+    def validate_telegram_api_id(cls, v: Any) -> int | None:
+        """Convert empty string to None for telegram_api_id."""
+        if v == "" or v is None:
+            return None
+        return int(v)
+
+    @field_validator("telegram_api_hash", mode="before")
+    @classmethod
+    def validate_telegram_api_hash(cls, v: Any) -> str | None:
+        """Convert empty string to None for telegram_api_hash."""
+        if v == "" or v is None:
+            return None
+        return str(v)
+
     telethon_session_name: str = Field(
         default="bot_client", description="Telethon session file name"
     )
