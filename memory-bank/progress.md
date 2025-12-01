@@ -20,10 +20,11 @@
 - **Phase 8.1**: ✅ Complete (2025-11-24) - DEBUG logging enhancement
 - **Phase 8.2**: ✅ Complete (2025-11-24) - LLM debug mode
 - **Phase 8.3**: ✅ Complete (2025-11-24) - LLM performance tracking
-- **Phase 9**: 🚀 IN PROGRESS (2025-11-30) - Large file support (Telethon Client API)
+- **Phase 9**: ✅ Complete (2025-11-30) - Large file support (Telethon Client API)
+- **Phase 10**: 📋 PLANNED (2025-12-02) - Interactive transcription processing (inline buttons)
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
 - **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking deployed)
-- Current focus (2025-11-30): Implement large file download (>20 MB), test with 24 MB file
+- Current focus (2025-12-02): Planning complete for interactive features, ready for implementation
 
 ## Delivered Milestones
 
@@ -1416,3 +1417,141 @@ llm_processing_time_seconds: NULL
 **Status**: ✅ Complete, PR #49 created
 **Branch**: `feature/llm-tracking`
 **PR**: https://github.com/konstantinbalakin/telegram-voice2text-bot/pull/49
+
+---
+
+### Phase 9: Large File Support (Telethon Client API) ✅ COMPLETE (2025-11-30)
+
+**Achievement**: Seamless support for audio files >20 MB up to 2 GB using Telegram Client API
+
+**Problem Solved**:
+- Telegram Bot API has 20 MB hard limit for file downloads
+- Users couldn't process larger audio files
+- Needed transparent solution without changing UX
+
+**Technical Decision**: **Telethon over Pyrogram**
+- Telethon v1.42.0 (November 2025) actively maintained
+- Pyrogram v2.0.106 (April 2023) no updates for 20+ months
+- Telethon more stable, official library
+
+**Implementation**:
+
+**1. New Service Layer** (`src/services/telegram_client.py`)
+- Telethon client for MTProto Client API
+- Session-based authentication (persistent across restarts)
+- Context manager support
+- Supports files up to 2 GB (Telegram limit)
+
+**2. Hybrid Download Strategy** (`src/bot/handlers.py`)
+```python
+if file_size > 20 MB:
+    # Use Client API (Telethon)
+    file_path = await telegram_client.download_large_file(...)
+else:
+    # Use Bot API (existing flow)
+    file_path = await audio_handler.download_voice_message(...)
+```
+
+**3. Dynamic File Size Limits**
+- Client API enabled: 2 GB max
+- Client API disabled: 20 MB max
+- Graceful fallback with clear messages
+
+**4. Configuration** (`src/config.py`)
+```python
+telegram_api_id: int | None
+telegram_api_hash: str | None
+telethon_session_name: str = "bot_client"
+telethon_enabled: bool = False  # Feature flag
+```
+
+**5. Bot Initialization** (`src/main.py`)
+- Start Telethon client on startup (if enabled)
+- Automatic session creation/loading
+- Graceful shutdown with disconnect
+- Error handling for missing credentials
+
+**Authentication Flow**:
+1. Get API credentials from https://my.telegram.org (one-time)
+2. Add to `.env`: TELETHON_ENABLED, TELEGRAM_API_ID, TELEGRAM_API_HASH
+3. Bot creates session file automatically (bot_client.session)
+4. Session persists across restarts
+5. Bot tokens authenticate automatically (no phone/SMS)
+
+**Files Created**:
+- `src/services/telegram_client.py`
+- `memory-bank/plans/2025-11-30-large-file-support-telethon.md`
+
+**Files Modified**:
+- `pyproject.toml` - Added telethon, cryptg dependencies
+- `src/config.py` - Client API configuration
+- `src/services/__init__.py` - Export TelegramClientService
+- `src/bot/handlers.py` - Hybrid download logic
+- `src/main.py` - Telethon initialization
+- `.env.example` - Client API setup
+- `.gitignore` - Exclude *.session files
+
+**Benefits**:
+- ✅ 100x file size increase (20 MB → 2 GB)
+- ✅ Seamless user experience
+- ✅ Graceful degradation
+- ✅ Production-ready
+
+**Status**: ✅ Complete, ready for production deployment with API credentials
+
+---
+
+### Phase 10: Interactive Transcription Processing 📋 PLANNED (2025-12-02)
+
+**Goal**: Add inline button-based interactive transcription processing features
+
+**User Requirements**:
+- **Viewing modes** (mutually exclusive):
+  - "Исходный текст" (default, always shown)
+  - "Структурировать" (LLM formatting: punctuation, paragraphs, lists)
+  - "О чем текст?" (LLM brief summary)
+- **Length variations** (5 levels):
+  - shorter ← short ← default → long → longer
+  - Dynamic buttons appear when mode activated
+  - Incremental generation from current level
+- **Options** (apply to any mode):
+  - Emoji: 3 levels (0, 1-2 emoji, 3-5 emoji)
+  - Timestamps: on/off for audio >5 min
+- **Additional features**:
+  - File handling for texts >4096 chars
+  - Retranscription: 2 variants (longer free, faster paid)
+
+**Planning Complete**: ✅ (2025-12-02)
+- **Approach**: Variant 1 - Phased MVP (8 implementation phases)
+- **Database**: SQLite (no PostgreSQL migration needed)
+- **Feature flags**: Full control via .env variables
+
+**Implementation Plan**:
+- **File**: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
+- **Total time**: 13-18 days
+- **Phases**: 8 phases, each 1-3 days
+- **Database**: 3 new tables (states, variants, segments)
+- **Modules**: callbacks.py, keyboards.py, text_processor.py
+
+**8 Phases**:
+1. Basic infrastructure (DB, segments, callbacks)
+2. Structured mode (LLM formatting)
+3. Length variations (5 levels)
+4. Summary mode (LLM brief)
+5. Emoji option (3 levels)
+6. Timestamps (segment formatting)
+7. File handling (>4096 chars)
+8. Retranscription (2 methods)
+
+**Key Technical Decisions**:
+- State management via TranscriptionState table
+- Callback data encoding (64-byte limit)
+- On-demand variant generation with caching
+- Save faster-whisper segments to DB
+- Feature flags for all functionality
+- Graceful LLM failure handling
+
+**Execution Instructions**: Provided for running each phase in separate chats
+
+**Status**: 📋 Ready for implementation
+**Next**: User will begin Phase 1 when ready

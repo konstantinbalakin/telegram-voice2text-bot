@@ -2,14 +2,14 @@
 
 ## Current Status
 
-**Phase**: Phase 9 - Large File Support (Telethon Client API) 🚀 IN PROGRESS (2025-11-30)
-**Date**: 2025-11-30
-**Stage**: Implementing hybrid download strategy for files >20 MB
-**Branch**: feature/large-file-support-telethon
+**Phase**: Phase 10 - Interactive Transcription Processing 📋 PLANNED (2025-12-02)
+**Date**: 2025-12-02
+**Stage**: Planning completed, ready for phased implementation
+**Branch**: main (planning complete)
 **Production Version**: v0.0.3+ (LLM tracking deployed, stable)
 **Production Status**: ✅ OPERATIONAL - All systems stable
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**, **hybrid transcription acceleration ✅**, **DEBUG logging enhancement ✅**, **LLM debug mode ✅**, **LLM performance tracking ✅**
-**Next Phase**: Test large file download (24 MB), deploy to production, monitor performance
+**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**, **hybrid transcription acceleration ✅**, **DEBUG logging enhancement ✅**, **LLM debug mode ✅**, **LLM performance tracking ✅**, **large file support (Telethon) ✅**
+**Next Phase**: Begin Phase 10 implementation - interactive inline buttons for transcription processing (8 phases planned)
 
 ## Production Configuration Finalized ✅
 
@@ -145,6 +145,67 @@ telethon_enabled: bool = False  # Feature flag
 - ✅ Production-ready (mature Telethon library)
 
 **Documentation**: Full implementation plan in `memory-bank/plans/2025-11-30-large-file-support-telethon.md`
+
+---
+
+### PHASE 10 PLANNING: INTERACTIVE TRANSCRIPTION PROCESSING 📋 (2025-12-02)
+**Achievement**: Comprehensive implementation plan for inline button-based interactive transcription features
+
+**Feature Overview**:
+User requests interactive transcription processing with inline Telegram buttons for:
+- **3 viewing modes**: Original (default), Structured (LLM formatting), Summary (LLM brief)
+- **Length variations**: 5 levels (shorter ← short ← default → long → longer)
+- **Options**: Emoji levels (0, 1-2, 3-5) and Timestamps (on/off for >5 min audio)
+- **File handling**: Hybrid text/file approach for >4096 chars
+- **Retranscription**: Two methods (longer free quality, faster paid quality)
+
+**Planning Approach**:
+- Selected **Variant 1**: Phased MVP approach (8 implementation phases)
+- Confirmed **SQLite** database (no PostgreSQL needed)
+- Added **feature flags** for enabling/disabling functionality via environment variables
+
+**Implementation Plan Created**:
+- **File**: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
+- **Structure**:
+  - 8 detailed phases with step-by-step implementation
+  - Database schema: 3 new tables (transcription_states, transcription_variants, transcription_segments)
+  - New modules: callbacks.py, keyboards.py, text_processor.py
+  - Feature flags configuration
+  - LLM prompts for each operation
+  - Success criteria and testing plans
+  - Time estimates: 13-18 days total development
+
+**8 Implementation Phases**:
+1. **Phase 1** (2-3 days): Basic infrastructure - DB models, segments storage, callback handler
+2. **Phase 2** (2-3 days): "Structured" mode - LLM formatting, caching, mode switching
+3. **Phase 3** (2 days): Length variations - Dynamic buttons, incremental generation
+4. **Phase 4** (1-2 days): "Summary" mode - LLM brief summary integration
+5. **Phase 5** (1-2 days): Emoji option - LLM-based emoji addition
+6. **Phase 6** (2 days): Timestamps - Segment formatting, conditional button
+7. **Phase 7** (1-2 days): File handling - Hybrid approach for >4096 chars
+8. **Phase 8** (2-3 days): Retranscription - Audio storage, two quality methods
+
+**Key Technical Decisions**:
+- **State Management**: TranscriptionState table tracks UI state per message
+- **Callback Data**: Compact encoding `action:usage_id:params` (64-byte limit)
+- **Variant Caching**: On-demand generation with max 10 variants per transcription
+- **Segments Storage**: Save faster-whisper segments (start, end, text) to DB
+- **Feature Flags**: Comprehensive control via .env (INTERACTIVE_MODE_ENABLED, etc.)
+- **Graceful Degradation**: Fallbacks for LLM failures, aggressive caching for cost control
+
+**Documentation Delivered**:
+- Detailed implementation plan with all technical specifications
+- Execution instructions for running implementation by phases in separate chats
+- Clear guidance on using `/workflow:execute` for each phase
+
+**Next Steps**:
+1. User will implement phases in separate chat sessions to avoid context overload
+2. Each phase can be invoked independently with reference to the plan
+3. Feature flags allow gradual rollout and testing
+
+**Status**: ✅ Planning complete, ready for implementation when user chooses to begin
+
+**Plan Location**: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
 
 ---
 
