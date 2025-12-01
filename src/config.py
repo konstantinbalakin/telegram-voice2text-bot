@@ -105,7 +105,8 @@ class Settings(BaseSettings):
         default=300, description="Maximum voice message duration (5 minutes)"
     )
     max_file_size_bytes: int = Field(
-        default=20 * 1024 * 1024, description="Maximum file size in bytes (20 MB - Telegram Bot API limit)"
+        default=20 * 1024 * 1024,
+        description="Maximum file size in bytes (20 MB - Telegram Bot API limit)",
     )
 
     # LLM Refinement Configuration

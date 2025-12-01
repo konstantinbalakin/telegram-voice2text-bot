@@ -437,9 +437,7 @@ class BotHandlers:
                         f"Размер вашего файла: {file_size_mb:.1f} МБ\n\n"
                         "Client API не настроен. Пожалуйста, отправьте более короткое сообщение."
                     )
-                    logger.warning(
-                        f"User {user.id} sent large file but Client API unavailable"
-                    )
+                    logger.warning(f"User {user.id} sent large file but Client API unavailable")
                     return
             else:
                 # Normal file: use Bot API (existing flow)
@@ -611,8 +609,7 @@ class BotHandlers:
                 logger.error(f"Telegram API error: {e}", exc_info=True)
                 try:
                     await status_msg.edit_text(
-                        "❌ Произошла ошибка Telegram API. "
-                        "Пожалуйста, попробуйте еще раз."
+                        "❌ Произошла ошибка Telegram API. " "Пожалуйста, попробуйте еще раз."
                     )
                 except Exception:
                     pass
@@ -937,8 +934,7 @@ class BotHandlers:
                 logger.error(f"Telegram API error: {e}", exc_info=True)
                 try:
                     await status_msg.edit_text(
-                        "❌ Произошла ошибка Telegram API. "
-                        "Пожалуйста, попробуйте еще раз."
+                        "❌ Произошла ошибка Telegram API. " "Пожалуйста, попробуйте еще раз."
                     )
                 except Exception:
                     pass

@@ -119,8 +119,6 @@ class TelegramClientService:
         await self.start()
         return self
 
-    async def __aexit__(
-        self, exc_type: Any, exc_val: Any, exc_tb: Any
-    ) -> None:
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit: stop client."""
         await self.stop()
