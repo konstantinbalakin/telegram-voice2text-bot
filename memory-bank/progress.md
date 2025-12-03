@@ -21,10 +21,11 @@
 - **Phase 8.2**: ✅ Complete (2025-11-24) - LLM debug mode
 - **Phase 8.3**: ✅ Complete (2025-11-24) - LLM performance tracking
 - **Phase 9**: ✅ Complete (2025-11-30) - Large file support (Telethon Client API)
-- **Phase 10**: 📋 PLANNED (2025-12-02) - Interactive transcription processing (inline buttons)
+- **Phase 10.1**: ✅ Complete (2025-12-03) - Interactive transcription Phase 1 (infrastructure)
+- **Phase 10.2**: ⏳ NEXT - Interactive transcription Phase 2 (Structured Mode)
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking deployed)
-- Current focus (2025-12-02): Planning complete for interactive features, ready for implementation
+- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1)
+- Current focus (2025-12-03): Phase 10.1 complete, ready for Phase 10.2 (Structured Mode)
 
 ## Delivered Milestones
 
@@ -1501,57 +1502,210 @@ telethon_enabled: bool = False  # Feature flag
 
 ---
 
-### Phase 10: Interactive Transcription Processing 📋 PLANNED (2025-12-02)
+### Phase 10.1: Interactive Transcription Infrastructure ✅ COMPLETE (2025-12-03)
 
-**Goal**: Add inline button-based interactive transcription processing features
+**Achievement**: Foundation for interactive transcription features - database models, keyboard system, callback handlers, and segment extraction
 
-**User Requirements**:
-- **Viewing modes** (mutually exclusive):
-  - "Исходный текст" (default, always shown)
-  - "Структурировать" (LLM formatting: punctuation, paragraphs, lists)
-  - "О чем текст?" (LLM brief summary)
-- **Length variations** (5 levels):
-  - shorter ← short ← default → long → longer
-  - Dynamic buttons appear when mode activated
-  - Incremental generation from current level
-- **Options** (apply to any mode):
-  - Emoji: 3 levels (0, 1-2 emoji, 3-5 emoji)
-  - Timestamps: on/off for audio >5 min
-- **Additional features**:
-  - File handling for texts >4096 chars
-  - Retranscription: 2 variants (longer free, faster paid)
+**Goal**: Implement Phase 1 of interactive transcription plan - create infrastructure for inline button-based features
 
-**Planning Complete**: ✅ (2025-12-02)
-- **Approach**: Variant 1 - Phased MVP (8 implementation phases)
-- **Database**: SQLite (no PostgreSQL migration needed)
-- **Feature flags**: Full control via .env variables
+**Problem Solved**:
+- No user interaction with transcription results
+- Users needed ability to request variations (structured, summary, length adjustments)
+- Need state management for tracking UI interactions
+- Need segment-level data for timestamp features
 
-**Implementation Plan**:
-- **File**: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
-- **Total time**: 13-18 days
-- **Phases**: 8 phases, each 1-3 days
-- **Database**: 3 new tables (states, variants, segments)
-- **Modules**: callbacks.py, keyboards.py, text_processor.py
+**Implementation** (9 major components):
 
-**8 Phases**:
-1. Basic infrastructure (DB, segments, callbacks)
-2. Structured mode (LLM formatting)
-3. Length variations (5 levels)
-4. Summary mode (LLM brief)
-5. Emoji option (3 levels)
-6. Timestamps (segment formatting)
-7. File handling (>4096 chars)
-8. Retranscription (2 methods)
+**1. Database Schema** (`src/storage/models.py` +140 lines)
+- `TranscriptionState`: UI state tracking
+  - Tracks active mode, length level, emoji level, timestamps
+  - Links to Usage record (usage_id)
+  - Stores message_id and chat_id for message editing
+- `TranscriptionVariant`: Cached text variations
+  - Composite unique key (usage_id, mode, length_level, emoji_level, timestamps_enabled)
+  - Stores generated_by, llm_model, processing_time
+  - Tracks last_accessed_at for cache management
+- `TranscriptionSegment`: Timestamp data from faster-whisper
+  - Stores segment_index, start_time, end_time, text
+  - Unique constraint on (usage_id, segment_index)
 
-**Key Technical Decisions**:
-- State management via TranscriptionState table
-- Callback data encoding (64-byte limit)
-- On-demand variant generation with caching
-- Save faster-whisper segments to DB
-- Feature flags for all functionality
-- Graceful LLM failure handling
+**2. Alembic Migration** (`alembic/versions/29b64c26ec8d_*.py`)
+- Created 3 new tables with indexes and constraints
+- Backward compatible (nullable foreign keys)
+- Successfully applied to production database
 
-**Execution Instructions**: Provided for running each phase in separate chats
+**3. Repository Layer** (`src/storage/repositories.py` +200 lines)
+- `TranscriptionStateRepository`: Create, get by usage_id/message_id, update
+- `TranscriptionVariantRepository`: Create, get variant with cache hit tracking
+- `TranscriptionSegmentRepository`: Batch creation, get by usage_id ordered
 
-**Status**: 📋 Ready for implementation
-**Next**: User will begin Phase 1 when ready
+**4. Keyboard Manager** (`src/bot/keyboards.py` NEW FILE, 77 lines)
+- `encode_callback_data()`: Compact format within 64-byte Telegram limit
+  - Format: `action:usage_id:param1=val1,param2=val2`
+  - Example: `mode:125:mode=original` (24 bytes)
+  - Validation raises ValueError if exceeds limit
+- `decode_callback_data()`: Parse callback data into dict
+- `create_transcription_keyboard()`: Generate InlineKeyboardMarkup
+  - Phase 1: Single button "Исходный текст (вы здесь)"
+  - Respects feature flags
+
+**5. Callback Handler** (`src/bot/callbacks.py` NEW FILE, 140 lines)
+- `CallbackHandlers` class with routing logic
+- `handle_callback_query()`: Main entry point, decodes data, routes to handlers
+- `handle_mode_change()`: Phase 1 stub (only 'original' mode supported)
+- Error handling with user-friendly messages
+- Graceful degradation for unimplemented features
+
+**6. Segment Extraction** (`src/transcription/providers/faster_whisper_provider.py`)
+- Modified to return segments from faster-whisper
+- Converts to `TranscriptionSegment` dataclass
+- Included in `TranscriptionResult.segments` field
+
+**7. Integration** (`src/bot/handlers.py` +60 lines)
+- `_create_interactive_state_and_keyboard()`: Helper method
+  - Creates TranscriptionState after message sent
+  - Saves segments if duration > 300s (configurable threshold)
+  - Generates keyboard
+- Integration in 3 message paths:
+  - LLM refined short text
+  - LLM refined long text (multiple messages)
+  - Direct result without LLM
+- Uses `edit_reply_markup()` to add keyboard after message sent
+
+**8. Main Entry Point** (`src/main.py` +30 lines)
+- `callback_query_wrapper()`: Session management for callbacks
+  - Creates repositories with async session per callback
+  - Instantiates CallbackHandlers
+  - Handles type annotations correctly
+- Registered `CallbackQueryHandler` conditionally
+- **CRITICAL FIX**: Added `allowed_updates=Update.ALL_TYPES` to `start_polling()`
+  - Without this, Telegram doesn't send callback_query updates
+  - Caused buttons to show "Загрузка..." indefinitely
+- Debug handler for all updates (`TypeHandler` with logging)
+
+**9. Feature Flags** (`src/config.py` +18 lines)
+- `interactive_mode_enabled`: Master switch (default: False)
+- Phase-specific flags for future features (all default: False):
+  - `enable_structured_mode`, `enable_summary_mode`
+  - `enable_emoji_option`, `enable_timestamps_option`
+  - `enable_length_variations`, `enable_retranscribe`
+- Limits configuration:
+  - `max_cached_variants_per_transcription`: 10
+  - `variant_cache_ttl_days`: 7
+  - `timestamps_min_duration`: 300 (5 minutes)
+
+**Critical Bugs Fixed**:
+
+**Bug 1: Callback Queries Not Received** (CRITICAL)
+- **Symptom**: Button appeared but clicking showed "Загрузка..." indefinitely
+- **Root Cause**: python-telegram-bot doesn't receive callback_query updates without explicit `allowed_updates` configuration
+- **Fix**: Added `allowed_updates=Update.ALL_TYPES` to `start_polling()` in `src/main.py:208`
+- **Impact**: Buttons now work correctly, callback handler receives events
+
+**Bug 2: UnboundLocalError with draft_text**
+- **Symptom**: When `LLM_REFINEMENT_ENABLED=false`, got `UnboundLocalError`
+- **Root Cause**: Variable `draft_text` undefined outside `if needs_refinement` block
+- **Fix**: Changed line 1310 in `src/bot/handlers.py` to use `final_text` directly
+- **Impact**: Bot works correctly with LLM disabled
+
+**Files Created** (3 files, ~360 lines):
+- `src/bot/keyboards.py` (77 lines)
+- `src/bot/callbacks.py` (140 lines)
+- `alembic/versions/29b64c26ec8d_add_interactive_transcription_tables.py`
+- `PHASE1_ACCEPTANCE.md` (274 lines) - Russian acceptance testing guide
+
+**Files Modified** (8 files):
+- `src/storage/models.py` (+140 lines) - 3 new models
+- `src/storage/repositories.py` (+200 lines) - 3 new repositories
+- `src/transcription/providers/faster_whisper_provider.py` - Return segments
+- `src/bot/handlers.py` (+60 lines) - Keyboard integration
+- `src/main.py` (+30 lines) - Callback handler registration + allowed_updates fix
+- `src/config.py` (+18 lines) - Feature flags
+- `src/bot/__init__.py` - Export CallbackHandlers
+- `src/services/__init__.py` - Export keyboard and callback modules
+
+**Testing & Quality**:
+- ✅ All 108 unit tests passing
+- ✅ Type checking (mypy): Success, no issues found
+- ✅ Linting (ruff): All checks passed
+- ✅ Code formatting (black): Applied
+- ✅ Database migration: Applied successfully
+- ✅ Manual acceptance testing: All 4 scenarios completed
+  - Scenario 1: Button appears for short audio ✅
+  - Scenario 2: Button click shows loading then dismisses ✅
+  - Scenario 3: Segments saved for long audio >5 min ✅
+  - Scenario 4: Feature flag disables functionality ✅
+
+**User Experience**:
+```
+User sends voice message (30s)
+  ↓
+Bot transcribes with faster-whisper
+  ↓
+Bot sends result with inline button:
+┌────────────────────────────────┐
+│ Transcription text here...     │
+│                                 │
+│ [Исходный текст (вы здесь)]   │
+└────────────────────────────────┘
+  ↓
+User clicks button
+  ↓
+Telegram shows "Загрузка..." briefly
+  ↓
+Message unchanged (Phase 1 stub - already in 'original' mode)
+Logs show: "Already in original mode for usage_id=X"
+```
+
+**Production Configuration**:
+```bash
+# Enable interactive mode
+INTERACTIVE_MODE_ENABLED=true
+
+# Phase 1: Only basic infrastructure, future features disabled
+ENABLE_STRUCTURED_MODE=false
+ENABLE_SUMMARY_MODE=false
+ENABLE_EMOJI_OPTION=false
+ENABLE_TIMESTAMPS_OPTION=false
+ENABLE_LENGTH_VARIATIONS=false
+ENABLE_RETRANSCRIBE=false
+
+# Limits
+MAX_CACHED_VARIANTS_PER_TRANSCRIPTION=10
+VARIANT_CACHE_TTL_DAYS=7
+TIMESTAMPS_MIN_DURATION=300  # 5 minutes
+```
+
+**Key Patterns Established**:
+1. **allowed_updates Configuration**: CRITICAL for receiving callback_query updates from inline buttons
+2. **Send Message Before Keyboard**: Message ID must exist before creating TranscriptionState, add keyboard via `edit_reply_markup()`
+3. **Session Management for Callbacks**: Create repositories with async session context per callback invocation
+4. **Callback Data Encoding**: Compact format within 64-byte limit with validation
+5. **Segment Threshold**: Only save segments for audio >5 minutes to optimize storage
+6. **Feature Flag System**: Granular control with master switch + phase-specific flags
+7. **Graceful Stub Implementation**: Phase 1 acknowledges clicks but doesn't change state (foundation for future phases)
+
+**Impact**:
+- ✅ Database infrastructure ready for all 8 planned phases
+- ✅ Callback system working correctly (after allowed_updates fix)
+- ✅ Segment extraction operational for timestamp features
+- ✅ Keyboard generation framework extensible for future modes
+- ✅ State management tracks user interactions
+- ✅ Variant caching system ready for LLM-generated alternatives
+- ✅ Feature flags enable safe gradual rollout
+
+**Next Steps (Phase 2: Structured Mode)**:
+- Implement LLM-based text structuring (punctuation, paragraphs)
+- Add "Структурированный" button to keyboard
+- Implement mode switching with message editing
+- Cache structured variants in database
+- Update keyboard state indicator ("вы здесь")
+
+**Status**: ✅ COMPLETE - All acceptance criteria met, ready for Phase 2
+**Branch**: `docs/phase10-interactive-transcription-plan` (documentation branch)
+**Completion Date**: 2025-12-03
+
+**Documentation**:
+- Implementation plan: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
+- Acceptance guide: `PHASE1_ACCEPTANCE.md` (Russian)
+- Memory Bank updated: `activeContext.md`, `progress.md`

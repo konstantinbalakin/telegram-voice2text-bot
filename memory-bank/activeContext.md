@@ -1,1583 +1,302 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status
+## Current Status (2025-12-03)
 
-**Phase**: Phase 10 - Interactive Transcription Processing 📋 PLANNED (2025-12-02)
-**Date**: 2025-12-02
-**Stage**: Planning completed, ready for phased implementation
-**Branch**: main (planning complete)
-**Production Version**: v0.0.3+ (LLM tracking deployed, stable)
-**Production Status**: ✅ OPERATIONAL - All systems stable
-**Completed**: Initial deployment, database fix, DNS configuration, swap setup, CI/CD path filtering, documentation reorganization, production bug fix, queue-based concurrency control, database migration system, production limit optimization, long transcription message splitting, **centralized logging ✅**, **automatic semantic versioning ✅**, **workflow fixes ✅**, **fully automatic deployment ✅**, **queue position calculation fix ✅**, **file naming conflict fix ✅**, **dynamic queue notifications ✅**, **hybrid transcription acceleration ✅**, **DEBUG logging enhancement ✅**, **LLM debug mode ✅**, **LLM performance tracking ✅**, **large file support (Telethon) ✅**
-**Next Phase**: Begin Phase 10 implementation - interactive inline buttons for transcription processing (8 phases planned)
+**Phase**: Phase 10 - Interactive Transcription Processing 🚀
+**Stage**: Phase 10.1 COMPLETE ✅ → Ready for Phase 10.2 (Structured Mode)
+**Branch**: `docs/phase10-interactive-transcription-plan`
+**Production Version**: v0.0.3+
+**Production Status**: ✅ OPERATIONAL
 
-## Production Configuration Finalized ✅
+### Infrastructure
+- **VPS**: 3GB RAM, 4 CPU cores (Russian VPS, ~$10-15/month)
+- **Docker**: Automated builds and deployments
+- **CI/CD**: Fully automatic (GitHub Actions)
+- **Database**: SQLite with automated migrations
+- **Bot**: Live on Telegram, healthy, responding
 
-**Decision**: `faster-whisper / medium / int8 / beam1`
+### Current Configuration
 
-After comprehensive manual analysis of benchmark transcripts (30+ configurations tested across 7s, 24s, 163s audio samples):
+**Whisper Model**: `faster-whisper / medium / int8 / beam1`
+- Performance: RTF ~0.6x (60s audio → ~36s)
+- Quality: Excellent for Russian language
+- Resources: ~2GB RAM peak
 
-- **Performance on Production VPS (4 CPU + 3GB RAM)**:
-  - RTF ~0.6x for medium model (60s audio → ~36s processing)
-  - RTF ~0.45x achievable with optimization
-- **Quality**: Excellent for Russian language, good accuracy on long informal speech
-- **Resources**: ~2GB RAM peak for medium model
-- **Tradeoff**: Prioritized quality over speed for better user experience
+**Hybrid Transcription** (Optional, disabled by default):
+- Short audio (<20s): Quality model directly
+- Long audio (≥20s): Fast draft (small model) + LLM refinement
+- Performance: 6-9x faster for long audio
+- Cost: ~$0.0002 per 60s (DeepSeek V3)
 
-Alternative faster configurations (tiny, small) showed unacceptable quality degradation (22-78% similarity on some samples).
+**Queue System**:
+- FIFO with atomic position tracking
+- Sequential processing (max_concurrent=1)
+- Live progress updates every 5s
+- Duration limit: 120s max, Queue size: 10 requests
 
-📄 Full analysis: `memory-bank/benchmarks/final-decision.md`
+---
 
-## Recent Changes
+## Recent Developments (Last 2 Weeks)
 
-### LARGE FILE SUPPORT IMPLEMENTATION 🚀 (2025-11-30)
-**Achievement**: Hybrid download strategy for files >20 MB using Telegram Client API
+### ✅ Phase 10.1: Interactive Transcription - Phase 1 COMPLETE (2025-12-03)
 
-**Problem Solved**:
-- Bot API has hard 20 MB limit for file downloads via `getFile()`
-- Users cannot process audio files larger than 20 MB
-- Need transparent solution without changing user experience
+**Achievement**: Foundation infrastructure for inline button-based transcription features
 
-**Solution Implemented**: Hybrid Download Strategy
+**What Was Implemented**:
+1. **Database Models** - 3 new tables:
+   - `transcription_states`: UI state tracking per message
+   - `transcription_variants`: Cached text variations (mode, length, emoji, timestamps)
+   - `transcription_segments`: faster-whisper segments for timestamp features
 
-**Technical Decision**: Telethon over Pyrogram
-- **Telethon**: v1.42.0 (November 2025) - actively maintained ✅
-- **Pyrogram**: v2.0.106 (April 2023) - no updates for 20+ months ❌
-- Active forks exist (pyrofork, pyrotgfork) but official Telethon more stable
+2. **Callback System**:
+   - `src/bot/keyboards.py`: Callback data encoding, keyboard generation
+   - `src/bot/callbacks.py`: Callback routing and handlers
+   - Compact format: `action:usage_id:params` (64-byte limit validation)
 
-**Architecture Changes**:
+3. **Segment Extraction**: Modified faster-whisper provider to return segments
 
-**1. New Service Layer** (`src/services/telegram_client.py`):
-```python
-class TelegramClientService:
-    - Telethon client for MTProto Client API
-    - Supports files up to 2 GB (Telegram limit)
-    - Session-based authentication (persistent across restarts)
-    - Context manager support for lifecycle management
-```
-
-**2. Hybrid Download Logic** (`src/bot/handlers.py`):
-```python
-if file_size > 20 MB:
-    # Use Client API (Telethon)
-    file_path = await telegram_client.download_large_file(
-        message_id=update.message.message_id,
-        chat_id=update.message.chat_id,
-        output_dir=temp_dir
-    )
-else:
-    # Use Bot API (existing flow)
-    voice_file = await context.bot.get_file(voice.file_id)
-    file_path = await audio_handler.download_voice_message(...)
-```
-
-**3. Dynamic File Size Limits**:
-- **Client API Enabled**: 2 GB max (Telegram limit)
-- **Client API Disabled**: 20 MB max (Bot API limit)
-- Graceful fallback with clear user messages
-
-**4. Configuration** (`src/config.py`):
-```python
-# New settings
-telegram_api_id: int | None  # From my.telegram.org
-telegram_api_hash: str | None  # From my.telegram.org
-telethon_session_name: str = "bot_client"
-telethon_enabled: bool = False  # Feature flag
-```
-
-**5. Bot Initialization** (`src/main.py`):
-- Start Telethon client on bot startup (if enabled)
-- Automatic session creation/loading
-- Graceful shutdown with client disconnect
-- Error handling for missing credentials
-
-**Implementation Details**:
-
-**Files Created**:
-- `src/services/telegram_client.py` - Telethon client wrapper
-- `memory-bank/plans/2025-11-30-large-file-support-telethon.md` - Implementation plan
-
-**Files Modified**:
-- `pyproject.toml` - Added `telethon = "^1.42.0"`, `cryptg = "^0.4.0"` (optional)
-- `src/config.py` - Added Client API configuration fields
-- `src/services/__init__.py` - Export TelegramClientService
-- `src/bot/handlers.py` - Hybrid download logic for voice & audio handlers
-- `src/main.py` - Telethon client initialization and cleanup
-- `.env.example` - Added Client API setup instructions
-- `.gitignore` - Exclude `*.session`, `*.session-journal` files
-
-**Authentication Flow**:
-1. Obtain `api_id` and `api_hash` from https://my.telegram.org (one-time)
-2. Add to `.env`: `TELETHON_ENABLED=true`, `TELEGRAM_API_ID=...`, `TELEGRAM_API_HASH=...`
-3. Bot creates/loads session file (`bot_client.session`) automatically
-4. Session persists across restarts (no re-authentication needed)
-5. Bot tokens authenticate automatically (no phone number/SMS needed)
-
-**Security**:
-- Session files stored locally, excluded from git
-- Credentials in `.env` (never committed)
-- Session file requires secure VPS storage
+4. **Feature Flags**: Master switch + phase-specific flags for gradual rollout
 
 **User Experience**:
-- **≤20 MB files**: Fast Bot API download (existing flow)
-- **>20 MB files**: Transparent Client API fallback
-- **No user action required**: Works seamlessly
-- Clear error messages if Client API unavailable
+```
+[Transcription text]
 
-**Testing Status**:
-- ✅ Telethon installed (v1.42.0)
-- ✅ Code implemented and integrated
-- ✅ Configuration updated
-- ⏳ Pending: Test with 24 MB file
-- ⏳ Pending: Production deployment
+[Исходный текст (вы здесь)]  ← Inline button
+```
 
-**Next Steps**:
-1. Configure Client API credentials in production `.env`
-2. Test with 24 MB audio file
-3. Verify session persistence across restarts
-4. Monitor download performance and errors
-5. Document user-facing changes
+**Critical Bugs Fixed**:
+1. **allowed_updates=Update.ALL_TYPES** - CRITICAL FIX
+   - Required for Telegram to send callback_query updates
+   - Without this: buttons show "Загрузка..." indefinitely
+   - Location: `src/main.py:219`
 
-**Key Benefits**:
-- ✅ Support files up to 2 GB (100x increase from 20 MB)
-- ✅ Seamless user experience (no workflow changes)
-- ✅ Graceful degradation (works without Client API)
-- ✅ Production-ready (mature Telethon library)
+2. **draft_text UnboundLocalError** - Fixed variable scope issue when LLM disabled
 
-**Documentation**: Full implementation plan in `memory-bank/plans/2025-11-30-large-file-support-telethon.md`
+**Status**: ✅ Tested, deployed, operational
+**Next**: Phase 2 - Structured Mode (LLM-based text formatting with punctuation, paragraphs)
 
 ---
 
-### PHASE 10 PLANNING: INTERACTIVE TRANSCRIPTION PROCESSING 📋 (2025-12-02)
-**Achievement**: Comprehensive implementation plan for inline button-based interactive transcription features
+### ✅ Large File Support via Telethon (2025-11-30)
 
-**Feature Overview**:
-User requests interactive transcription processing with inline Telegram buttons for:
-- **3 viewing modes**: Original (default), Structured (LLM formatting), Summary (LLM brief)
-- **Length variations**: 5 levels (shorter ← short ← default → long → longer)
-- **Options**: Emoji levels (0, 1-2, 3-5) and Timestamps (on/off for >5 min audio)
-- **File handling**: Hybrid text/file approach for >4096 chars
-- **Retranscription**: Two methods (longer free quality, faster paid quality)
+**Achievement**: Support files up to 2 GB (100x increase from 20 MB)
 
-**Planning Approach**:
-- Selected **Variant 1**: Phased MVP approach (8 implementation phases)
-- Confirmed **SQLite** database (no PostgreSQL needed)
-- Added **feature flags** for enabling/disabling functionality via environment variables
+**Solution**: Hybrid download strategy
+- ≤20 MB: Bot API (fast, existing)
+- >20 MB: Telethon Client API (MTProto, up to 2 GB)
 
-**Implementation Plan Created**:
-- **File**: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
-- **Structure**:
-  - 8 detailed phases with step-by-step implementation
-  - Database schema: 3 new tables (transcription_states, transcription_variants, transcription_segments)
-  - New modules: callbacks.py, keyboards.py, text_processor.py
-  - Feature flags configuration
-  - LLM prompts for each operation
-  - Success criteria and testing plans
-  - Time estimates: 13-18 days total development
-
-**8 Implementation Phases**:
-1. **Phase 1** (2-3 days): Basic infrastructure - DB models, segments storage, callback handler
-2. **Phase 2** (2-3 days): "Structured" mode - LLM formatting, caching, mode switching
-3. **Phase 3** (2 days): Length variations - Dynamic buttons, incremental generation
-4. **Phase 4** (1-2 days): "Summary" mode - LLM brief summary integration
-5. **Phase 5** (1-2 days): Emoji option - LLM-based emoji addition
-6. **Phase 6** (2 days): Timestamps - Segment formatting, conditional button
-7. **Phase 7** (1-2 days): File handling - Hybrid approach for >4096 chars
-8. **Phase 8** (2-3 days): Retranscription - Audio storage, two quality methods
-
-**Key Technical Decisions**:
-- **State Management**: TranscriptionState table tracks UI state per message
-- **Callback Data**: Compact encoding `action:usage_id:params` (64-byte limit)
-- **Variant Caching**: On-demand generation with max 10 variants per transcription
-- **Segments Storage**: Save faster-whisper segments (start, end, text) to DB
-- **Feature Flags**: Comprehensive control via .env (INTERACTIVE_MODE_ENABLED, etc.)
-- **Graceful Degradation**: Fallbacks for LLM failures, aggressive caching for cost control
-
-**Documentation Delivered**:
-- Detailed implementation plan with all technical specifications
-- Execution instructions for running implementation by phases in separate chats
-- Clear guidance on using `/workflow:execute` for each phase
-
-**Next Steps**:
-1. User will implement phases in separate chat sessions to avoid context overload
-2. Each phase can be invoked independently with reference to the plan
-3. Feature flags allow gradual rollout and testing
-
-**Status**: ✅ Planning complete, ready for implementation when user chooses to begin
-
-**Plan Location**: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
+**Technical**:
+- Telethon v1.42.0 (actively maintained)
+- Session-based auth (persistent)
+- Feature flag: `TELETHON_ENABLED`
 
 ---
 
-### QUEUE-BASED CONCURRENCY CONTROL IMPLEMENTATION ✅ (2025-10-29)
-**Achievement**: Complete rewrite of request handling to prevent crashes and improve user experience
+### Other Recent Enhancements (Nov 2025)
 
-**Problem Solved**:
-- Bot crashed when processing 4-minute audio file on 2 CPU / 2 GB RAM VPS
-- No concurrency controls → multiple simultaneous transcriptions exhausted resources
-- No user feedback during processing
-- No duration limits → resource exhaustion
-- No analytics on request lifecycle
+**Hybrid Transcription** (Phase 8): 6-9x faster for long audio via draft+LLM
+**DEBUG Logging** (Phase 8.1): Comprehensive logging for local development
+**LLM Debug Mode** (Phase 8.2): Side-by-side draft vs refined comparison
+**LLM Performance Tracking** (Phase 8.3): Database fields for LLM metrics
+**Smart Audio Preprocessing** (Phase 8.4): 97% file size reduction (WAV→Opus)
 
-**Solution Implemented** (6 phases, commits: 8eea54f, f6e1d5c):
+*Details in progress.md and systemPatterns.md*
 
-**Phase 1: Database Migration**
-- Added `updated_at` column for lifecycle tracking
-- Added `transcription_length` (int) instead of `transcription_text` for privacy
-- Made `voice_duration_seconds` and `model_size` nullable for staged writes
-- Migration: `alembic/versions/a9f3b2c8d1e4_*.py`
+---
 
-**Phase 2: Repository Updates**
-- Refactored `UsageRepository` with `create()` and `update()` methods
-- Three-stage lifecycle: download → processing → complete
-- Privacy-friendly: only store transcription length, not text
+## Key Patterns & Decisions
 
-**Phase 3: Queue Manager** (`src/services/queue_manager.py`)
-- FIFO queue with configurable size (default: 50)
-- Semaphore-based concurrency control (default: max_concurrent=1)
-- Background worker with graceful error handling
-- Request/response tracking with timeout support
-- Non-blocking enqueue operation
+### Interactive Transcription Patterns (Phase 10.1)
 
-**Phase 4: Progress Tracker** (`src/services/progress_tracker.py`)
-- Live progress bar updates every 5 seconds:
-  ```
-  🔄 Обработка [████████░░░░] 40%
-  ⏱️ Прошло: 8с | Осталось: ~12с
-  ```
-- RTF-based time estimation (default: 0.3x)
-- Telegram rate limit handling (RetryAfter, TimedOut)
-- Visual feedback during transcription
+**1. Callback Data Encoding**
+- Format: `action:usage_id:param=value`
+- 64-byte Telegram limit with validation
+- Example: `mode:125:mode=structured`
 
-**Phase 5: Configuration Updates** (`src/config.py`)
-- `max_voice_duration_seconds`: 300 → **120** (2 minutes)
-- `max_queue_size`: 100 → **10** (final production value, optimized 2025-10-29)
-- `max_concurrent_workers`: 3 → **1** (sequential processing)
-- `progress_update_interval`: **5** seconds
-- `progress_rtf`: **0.3** (for estimation)
+**2. allowed_updates Configuration**
+- **CRITICAL**: Must include `Update.ALL_TYPES` in `start_polling()`
+- Without this, callback_query updates not received
+- Non-obvious requirement, caused significant debugging
 
-**Phase 6: Handler Integration** (`src/bot/handlers.py`)
-- Duration validation: reject files > 120 seconds
-- Queue capacity check: reject when queue full
-- Staged database writes:
-  - Stage 1: Create record on download
-  - Stage 2: Update with duration after download
-  - Stage 3: Update with results after transcription
-- Queue position feedback to users
-- Estimated wait time display
-- Graceful error handling
+**3. Send Message Before Keyboard**
+- Message ID must exist before creating TranscriptionState
+- Add keyboard via `edit_reply_markup()` after message sent
+- Avoids race conditions
 
-**User Experience Improvements**:
+**4. Session Management for Callbacks**
+- Create repositories with async session per callback invocation
+- Wrapper pattern: `callback_query_wrapper()` in main.py
 
-*Before*:
-- ❌ No feedback during processing
-- ❌ Crashes on long files or concurrent requests
-- ❌ No queue management
+**5. Segment Storage Threshold**
+- Only save segments for audio >300s (5 minutes)
+- Optimizes database storage
 
-*After*:
-- ✅ Live progress bar every 5 seconds
-- ✅ Duration limit: 120s with clear rejection message
-- ✅ Queue position: "📋 В очереди: позиция 3"
-- ✅ Estimated wait time: "⏱️ Примерное время ожидания: ~60с"
-- ✅ Sequential processing prevents crashes
+**6. Feature Flag System**
+- Master switch: `INTERACTIVE_MODE_ENABLED`
+- Phase-specific flags: `ENABLE_STRUCTURED_MODE`, etc.
+- Gradual rollout strategy
 
-**New User Flow**:
+### Queue System Patterns (Phase 6-7, Oct 2025)
+
+**1. Atomic Counter Pattern**
+- Use dedicated `_total_pending` counter for positions
+- DON'T use `qsize()` - unreliable with concurrent workers
+- Increment before put(), decrement in finally block
+
+**2. Unique File Naming**
+- Add UUID suffix: `{file_id}_{uuid8}.extension`
+- Prevents conflicts when multiple users forward same message
+
+**3. Live Progress Feedback**
+- Updates every 5s via message edits
+- Visual progress bar + RTF-based time estimates
+- Dramatically improves UX even when processing is slow
+
+**4. Sequential Processing**
+- `max_concurrent=1` prevents resource exhaustion
+- Essential for 3GB RAM / 4 CPU VPS
+- Acceptable UX through progress updates
+
+### Deployment Patterns (Phase 7, Nov 2025)
+
+**1. Fully Automatic Pipeline**
+- PR merge → Build & Tag → Deploy (zero manual steps)
+- Version calculation: `git describe --tags --abbrev=0`
+- Separate build and deploy workflows
+
+**2. Database Migrations**
+- Automated testing in CI (fresh DB, upgrade/downgrade cycle)
+- Production migration before deploy
+- Automatic rollback on failure
+
+**3. Centralized Logging**
+- Size-based rotation (not time-based)
+- Version in every log entry
+- Persists across container rebuilds
+
+---
+
+## Next Steps
+
+### Phase 10.2: Structured Text Mode (NEXT)
+
+**Goal**: LLM-based text formatting with punctuation and paragraphs
+
+**Implementation Tasks**:
+1. Create `src/services/text_processor.py`:
+   - `create_structured(text)` method
+   - LLM prompt for structuring
+   - Graceful fallback on errors
+
+2. Update `src/bot/keyboards.py`:
+   - Add "📝 Структурировать" button
+   - Update state indicator ("вы здесь")
+
+3. Update `src/bot/callbacks.py`:
+   - Implement structured mode handler
+   - Generate variant on first request
+   - Cache in database
+   - Update message text + keyboard
+
+4. Save original variant in `src/bot/handlers.py`:
+   - After transcription, save as "original" mode
+
+5. Feature flag: `ENABLE_STRUCTURED_MODE` (already exists)
+
+**Expected User Experience**:
 ```
-1. 📥 Загружаю файл...
-2. 📋 В очереди: позиция 3 (if queued)
-   ⏱️ Примерное время ожидания: ~60с
-3. 🔄 Обработка [████████░░░░] 40%
-   ⏱️ Прошло: 8с | Осталось: ~12с
-4. ✅ Готово!
-   [transcription text]
+[Transcription text]
+
+[Исходный текст]
+[📝 Структурировать]  ← Click to format text
+
+→ Message updates with formatted text:
+- Proper punctuation
+- Paragraph breaks
+- Bullet lists (if appropriate)
+
+[Исходный текст]
+[📝 Структурировать (вы здесь)]  ← State indicator
 ```
 
-**Files Created**:
-- `src/services/__init__.py`
-- `src/services/queue_manager.py`
-- `src/services/progress_tracker.py`
-- `alembic/versions/a9f3b2c8d1e4_add_updated_at_and_transcription_length.py`
-- `memory-bank/plans/2025-10-29-queue-based-concurrency-plan.md`
+**Acceptance Criteria**:
+- ✅ Button appears when `ENABLE_STRUCTURED_MODE=true`
+- ✅ Click generates structured text via LLM
+- ✅ Variant cached in database (no regeneration on re-click)
+- ✅ Message updates with new text + keyboard state
+- ✅ Works with/without LLM enabled
+- ✅ All tests passing
 
-**Files Modified**:
-- `src/storage/models.py` - Usage model with staged fields
-- `src/storage/repositories.py` - create/update methods
-- `src/bot/handlers.py` - Complete refactor with queue integration
-- `src/config.py` - New queue and progress settings
-- `src/main.py` - QueueManager initialization
+**Plan**: See `memory-bank/plans/2025-12-02-interactive-transcription-processing.md` Phase 2
 
-**Production Configuration** (deployed 2025-10-29):
+### Future Phases (Phase 10.3-10.8)
+
+**Phase 3**: Length variations (5 levels: shorter ← short ← default → long → longer)
+**Phase 4**: Summary mode ("О чем текст?")
+**Phase 5**: Emoji option (0, 1-2, 3-5 levels)
+**Phase 6**: Timestamps (for audio >5 min)
+**Phase 7**: File handling (for text >4096 chars)
+**Phase 8**: Retranscription (two quality methods)
+
+---
+
+## Important Context for Future Sessions
+
+### Critical Configuration
+
+**Environment Variables to Remember**:
 ```bash
-# Production .env values
-MAX_VOICE_DURATION_SECONDS=120
-MAX_QUEUE_SIZE=10  # Optimized from initial 50
+# Interactive Mode
+INTERACTIVE_MODE_ENABLED=true
+ENABLE_STRUCTURED_MODE=false  # Phase 2+
+ENABLE_SUMMARY_MODE=false     # Phase 4+
+
+# Queue System
+MAX_QUEUE_SIZE=10
 MAX_CONCURRENT_WORKERS=1
-PROGRESS_UPDATE_INTERVAL=5
-PROGRESS_RTF=0.3
-```
+MAX_VOICE_DURATION_SECONDS=120
 
-**Deployment Status**:
-- ✅ Code merged to main
-- ✅ Database migration applied (a9f3b2c8d1e4)
-- ✅ CI/CD pipeline deployed to production
-- ✅ Environment variables updated
-- ✅ Bot operational with queue system
-- ⏳ Real-world usage monitoring ongoing
-
-**Branch**: `main`
-**Status**: ✅ Deployed to production
-**Documentation**: `memory-bank/plans/2025-10-29-queue-based-concurrency-plan.md`
-
-**Key Pattern Established**: Queue-based request management with progress feedback is essential for resource-constrained deployments. Sequential processing (max_concurrent=1) prevents crashes while maintaining acceptable UX through live progress updates.
-
-### CRITICAL BUG FIX: faster-whisper Missing from Docker Image ✅ (2025-10-29)
-**Impact**: Production bot was crashing on startup with `ModuleNotFoundError: No module named 'faster_whisper'`
-
-**Root Cause Analysis**:
-1. In `pyproject.toml`, `faster-whisper` marked as `optional = true` dependency
-2. Local `requirements.txt` was correct (generated with `--extras "faster-whisper"`)
-3. **CI/CD workflow (.github/workflows/build-and-deploy.yml:51) was exporting requirements.txt WITHOUT `--extras` flag before Docker build**
-4. Docker images built without `faster-whisper` package
-5. Container crashed on startup when importing `faster_whisper` module
-
-**Symptoms**:
-- Container status: `Restarting (1)` - infinite restart loop
-- Docker image size: 614 MB (vs normal ~1 GB)
-- Logs: `ModuleNotFoundError: No module named 'faster_whisper'`
-
-**Fix** (#19):
-```diff
-- poetry export --without dev -f requirements.txt -o requirements.txt
-+ poetry export --without dev -f requirements.txt -o requirements.txt --extras "faster-whisper"
-```
-
-**Verification**:
-- ✅ Build succeeded with correct dependencies
-- ✅ Docker image: 614 MB → 1.03 GB (correct size)
-- ✅ Container status: `healthy`
-- ✅ FasterWhisper model initialized successfully
-- ✅ Bot responding to messages
-
-**Key Lesson**: When using optional dependencies in Poetry, CI/CD must explicitly include extras in export command. Local development scripts were correct, but CI/CD workflow diverged.
-
-**Files Modified**: `.github/workflows/build-and-deploy.yml`
-
-### Documentation Reorganization ✅ (2025-10-28)
-**Achievement**: Complete documentation restructuring for better navigation and reduced redundancy
-
-**Changes**:
-- **New Structure**: Hierarchical `docs/` organization
-  - `docs/getting-started/` - Installation, configuration, quick start (3 new files)
-  - `docs/development/` - Architecture, testing, git workflow, dependencies (4 files)
-  - `docs/deployment/` - Docker, VPS setup, CI/CD (3 files)
-  - `docs/research/benchmarks/` - Performance benchmarks (5 files moved)
-- **New Documentation**:
-  - `docs/README.md` - Central navigation index
-  - `docs/deployment/docker.md` - Docker deployment guide
-  - `docs/development/architecture.md` - System architecture documentation
-  - `docs/getting-started/*` - Installation, configuration, quick start guides
-- **Files Moved**: DEPLOYMENT.md, VPS_SETUP.md, TESTING.md, WORKFLOW.md, DEPENDENCIES.md, benchmarks
-- **README.md**: Reduced from 461 to 229 lines, focused on project overview
-- **Requirements Simplification**: Merged `requirements-docker.txt` into single `requirements.txt`
-- **Removed**: `run.sh` (replaced with documentation)
-
-**Benefits**:
-- Clear hierarchy organized by audience (getting started → development → deployment)
-- Eliminated content overlap and redundancy
-- Easier navigation with central index
-- Reduced root directory clutter
-- Single source of truth for requirements
-- Scalable structure for future growth
-
-**Implementation Plan**: `memory-bank/plans/2025-10-29-docs-reorganization-plan.md`
-
-### CI/CD Path Filtering Optimization ✅ (2025-10-28)
-**Achievement**: Workflows now intelligently skip operations for documentation-only changes
-
-**Problem Solved**: Previously used `paths-ignore` which prevented workflows from running entirely for docs-only PRs. This caused GitHub's required status checks to never be created, blocking PR merges even when no code was changed.
-
-**Solution Implemented** (#15):
-- Replaced `paths-ignore` with `tj-actions/changed-files@v45` action
-- Added conditional steps (`if: steps.changed-files.outputs.any_changed == 'true'`) to expensive operations
-- Ensured workflows always run (status checks created) but skip heavy steps when only docs change
-
-**Files Modified**:
-- `.github/workflows/ci.yml`: Conditional test execution, linting, type checking
-- `.github/workflows/build-and-deploy.yml`: Conditional build and deploy jobs
-
-**Benefits**:
-- ✅ Required status checks always created (no merge blocks)
-- ✅ CI minutes saved on docs-only changes (skips tests, build, deploy)
-- ✅ Workflows complete successfully even when skipping steps
-- ✅ Maintains code quality gates for actual code changes
-
-**Pattern**: Conditional execution with always-run workflows for required status checks
-
-### VPS Deployment SUCCESS ✅ (2025-10-27)
-**Achievement**: Bot successfully deployed and operational on 1GB VPS
-
-**Issues Resolved**:
-1. **Database Directory Issue** (#11)
-   - Error: `sqlite3.OperationalError: unable to open database file`
-   - Fix: Added directory creation in `init_db()` (src/storage/database.py:72-87)
-   - Handles volume mount replacing container directories
-
-2. **DNS Resolution Failure** (#12)
-   - Error: `failed to lookup address information` for transfer.xethub.hf.co
-   - Fix: Added DNS servers in docker-compose.prod.yml (VPS host + Google DNS)
-   - Enables HuggingFace model downloads
-
-3. **OOM Killer (Exit Code 137)**
-   - Issue: Container killed during model loading (medium requires ~1.3GB peak)
-   - Fix: Created 1GB swap file on VPS
-   - Result: **Bot stable and healthy**
-
-**Production Metrics** (2025-10-27):
-- **Memory Usage**: 516 MB RAM + 755 MB swap = **1.27 GB total**
-- **Model**: medium/int8 successfully loaded
-- **Status**: Container healthy, bot responding
-- **Performance**: RTF **3.04x** (9s audio → 27s processing)
-  - 10x slower than local benchmark (0.3x)
-  - Bottleneck: 1 vCPU + heavy swap usage
-
-### Performance Gap Identified 🎯
-**Current**: RTF 3.04x (3x slower than audio)
-**Target**: RTF 0.3x (3x faster than audio, as measured locally)
-**Gap**: **10x performance difference** vs local machine
-
-**Root Causes**:
-1. **Swap bottleneck**: 755 MB active swap usage severely degrades I/O
-2. **Limited CPU**: 1 vCPU vs multi-core local machine
-3. **Resource contention**: System using swap for model data access
-
-**Next Steps**: Systematically test different VPS configurations
-
-### Provider Architecture Cleanup ✅
-- **Removed**: openai-whisper provider (original Whisper)
-  - Deleted: `src/transcription/providers/whisper_provider.py`
-  - Deleted: `tests/unit/test_whisper_service.py`
-  - Removed from factory, router, all imports
-
-- **Dependencies Optimized**:
-  - Removed: `openai-whisper`, `torch` from pyproject.toml
-  - `requirements-docker.txt`: 75 → 50 dependencies (~2-3GB Docker image savings)
-  - Deleted: `requirements-full.txt`, `docker-compose.prod.yml` (obsolete)
-
-- **Updated Defaults**:
-  - `FASTER_WHISPER_MODEL_SIZE`: base → **medium**
-  - `FASTER_WHISPER_BEAM_SIZE`: 5 → **1** (greedy decoding, faster)
-  - All documentation updated with production benchmarks
-
-- **Provider Tests Added**:
-  - `tests/unit/test_faster_whisper_provider.py` (6 tests)
-  - `tests/unit/test_openai_provider.py` (7 tests)
-  - All 45 unit tests passing ✅
-
-### Quality Assurance ✅
-- ✅ mypy: No type errors
-- ✅ ruff: All checks passed
-- ✅ black: Code formatted
-- ✅ pytest: 45/45 tests passing
-
-### NEW: Database Migration System ✅ (2025-10-29)
-**Achievement**: Seamless database migration deployment system
-
-**Implementation** (commit 5c4cc5a):
-
-**1. Automated Migration Testing in CI**
-- New `test-migrations` job in GitHub Actions workflow
-- Tests fresh database migration (from scratch)
-- Tests upgrade/downgrade cycle for reversibility
-- Tests application startup after migration
-- Runs in parallel with build job
-
-**2. Production Migration Job**
-- New `migrate` job between build and deploy
-- SSH to VPS and applies migrations before code update
-- Automatic rollback on migration failure (downgrade -1)
-- Stops deployment if migration fails
-- Shows migration status before/after
-
-**3. Health Check System**
-- New `src/health_check.py` script
-- Checks database connectivity
-- Verifies schema version matches HEAD
-- Used by docker-compose health check
-- Prevents unhealthy containers from running
-
-**4. Updated init_db() Function**
-- Removed `create_all()` (doesn't work with migrations)
-- Added migration version verification
-- Logs current schema revision on startup
-- Raises error if schema out of date
-- Prevents bot from starting with wrong schema
-
-**5. Comprehensive Documentation**
-- `docs/development/database-migrations.md` - Developer guide (creating and testing migrations)
-- `docs/deployment/migration-runbook.md` - Operations runbook (manual procedures, rollback, emergency)
-- Updated `docs/deployment/vps-setup.md` with Phase 6.5 (migration management)
-
-**Deployment Flow**:
-```
-push to main
-  ↓
-test-migrations (parallel with build)
-  ↓
-build (Docker image)
-  ↓
-migrate (apply migrations on VPS)
-  ↓ (if success)
-deploy (restart bot)
-  ↓
-health check (verify schema)
-```
-
-**Rollback Strategy**: If migration fails → automatic `alembic downgrade -1` → deployment stops → bot continues on old version
-
-**Status**: ✅ Operational since 2025-10-29, tested with production migration a9f3b2c8d1e4
-
-### PRODUCTION LIMIT OPTIMIZATION ✅ (2025-10-29)
-**Achievement**: Fine-tuned queue limits for 1GB VPS constraints (PR #25)
-
-**Changes**:
-- `MAX_QUEUE_SIZE`: 100 → 50 → **10** (final)
-- `MAX_CONCURRENT_WORKERS`: 3 → **1** (maintained)
-- `MAX_VOICE_DURATION_SECONDS`: 300 → **120** (maintained)
-
-**Rationale**:
-- Conservative approach for resource-constrained 1GB RAM + 1 vCPU VPS
-- Prevents memory exhaustion with sequential processing
-- Queue size of 10 provides adequate buffering without excessive memory overhead
-- Maintains acceptable UX through progress feedback
-
-**Deployment**: Automated via CI/CD, environment variables updated in GitHub Actions
-
-**Status**: ✅ Deployed and operational
-
-### LONG TRANSCRIPTION MESSAGE SPLITTING ✅ (2025-10-30)
-**Achievement**: Automatic splitting of long transcriptions to handle Telegram's 4096 character limit
-
-**Problem Encountered**:
-- Telegram limits messages to 4096 characters
-- 31-minute voice message produced 23,676 character transcription
-- Bot crashed with `telegram.error.BadRequest: Message is too long`
-- Critical bug blocking users from transcribing longer messages
-
-**Solution Implemented** (commit 0906229):
-
-**1. Smart Text Splitting Function**
-- Added `split_text()` function in `src/bot/handlers.py`
-- Reserves 50 characters for message headers
-- Effective max: 4046 characters per chunk
-- Smart boundary detection (paragraph → newline → sentence → word → force)
-- Guarantees no chunk exceeds 4096 chars including header
-
-**2. Updated Data Model**
-- Added `user_message: Message` to `TranscriptionRequest`
-- Enables proper reply threading for multi-message responses
-- Modified `src/services/queue_manager.py`
-
-**3. Dynamic Message Handling**
-- Short transcriptions (≤4096): Edit status message (no change)
-- Long transcriptions (>4096): Delete status message + send numbered parts
-  ```
-  📝 Часть 1/6
-  [chunk 1]
-
-  📝 Часть 2/6
-  [chunk 2]
-  ...
-  ```
-- 0.1s delay between messages to avoid rate limits
-
-**Production Testing**:
-- ✅ 31-minute voice (1885s) → 23,676 chars
-- ✅ Split into 6 messages successfully
-- ✅ Processing time: 559s (RTF 0.30x)
-- ✅ All messages delivered without errors
-
-**Impact**:
-- ✅ Bot can now handle any length voice message
-- ✅ Clean UX with numbered message parts
-- ✅ No data loss or truncation
-- ✅ Graceful edge case handling
-
-**Files Modified**:
-- `src/bot/handlers.py` (90 lines added: split_text + multi-message logic)
-- `src/services/queue_manager.py` (1 line: user_message field)
-
-**Status**: ✅ Tested locally, ready for production push
-
-### Phase 7: Centralized Logging & Automatic Versioning ✅ COMPLETE (2025-11-03)
-**Achievement**: Full observability with version tracking and automated semantic versioning
-
-**Problem Solved**:
-- No logs preserved across container rebuilds during deployments
-- Git SHA version identifiers not user-friendly
-- No correlation between logs and deployed versions
-- Manual version management required
-
-**Solution Implemented** (2 major features):
-
-#### Feature 1: Centralized Logging System
-
-**1. Logging Infrastructure** (`src/utils/logging_config.py`, 233 lines)
-- **VersionEnrichmentFilter**: Custom filter adds version and container_id to all log records
-- **CustomJsonFormatter**: JSON formatter with ISO timestamps and structured context
-- **setup_logging()**: Configures file handlers with rotation, optional remote syslog
-- **log_deployment_event()**: Records deployment lifecycle (startup, ready, shutdown)
-
-**2. Log Files**:
-- **app.log**: All INFO+ logs in JSON format
-  - **Size-based rotation**: 10MB per file, keeps 5 backups
-  - Total: ~60MB max (app.log + app.log.1-5)
-  - Structure: timestamp, level, logger, version, container_id, message, context
-- **errors.log**: ERROR/CRITICAL logs only
-  - **Size-based rotation**: 5MB per file, keeps 5 backups
-  - Total: ~30MB max
-- **deployments.jsonl**: Deployment events
-  - **Never rotated**: JSONL format, one event per line
-  - Tracks: startup (with full config), ready, shutdown
-  - ~1KB per deployment, ~365KB/year
-
-**3. Version Tracking**:
-- `APP_VERSION` environment variable set by CI/CD (git SHA)
-- Short form (7 chars) included in every log entry
-- Enables filtering logs by specific deployment
-- Container ID tracking for multi-instance deployments
-
-**4. Integration Points**:
-- `src/main.py`: Logging initialization, deployment events
-- `docker-compose.prod.yml`: Volume mount for log persistence (`./logs:/app/logs`)
-- `.github/workflows/deploy.yml`: APP_VERSION passed from git tag
-
-**5. Configuration**:
-```python
-# Environment Variables
-APP_VERSION=<git-tag>  # Set by CI/CD
-LOG_DIR=/app/logs
-LOG_LEVEL=INFO
-SYSLOG_ENABLED=false  # Optional
-SYSLOG_HOST=  # Optional (e.g., logs.papertrailapp.com)
-SYSLOG_PORT=514  # Optional
-```
-
-**6. Documentation**:
-- `docs/development/logging.md` (347 lines): Complete logging guide
-  - Log file formats and rotation strategy
-  - Configuration and usage
-  - Searching and analyzing logs with jq
-  - Remote syslog setup (Papertrail)
-  - Troubleshooting
-
-**Rotation Strategy Decision**:
-- **Size-based only** (NOT time-based): "Если мало логов, то пусть хранятся долго"
-- If few logs generated → files kept for weeks/months
-- Predictable disk usage: ~90MB max total
-- No data loss from time-based rotation
-
-**Files Created**:
-- `src/utils/logging_config.py`
-- `docs/development/logging.md`
-- `memory-bank/plans/2025-11-03-centralized-logging.md` (implementation plan)
-
-**Files Modified**:
-- `pyproject.toml` - Added `python-json-logger = "^4.0.0"` dependency
-- `src/main.py` - Logging setup, deployment event tracking
-- `docker-compose.prod.yml` - LOG_DIR, SYSLOG_* environment variables
-- `docs/README.md` - Added logging documentation link
-
-**Key Benefit**: Full traceability - every log entry knows its version, enabling post-mortem analysis of any deployment
-
-#### Feature 2: Automatic Semantic Versioning
-
-**Problem**: Git SHA (09f9af8) not user-friendly for tracking releases
-
-**Solution**: Automatic semantic versioning with separate build and deploy workflows
-
-**1. Build & Tag Workflow** (`.github/workflows/build-and-tag.yml`)
-- **Trigger**: Push to main (after PR merge)
-- **Steps**:
-  1. Run database migration tests (fresh DB, upgrade/downgrade cycle, app startup)
-  2. Calculate next version:
-     ```bash
-     LAST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
-     VERSION=${LAST_TAG#v}  # Remove 'v' prefix
-     IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-     NEW_PATCH=$((PATCH + 1))
-     NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
-     ```
-  3. Build Docker image
-  4. Export requirements with extras: `poetry export --extras "faster-whisper"`
-  5. Push to Docker Hub with multiple tags:
-     - `konstantinbalakin/telegram-voice2text-bot:$NEW_VERSION` (e.g., v0.1.1)
-     - `konstantinbalakin/telegram-voice2text-bot:${{ github.sha }}`
-     - `konstantinbalakin/telegram-voice2text-bot:latest`
-  6. Create annotated git tag: `git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"`
-  7. Push tag to GitHub
-  8. Create GitHub Release
-
-**2. Deploy Workflow** (`.github/workflows/deploy.yml`)
-- **Trigger**: Tag creation (refs/tags/v*.*.*)
-- **Steps**:
-  1. **Migrate Job** (runs first):
-     - Extract version from tag
-     - SSH to VPS
-     - Checkout tagged version
-     - Check current database revision
-     - Handle existing DB without alembic version (stamp to initial revision)
-     - Run `alembic upgrade head`
-     - Automatic rollback on failure: `alembic downgrade -1`
-     - Abort deployment if migration fails
-  2. **Deploy Job** (runs after migrate succeeds):
-     - Extract version from tag
-     - SSH to VPS
-     - Checkout tagged version
-     - Create .env with production configuration
-     - Pull Docker image by version tag
-     - Rolling update: `docker compose up -d --no-deps bot`
-     - Health check verification (15s wait)
-     - Image cleanup (keep last 3 versions)
-
-**3. Version Format**:
-- **Automatic patch versions**: v0.1.0 → v0.1.1 → v0.1.2 (every merge to main)
-- **Manual minor/major versions**:
-  ```bash
-  git tag -a v0.2.0 -m "Release v0.2.0: Add quota system"
-  git push origin v0.2.0  # Triggers deployment
-  ```
-
-**4. Workflow Separation**:
-```
-PR merged to main
-  ↓
-Build & Tag Workflow
-  - Test migrations
-  - Build image
-  - Create v0.1.1 tag
-  - Push to Docker Hub
-  - Create GitHub Release
-  ↓ (tag created)
-Deploy Workflow (triggered by tag)
-  - Run migrations on VPS
-  - Deploy v0.1.1
-  - Health checks
-  ↓
-Production running v0.1.1
-```
-
-**5. Initial Version**:
-- Created `v0.1.0` tag at commit 09f9af8
-- Next merge to main will create `v0.1.1` automatically
-
-**6. Documentation**:
-- `docs/development/git-workflow.md` - Added comprehensive versioning section (517 lines total):
-  - Automatic versioning workflow
-  - Creating manual minor/major versions
-  - Viewing versions and rollback procedures
-  - Docker image tagging strategy
-  - Troubleshooting version issues
-
-**Files Created**:
-- `.github/workflows/build-and-tag.yml`
-- `.github/workflows/deploy.yml`
-- Git tag: `v0.1.0` (initial version)
-
-**Files Modified**:
-- `.github/workflows/build-and-deploy.yml` → `.github/workflows/build-and-deploy.yml.old` (disabled)
-- `docs/development/git-workflow.md` - Added "Versioning and Releases" section
-
-**Key Benefits**:
-- ✅ User-friendly version numbers (v0.1.0 instead of 09f9af8)
-- ✅ Automatic patch version increments
-- ✅ Separation of build and deploy for testing
-- ✅ Automated GitHub Releases with changelog
-- ✅ Version-tagged Docker images for rollback
-- ✅ Full version history: `git tag -l "v*"`
-
-**Deployment Status**:
-- ✅ Both systems implemented and tested
-- ✅ Initial version v0.0.1 created and deployed
-- ✅ Documentation complete
-- ✅ Logging system active on production VPS
-- ✅ Logs being collected successfully with version tracking
-- ✅ Workflow fixes deployed (PRs #30, #31, #32)
-- ✅ Fully automatic deployment working (v0.0.3)
-
-**Production Verification** (2025-11-03):
-- ✅ Version v0.0.1 running on VPS
-- ✅ Logs directory created: `/opt/telegram-voice2text-bot/logs/`
-- ✅ Log files:
-  - `app.log` (9.3KB) - All logs with version enrichment
-  - `errors.log` (0KB) - No errors yet
-  - `deployments.jsonl` (586B) - Startup and ready events
-- ✅ Every log entry includes version "v0.0.1" and container_id
-- ✅ Deployment events recorded with full configuration
-- ✅ Docker container: `kosbalakin/telegram-voice2text-bot:v0.0.1`
-- ✅ Container status: `healthy`
-
-**Workflow Improvements** (PRs #30, #31, #32):
-- PR #30: Added `contents: write` and `packages: write` permissions to Build & Tag workflow
-- PR #31: Added `workflow_run` and `workflow_dispatch` triggers to Deploy workflow
-- PR #32: ✅ SOLVED automatic deployment issue
-  - Problem: `workflow_run` receives `refs/heads/main` instead of tag
-  - Solution: Get latest tag via `git describe --tags --abbrev=0` for workflow_run trigger
-  - Result: Fully automatic deployment working (v0.0.3 deployed successfully)
-
-**Key Pattern Established**: Centralized logging with version tracking is essential for production observability. Size-based log rotation ensures logs persist longer when generation is low, while automatic semantic versioning provides user-friendly release tracking without manual version management. For GitHub Actions: when `workflow_run` has limitations, use `git describe --tags --abbrev=0` to get latest tag instead of relying on GITHUB_REF.
-
-### Phase 7.2: Fully Automatic Deployment Pipeline ✅ COMPLETE (2025-11-04)
-**Achievement**: Resolved workflow_run limitations to achieve fully automatic CI/CD pipeline without manual intervention
-
-**Problem Encountered** (after Phase 7.1):
-- User requirement: "не, погоди. Я хотел, чтобы было все автоматически без ручных вмешательств"
-- workflow_run trigger receives `refs/heads/main` instead of tag reference
-- This caused Docker image naming issues: `konstantinbalakin/telegram-voice2text-bot:refs/heads/main` (invalid)
-- Manual workaround (workflow_dispatch) was acceptable but not fully automatic
-- User expectation: **Merge to main → automatic production deploy** with zero manual steps
-
-**Solution Implemented** (PR #32):
-
-**1. Version Extraction Logic in Deploy Workflow**
-- Modified `.github/workflows/deploy.yml` to handle all trigger types
-- Added conditional version extraction based on `github.event_name`:
-  ```yaml
-  - name: Extract version from tag
-    id: version
-    run: |
-      if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-        VERSION="${{ github.event.inputs.version }}"
-      elif [ "${{ github.event_name }}" = "push" ]; then
-        VERSION=${GITHUB_REF#refs/tags/}
-      else
-        # workflow_run - get latest tag from repository
-        git fetch --tags
-        VERSION=$(git describe --tags --abbrev=0)
-      fi
-  ```
-
-**2. Key Insight**:
-- `workflow_run` trigger doesn't provide tag reference in GITHUB_REF
-- Solution: Use `git describe --tags --abbrev=0` to get latest tag from repository
-- This works because Build & Tag workflow creates and pushes tag BEFORE triggering deploy
-
-**3. Additional Changes**:
-- Added `fetch-depth: 0` to checkout steps (need full history for git describe)
-- Added success check: `if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}`
-- Prevents deployment if build failed
-
-**Testing**:
-- ✅ v0.0.2 deployment successful (initial test)
-- ✅ v0.0.3 deployment successful (production verification)
-- ✅ Both migrate and deploy jobs ran automatically
-- ✅ Container healthy, bot operational
-- ✅ No manual intervention required
-
-**Deployment Flow (Fully Automatic)**:
-```
-PR merged to main
-  ↓
-Build & Tag Workflow
-  - Test migrations
-  - Build Docker image
-  - Create v0.0.3 tag
-  - Push tag to GitHub
-  ↓ (triggers workflow_run)
-Deploy Workflow (automatic)
-  - Extract version via git describe
-  - Run migrations on VPS
-  - Deploy v0.0.3
-  - Health checks
-  ↓
-Production running v0.0.3
-```
-
-**Files Modified**:
-- `.github/workflows/deploy.yml` - Added version extraction logic, fetch-depth, success check
-
-**Impact**:
-- ✅ Zero manual intervention required
-- ✅ Main branch is deployable source of truth
-- ✅ Full automation: PR merge → production deploy
-- ✅ Version tracking maintained
-- ✅ Rollback still possible via workflow_dispatch
-
-**Key Pattern Established**: For GitHub Actions workflow_run limitations, use `git describe --tags --abbrev=0` to retrieve the latest tag created by previous workflow. This enables fully automatic deployment pipelines without manual triggers.
-
-**Status**: ✅ Deployed and operational, v0.0.3 running in production
-
-### Phase 7.3: Production Bug Fixes ✅ COMPLETE (2025-11-19)
-**Achievement**: Fixed two critical bugs affecting queue position display and concurrent file downloads
-
-**Bug 1: Queue Position Always Showing "1"**
-
-**Problem**: When multiple audio files were sent in sequence, all queued messages displayed "📋 В очереди: позиция 1" instead of their actual positions (2, 3, etc.).
-
-**Root Cause Analysis**:
-- The `enqueue()` method returned the correct position, but the handler was recalculating it using `get_queue_depth()`
-- Race condition: by the time `get_queue_depth()` was called, the worker had already pulled items from the queue
-- `qsize()` is unreliable because the background worker immediately empties the queue
-
-**Solution Implemented**:
-1. Added `_total_pending` counter in `QueueManager` class
-2. Counter increments BEFORE `put()` to get correct position atomically
-3. Counter decrements in `finally` block after request completes
-4. Handler now uses the position returned by `enqueue()` directly
-
-**Files Modified**:
-- `src/services/queue_manager.py`:
-  ```python
-  # In __init__:
-  self._total_pending: int = 0
-
-  # In enqueue():
-  self._total_pending += 1
-  position = self._total_pending
-  await self._queue.put(request)
-  return position
-
-  # In _process_request() finally block:
-  self._total_pending -= 1
-  ```
-- `src/bot/handlers.py`: Use returned position instead of recalculating
-
-**Bug 2: FileNotFoundError with Concurrent Users**
-
-**Problem**: When two users forwarded the same voice message, the second user got `FileNotFoundError` because the file was already deleted.
-
-**Root Cause Analysis**:
-- Same Telegram `file_id` creates the same filename
-- First request downloads file, processes it, deletes it after completion
-- Second request tries to access the same filename but file is gone
-- Issue: filename collision when multiple users process the same forwarded message
-
-**Solution Implemented**:
-- Added UUID suffix to all downloaded filenames
-- Each download creates a unique file regardless of `file_id`
-
-**Files Modified**:
-- `src/transcription/audio_handler.py`:
-  ```python
-  import uuid
-
-  # In download_voice_message():
-  unique_suffix = uuid.uuid4().hex[:8]
-  audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
-
-  # In download_from_url():
-  unique_suffix = uuid.uuid4().hex[:8]
-  audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
-  ```
-
-**Testing Results**:
-- ✅ Queue positions now correctly show 1, 2, 3...
-- ✅ User confirmed: "Вроде теперь ок"
-- ✅ File naming conflict resolved
-- ✅ All code quality checks pass (syntax, mypy, ruff)
-
-**Key Patterns Established**:
-1. **Atomic Counter Pattern**: For queue position tracking, use a dedicated counter that increments/decrements atomically rather than relying on `qsize()` which can be affected by concurrent workers
-2. **Unique File Naming Pattern**: When multiple users may process the same resource (same file_id), always add UUID suffix to prevent filename collisions and race conditions
-
-**Impact**:
-- ✅ Accurate queue position feedback for users
-- ✅ No more file conflicts when multiple users forward same message
-- ✅ Improved reliability for concurrent usage scenarios
-
-**Status**: ✅ Implemented and tested locally, ready for production deployment
-
-### Phase 7.4: Dynamic Queue Notifications ✅ COMPLETE (2025-11-19)
-**Achievement**: Enhanced queue notification system with accurate wait time calculation and dynamic updates
-
-**Problem Solved**:
-- Confusing message formulation: "Примерное время ожидания" didn't clarify if it was queue wait or processing time
-- Inaccurate wait time calculation: used duration of current message instead of messages ahead in queue
-- No dynamic updates: users didn't see position changes when queue progressed
-- Didn't account for messages currently being processed
-- Didn't correctly handle parallel processing (max_concurrent > 1)
-
-**Solution Implemented**:
-
-**1. Enhanced QueueManager** (`src/services/queue_manager.py`)
-- Added `_pending_requests: list[TranscriptionRequest]` to track queue items with their data
-- Added `_processing_requests: list[TranscriptionRequest]` to track items being processed
-- Added `_on_queue_changed` callback for notifying handlers when queue changes
-- New methods:
-  - `get_estimated_wait_time_by_id()`: Calculates wait time based on:
-    - Duration of all currently processing requests
-    - Duration of all pending requests ahead in queue
-    - Divides by `max_concurrent` for parallel processing
-  - `get_queue_position_by_id()`: Returns current position in pending queue
-  - `set_on_queue_changed()`: Registers callback for queue updates
-
-**2. Dynamic Message Updates** (`src/bot/handlers.py`)
-- New method `_update_queue_messages()`:
-  - Called when any request starts processing
-  - Iterates through all pending requests
-  - Updates each user's status message with new position and times
-  - Handles Telegram API errors gracefully
-- Improved message format with clear separation:
-  ```
-  📋 В очереди: позиция 2
-  ⏱️ Ожидание в очереди: ~1м 50с
-  🎯 Обработка вашего сообщения: ~18с
-  ```
-
-**3. Accurate Wait Time Calculation**
-```python
-# Calculate total duration of items currently being processed
-processing_duration = sum(r.duration_seconds for r in self._processing_requests)
-
-# Get requests ahead in pending queue
-pending_duration_ahead = sum(r.duration_seconds for r in items_ahead)
-
-# Total wait = (processing + pending ahead) * RTF / concurrent workers
-wait_time = (processing_duration + pending_duration_ahead) * rtf / max_concurrent
-
-# Processing time = current message duration * RTF
-processing_time = current_request.duration_seconds * rtf
-```
-
-**4. Time Formatting**
-- Shows seconds for times < 60s: "~18с"
-- Shows minutes and seconds for longer times: "~1м 50с"
-
-**User Experience Improvements**:
-
-*Before*:
-- ❌ "Примерное время ожидания: ~18с" (confusing - is it wait or processing?)
-- ❌ Time based on own message duration, not queue
-- ❌ No updates when queue progresses
-- ❌ All messages showed position 1 due to race condition
-
-*After*:
-- ✅ Clear separation: "Ожидание в очереди" vs "Обработка вашего сообщения"
-- ✅ Wait time calculated from actual messages ahead
-- ✅ Dynamic updates when queue progresses
-- ✅ Correct position display (1, 2, 3...)
-- ✅ Accounts for messages currently being processed
-- ✅ Handles parallel processing correctly
-
-**Files Modified**:
-- `src/services/queue_manager.py`:
-  - Added `_pending_requests`, `_processing_requests` lists
-  - Added `_on_queue_changed` callback
-  - Added `get_estimated_wait_time_by_id()`, `get_queue_position_by_id()`, `set_on_queue_changed()`
-  - Updated `enqueue()` to add to `_pending_requests`
-  - Updated `_process_request()` to move between lists and call callback
-- `src/bot/handlers.py`:
-  - Added `_update_queue_messages()` method
-  - Registered callback in `__init__`
-  - Updated queue notification formatting in both handlers
-
-**Testing Results**:
-- ✅ User confirmed: "Белиссимо! Все идеально вроде работает"
-- ✅ Positions correctly show 1, 2, 3...
-- ✅ Wait times accurately reflect messages ahead
-- ✅ Processing times show individual message duration
-- ✅ Messages update dynamically when queue progresses
-- ✅ All code quality checks pass (ruff, mypy)
-
-**Key Patterns Established**:
-1. **Callback Pattern for Queue Updates**: Use callbacks to notify handlers when queue state changes, enabling dynamic UI updates
-2. **Dual List Tracking**: Separate lists for pending and processing requests enables accurate time calculation
-3. **Time Formatting Helper**: Consistent time display with appropriate units (seconds vs minutes)
-
-**Plan Documentation**: `memory-bank/plans/2025-01-19-queue-notifications-improvement.md`
-
-**Impact**:
-- ✅ Clear, informative queue notifications
-- ✅ Accurate wait time estimates
-- ✅ Better user experience with dynamic updates
-- ✅ Full transparency about queue state
-
-**Status**: ✅ Implemented and tested, ready for production deployment
-
-## Phase 8: Hybrid Transcription Acceleration ✅ COMPLETE (2025-11-20)
-
-**Achievement**: Implemented 6-9x faster processing for long audio through hybrid transcription strategy
-
-**Implementation**: 3-phase development completed in single session
-
-### Phase 1: LLM Service Infrastructure ✅
-- Created `src/services/llm_service.py` (263 lines)
-  - Abstract `LLMProvider` base class
-  - `DeepSeekProvider` with retry logic and error handling
-  - `LLMFactory` for provider creation
-  - `LLMService` high-level API with fallback
-- Added LLM and hybrid strategy configuration to `src/config.py`
-- Added `tenacity ^9.0.0` dependency for retry logic
-- Created 19 comprehensive unit tests (all passing)
-- Full type safety (mypy) and linting (ruff) compliance
-
-**Key Features**:
-- DeepSeek V3 integration via OpenAI-compatible API
-- Retry logic with exponential backoff
-- Text truncation for long inputs (max 10,000 chars)
-- Graceful fallback on errors (timeout, API failure)
-- Token usage logging
-
-### Phase 2: Hybrid Strategy & Audio Preprocessing ✅
-- Added `HybridStrategy` to `src/transcription/routing/strategies.py`
-  - Duration-based routing (<20s: quality model, ≥20s: draft model)
-  - Methods: `get_model_for_duration()`, `requires_refinement()`
-- Added audio preprocessing to `src/transcription/audio_handler.py`
-  - `preprocess_audio()`: Mono conversion + speed adjustment pipeline
-  - `_convert_to_mono()`: ffmpeg-based mono conversion
-  - `_adjust_speed()`: ffmpeg atempo filter (0.5x-2.0x range)
-  - Graceful fallback to original on errors
-- Created 29 unit tests for hybrid strategy and preprocessing (all passing)
-- ffmpeg already verified in Dockerfile
-
-**Configuration Added**:
-```python
-# Hybrid Strategy
-hybrid_short_threshold: int = 20
-hybrid_draft_provider: str = "faster-whisper"
-hybrid_draft_model: str = "small"
-hybrid_quality_provider: str = "faster-whisper"
-hybrid_quality_model: str = "medium"
-
-# Audio Preprocessing
-audio_convert_to_mono: bool = False
-audio_target_sample_rate: int = 16000
-audio_speed_multiplier: float = 1.0
-```
-
-### Phase 3: Handler Integration ✅
-- Updated `src/bot/handlers.py`:
-  - Added preprocessing pipeline in `_process_transcription()`
-  - Staged message updates (draft → refining → final)
-  - LLM refinement for long audio in hybrid mode
-  - Fallback to draft if LLM fails
-  - Cleanup of preprocessed files
-- Updated `src/main.py`:
-  - LLM service initialization with proper error handling
-  - Resource cleanup on shutdown
-- All 93 unit tests passing
-
-**User Experience (Hybrid Mode)**:
-```
-For long audio (≥20s):
-1. 📥 Загружаю файл...
-2. 🔄 [progress bar for draft]
-3. ✅ Черновик готов:
-   [draft text]
-   🔄 Улучшаю текст...
-4. ✨ Готово!
-   [refined text]
-
-For short audio (<20s):
-1. 📥 Загружаю файл...
-2. 🔄 [progress bar]
-3. ✅ Готово!
-   [final text]
-```
-
-### Quality Assurance ✅
-- **Tests**: 93 unit tests passing (19 new for LLM, 29 for hybrid/preprocessing)
-- **Type Safety**: mypy - no errors
-- **Linting**: ruff - all checks passed
-- **Formatting**: black - code formatted
-- **Coverage**: Comprehensive test coverage for all new code
-
-### Implementation Stats
-- **5 commits** in feature branch:
-  - Phase 1: LLM service infrastructure
-  - Phase 2: Hybrid strategy and preprocessing
-  - Phase 3: Handler integration
-  - Style: Code formatting
-  - Fix: Type annotations and unused imports
-- **8 new files created**
-- **93 tests passing**
-- **Pull Request**: #44 created with comprehensive documentation
-
-### Expected Performance
-- **60s audio**: 36s → ~6s (6x faster)
-  - Draft transcription: ~4s (small model, RTF 0.2x)
-  - LLM refinement: ~2s (DeepSeek V3)
-- **Cost**: ~$0.0002 per 60s audio (vs $0.006 OpenAI Whisper API)
-- **Quality**: LLM corrects grammar, punctuation, capitalization
-
-### Configuration (Default: Disabled)
-```bash
-# Disabled by default for safety
-WHISPER_ROUTING_STRATEGY=single
+# LLM (Optional)
 LLM_REFINEMENT_ENABLED=false
+LLM_PROVIDER=deepseek
+LLM_MODEL=deepseek-chat
 
-# Enable hybrid mode:
-WHISPER_ROUTING_STRATEGY=hybrid
-HYBRID_SHORT_THRESHOLD=20
-HYBRID_DRAFT_MODEL=small
-LLM_REFINEMENT_ENABLED=true
-LLM_API_KEY=sk-your-deepseek-key
+# Telethon (Optional)
+TELETHON_ENABLED=false
+TELEGRAM_API_ID=<from my.telegram.org>
+TELEGRAM_API_HASH=<from my.telegram.org>
 ```
 
-### Documentation ✅
-- `.env.example`: Updated with hybrid configuration (lines 249-385)
-- Implementation plan: `memory-bank/plans/2025-11-20-hybrid-transcription-acceleration.md`
-- Checklist: `memory-bank/plans/2025-11-20-hybrid-implementation-checklist.md`
-- PR #44: Comprehensive summary with testing plan
+### Key Files to Know
 
-### Key Patterns Established
-1. **Hybrid Routing Strategy**: Duration-based provider selection for performance optimization
-2. **LLM Post-Processing**: Use fast draft + LLM refinement instead of slow quality model
-3. **Graceful Degradation**: Fallback to draft on LLM failures (timeout, API errors)
-4. **Staged UI Updates**: Show draft immediately, then refine for better UX
-5. **Audio Preprocessing Pipeline**: Optional transformations with error fallback
+**Interactive Transcription**:
+- `src/bot/keyboards.py` - Keyboard generation
+- `src/bot/callbacks.py` - Callback handlers
+- `src/storage/models.py` - State, Variant, Segment models
+- `src/main.py:219` - allowed_updates=Update.ALL_TYPES (CRITICAL)
 
-### Next Steps
-1. ⏳ Manual testing with real voice messages
-2. ⏳ Merge PR #44 to main
-3. ⏳ Production deployment (disabled by default)
-4. ⏳ Gradual rollout to specific users
-5. ⏳ Monitor performance and costs
-6. ⏳ Enable for all users after validation
+**Queue System**:
+- `src/services/queue_manager.py` - FIFO queue, atomic counter
+- `src/services/progress_tracker.py` - Live progress updates
 
-**Status**: ✅ Implementation complete, PR created, ready for testing and deployment
-**Pull Request**: https://github.com/konstantinbalakin/telegram-voice2text-bot/pull/44
+**LLM Integration**:
+- `src/services/llm_service.py` - LLM provider abstraction
+- `src/services/text_processor.py` - Will be created in Phase 2
 
-## Recent Changes (2025-11-24)
+### Common Pitfalls
 
-### Phase 8.1: DEBUG Logging Enhancement ✅
-**Achievement**: Comprehensive DEBUG logging system for local development
-
-**Problem**: Limited visibility into SQL queries, method parameters, and execution flow during local debugging
-
-**Solution**: Added extensive DEBUG logging across all components:
-- Dynamic log levels (handlers respect LOG_LEVEL setting)
-- Separate `debug.log` file (only created when LOG_LEVEL=DEBUG)
-- SQL query logging via SQLAlchemy echo parameter
-- Method entry points with parameters
-- Queue operations with positions and timings
-- API calls with masked keys (first 8 chars + "...")
-- File operations with paths and sizes
-- Transcription details with memory usage
-
-**Files Modified**: 11 files updated with DEBUG logs + comprehensive documentation
-
-**Impact**: Full visibility for local debugging without affecting production
-
-**Status**: ✅ Complete, ready for use
-
-### Phase 8.2: LLM Debug Mode ✅
-**Achievement**: Side-by-side comparison of draft and refined transcriptions
-
-**Problem**: No way to evaluate LLM refinement quality or see what changed
-
-**Solution**: Added `LLM_DEBUG_MODE` flag that sends comparison message:
-- Shows draft transcription from Whisper model
-- Shows refined transcription from LLM
-- Indicates which models were used
-- HTML formatting for readability
-- Auto-truncation for long texts (>4000 chars)
-- Graceful error handling
-
-**Configuration**:
-```bash
-LLM_DEBUG_MODE=true  # Default: false
-```
-
-**Files Modified**:
-- `src/config.py` - Added `llm_debug_mode` flag
-- `src/bot/handlers.py` - Added comparison message (lines 864-888)
-- `.env.example` - Added comprehensive documentation
-- `.env.example.short` - Added inline comment
-
-**Use Cases**: Testing LLM quality, comparing models, tuning prompts, evaluating improvements
-
-**Status**: ✅ Complete, ready for LLM quality testing
-
-**Branch**: Both features committed to `feature/hybrid-transcription` (PR #44)
-
-### Phase 8.3: LLM Performance Tracking ✅ COMPLETE (2025-11-24)
-**Achievement**: Database tracking of LLM processing time and model for performance analytics
-
-**Problem**:
-- In hybrid mode, only Whisper transcription time was tracked
-- No way to analyze LLM performance or cost
-- Impossible to compare LLM models or track refinement overhead
-- No data for optimization decisions
-
-**Solution**: Added dedicated database fields and tracking logic
-
-**Database Changes** (Migration: `0fde9e5effe5_add_llm_tracking_fields`):
-```sql
-ALTER TABLE usage ADD COLUMN llm_model VARCHAR(100) NULL;
-ALTER TABLE usage ADD COLUMN llm_processing_time_seconds FLOAT NULL;
-```
-
-**Lifecycle Updates**:
-- **Stage 3** (after Whisper): Save `llm_model` to database
-- **Stage 4** (after LLM, NEW): Track and save `llm_processing_time_seconds`
-
-**Implementation Details**:
-```python
-# Stage 3: After Whisper transcription
-await usage_repo.update(
-    usage_id=request.usage_id,
-    model_size=result.model_name,              # Whisper: "medium"
-    processing_time_seconds=result.processing_time,  # Whisper: 10.5s
-    llm_model=settings.llm_model,              # NEW: "deepseek-chat"
-)
-
-# Stage 4: After LLM refinement
-llm_start = time.time()
-refined_text = await llm_service.refine_transcription(draft_text)
-llm_time = time.time() - llm_start
-
-await usage_repo.update(
-    usage_id=request.usage_id,
-    llm_processing_time_seconds=llm_time,     # NEW: 3.2s
-)
-logger.info(f"LLM refinement took {llm_time:.2f}s")
-```
-
-**Data Examples**:
-
-*Long audio (≥20s with LLM)*:
-```
-model_size: "medium"
-processing_time_seconds: 10.5
-llm_model: "deepseek-chat"       ← NEW
-llm_processing_time_seconds: 3.2  ← NEW
-```
-
-*Short audio (<20s without LLM)*:
-```
-model_size: "medium"
-processing_time_seconds: 3.0
-llm_model: NULL
-llm_processing_time_seconds: NULL
-```
-
-**Files Modified**:
-- `alembic/versions/0fde9e5effe5_add_llm_tracking_fields.py` - NEW migration
-- `src/storage/models.py` - Added `llm_model`, `llm_processing_time_seconds` fields
-- `src/storage/repositories.py` - Extended `create()` and `update()` methods
-- `src/bot/handlers.py` - Added time tracking and Stage 4 database update
-
-**Testing**:
-- ✅ All 93 unit tests pass
-- ✅ Manual validation script verified all 4 lifecycle stages
-- ✅ Database schema confirmed (SQLite inspection)
-- ✅ Type checking (mypy): 0 errors
-- ✅ Code formatted with black
-
-**Benefits**:
-- 📊 Full performance visibility: Whisper time vs LLM time
-- 💰 Cost analysis: Can calculate per-request LLM costs
-- 🔍 Model comparison: Easy to A/B test different LLM models
-- ⚡ Optimization: Identify bottlenecks in hybrid pipeline
-- 📈 Analytics: RTF calculations for both stages
-
-**Migration Safety**:
-- Nullable fields: existing records remain valid
-- Backward compatible: no breaking changes
-- Rollback supported: `alembic downgrade` available
-
-**Next Steps After Deployment**:
-1. Apply migration on production: `alembic upgrade head`
-2. Monitor logs for "LLM refinement took X.XXs" messages
-3. Query database for performance analytics:
-   ```sql
-   SELECT
-     AVG(processing_time_seconds) as avg_whisper_time,
-     AVG(llm_processing_time_seconds) as avg_llm_time,
-     COUNT(*) as total_llm_requests
-   FROM usage
-   WHERE llm_model IS NOT NULL;
-   ```
-
-**Status**: ✅ Complete, PR #49 created, ready for merge and deployment
-
-**Branch**: `feature/llm-tracking` (PR #49)
-
-### Phase 8.4: Smart Audio Preprocessing ✅ COMPLETE (2025-01-27)
-**Achievement**: Optimized audio preprocessing with 97% file size reduction and intelligent processing decisions
-
-**Problem Identified**:
-1. **Speed adjustment created WAV files** - 30x larger than needed (~10 MB vs ~0.3 MB for 1 min)
-2. **No smart preprocessing** - Converted files unnecessarily (added 0.13s overhead)
-3. **Missing sample rate optimization** - Didn't resample to Whisper's optimal 16kHz
-
-**Solution Implemented** (Option 2: Smart Preprocessing):
-
-**1. Audio Analysis Helpers** (`src/transcription/audio_handler.py`)
-- Added `_get_audio_codec()` - Returns codec name (opus, mp3, pcm)
-- Added `_get_audio_channels()` - Returns channel count (1=mono, 2=stereo)
-- Added `_get_audio_sample_rate()` - Returns sample rate in Hz
-
-**2. Fixed Speed Adjustment Format**
-```python
-# Before:
-output_path = f"{input_path.stem}_speed{multiplier}x.wav"  # PCM WAV
-# No codec specified → FFmpeg defaults to huge PCM files
-
-# After:
-output_path = f"{input_path.stem}_speed{multiplier}x.opus"
-subprocess.run([
-    "ffmpeg", "-filter:a", f"atempo={multiplier}",
-    "-acodec", "libopus",  # Efficient compression
-    "-b:a", "32k",         # 32 kbps optimal for speech
-    "-vbr", "on",          # Variable bitrate
-    str(output_path),
-])
-```
-**Impact**: **97% file size reduction** (10 MB → 0.3 MB for 1 min speed-adjusted audio)
-
-**3. Enhanced Mono Conversion**
-- Uses new helper methods (cleaner code)
-- Added `-ar 16000` for sample rate optimization (Whisper native)
-- Smart skip logic: already checks channels and returns original if mono
-
-**4. Improved Logging**
-- Shows when conversion is skipped (already mono)
-- Clear indication of optimization decisions
-- Better observability
-
-**Performance Impact**:
-
-| Scenario | Before | After | Improvement |
-|----------|--------|-------|-------------|
-| Speed adjustment (1 min) | ~10 MB WAV | ~0.3 MB Opus | **97% reduction** |
-| Stereo → Mono | 2.0 MB | 1.0 MB | **50% reduction** |
-| Telegram voice (mono) | 0.13s overhead | 0s (skipped) | **100% faster** |
-
-**Files Modified**:
-- `src/transcription/audio_handler.py` (+95 lines)
-  - Added 3 audio analysis helpers
-  - Fixed `_adjust_speed` to output Opus
-  - Enhanced `_convert_to_mono` with sample rate
-  - Improved docstrings and logging
-
-- `tests/unit/test_audio_preprocessing.py` (+40 lines)
-  - Added 4 new test cases for helpers
-  - Updated 6 existing tests for Opus format
-  - All 17 tests passing
-
-**Documentation**:
-- `docs/research/audio-preprocessing-analysis.md` (new) - Comprehensive analysis with benchmarks
-- `memory-bank/plans/2025-01-27-smart-audio-preprocessing.md` (new) - Implementation plan
-
-**Quality Assurance**:
-- ✅ 97 unit tests passing (4 new tests added)
-- ✅ Type checking (mypy): 0 errors
-- ✅ Linting (ruff): all checks passed
-- ✅ Formatting (black): code formatted
-- ✅ Manual validation: 96% size reduction vs WAV verified
-
-**Key Patterns Established**:
-1. **Smart Preprocessing**: Check file properties before converting to avoid unnecessary overhead
-2. **Opus Optimization**: Use Opus codec for all audio outputs (97% smaller than WAV)
-3. **Sample Rate Optimization**: Resample to 16kHz (Whisper's native rate) for better efficiency
-4. **Helper Method Pattern**: Dedicated FFprobe wrapper methods for clean audio analysis
-
-**Opus Sample Rate Behavior** (Important Note):
-- Opus containers report 48kHz in metadata even when encoded at 16kHz
-- This is normal Opus behavior - audio is internally resampled
-- Whisper decodes correctly regardless of reported sample rate
-
-**Benefits**:
-- ✅ **97% file size reduction** for speed-adjusted files
-- ✅ **50% reduction** for stereo → mono conversion
-- ✅ **100% skip overhead** for Telegram voices (already mono)
-- ✅ **Better memory efficiency** (50% less for stereo files)
-- ✅ **Lower storage costs** (smaller processed files)
-- ✅ **Faster I/O** (smaller files = faster read/write)
-
-**Configuration** (No changes required):
-```bash
-# Existing settings work as before
-AUDIO_CONVERT_TO_MONO=false  # Default: disabled
-AUDIO_TARGET_SAMPLE_RATE=16000  # Used for mono conversion
-AUDIO_SPEED_MULTIPLIER=1.0  # Default: no adjustment
-```
-
-**Next Steps**:
-1. ✅ All changes committed
-2. ⏳ Push to PR #52
-3. ⏳ Merge to main after approval
-
-**Status**: ✅ Complete, ready for production deployment
-
-**Branch**: `feat/improve-progress-time-formatting` (PR #52)
+1. **Forgetting allowed_updates**: Buttons won't work without `Update.ALL_TYPES`
+2. **Variable scope**: Ensure variables defined before use (draft_text bug)
+3. **Session management**: Create repositories with session per callback
+4. **64-byte limit**: Validate callback_data length
+5. **LLM graceful fallback**: Always handle LLM failures
 
 ---
 
-## Next Steps (Current Priority)
+## Documentation
 
-### 1. Production Monitoring (High Priority) ⏳
-
-**Current Production State**:
-- Version: v0.0.1
-- Logging: ✅ Active and collecting
-- Health: ✅ Container healthy
-- Performance: Stable
-
-**Monitor These Metrics**:
-- Queue depth (should stay < 10)
-- CPU usage (should stay < 80%)
-- Memory usage (RAM + swap)
-- Processing times (RTF metrics)
-- Rejection rates (duration > 120s, queue full)
-- Progress bar functionality
-- Error rates
-
-**Actions**:
-```bash
-# Watch logs
-docker logs -f telegram-voice2text-bot
-
-# Check resource usage
-docker stats telegram-voice2text-bot
-
-# Monitor queue depth (from application logs)
-grep "queue_depth" logs/bot.log
-```
-
-### 3. Documentation Maintenance ✅ COMPLETE
-
-**Updated**:
-- ✅ Memory Bank activeContext.md (Phase 6.7 documented)
-- ✅ Memory Bank progress.md (Phase 6.7 completion added)
-- ✅ All key learnings captured
-
-### 4. Future Performance Optimization (Low Priority)
-
-**Only if needed** (after queue system proves stable):
-
-1. **Test 3 CPU** (if concurrent load increases)
-   - Update `MAX_CONCURRENT_WORKERS=2`
-   - Monitor CPU usage
-   - Cost: ~$1-2/month increase
-
-2. **Add Metrics Dashboard** (optional)
-   - Prometheus + Grafana
-   - Track: queue depth, processing times, rejection rate
-
-3. **Optimize RTF** (if users complain about wait times)
-   - Current: RTF ~0.3x with sequential processing
-   - Could experiment with smaller models for short files
-
-**Current Approach**: Start conservative (sequential, 120s limit), scale up only if needed based on actual usage patterns.
-
-## Current Infrastructure
-
-**VPS Configuration**:
-- Provider: Russian VPS (~$10-15/month)
-- RAM: 3GB
-- CPU: 4 CPU cores
-- OS: Ubuntu (clean)
-- Docker: Installed and operational
-
-**Deployment**:
-- Method: Automated via GitHub Actions
-- Trigger: Push to main branch
-- Process: Build → Push to Docker Hub → SSH deploy
-- Status: Fully operational
-
-**Monitoring**:
-- Container: `docker stats` for resources
-- Logs: `docker logs telegram-voice2text-bot`
-- Health: Container health checks passing
+**Full History**: See `memory-bank/progress.md`
+**Patterns**: See `memory-bank/systemPatterns.md`
+**Tech Stack**: See `memory-bank/techContext.md`
+**Implementation Plan**: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
+**Phase 1 Acceptance**: `PHASE1_ACCEPTANCE.md`
