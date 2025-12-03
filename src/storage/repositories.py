@@ -6,10 +6,17 @@ import logging
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.storage.models import User, Usage, Transaction
+from src.storage.models import (
+    User,
+    Usage,
+    Transaction,
+    TranscriptionState,
+    TranscriptionVariant,
+    TranscriptionSegment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -276,5 +283,208 @@ class TransactionRepository:
             .where(Transaction.user_id == user_id)
             .order_by(Transaction.created_at.desc())
             .limit(limit)
+        )
+        return list(result.scalars().all())
+
+
+class TranscriptionStateRepository:
+    """Repository for TranscriptionState model operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self,
+        usage_id: int,
+        message_id: int,
+        chat_id: int,
+        is_file_message: bool = False,
+        file_message_id: Optional[int] = None,
+    ) -> TranscriptionState:
+        """Create a new transcription state."""
+        logger.debug(
+            f"TranscriptionStateRepository.create(usage_id={usage_id}, "
+            f"message_id={message_id}, chat_id={chat_id})"
+        )
+        state = TranscriptionState(
+            usage_id=usage_id,
+            message_id=message_id,
+            chat_id=chat_id,
+            active_mode="original",
+            length_level="default",
+            emoji_level=0,
+            timestamps_enabled=False,
+            is_file_message=is_file_message,
+            file_message_id=file_message_id,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        self.session.add(state)
+        await self.session.flush()
+        await self.session.refresh(state)
+        logger.debug(f"TranscriptionState created: id={state.id}")
+        return state
+
+    async def get_by_id(self, state_id: int) -> Optional[TranscriptionState]:
+        """Get state by ID."""
+        result = await self.session.execute(
+            select(TranscriptionState).where(TranscriptionState.id == state_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_usage_id(self, usage_id: int) -> Optional[TranscriptionState]:
+        """Get state by usage ID."""
+        result = await self.session.execute(
+            select(TranscriptionState).where(TranscriptionState.usage_id == usage_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_message(self, message_id: int, chat_id: int) -> Optional[TranscriptionState]:
+        """Get state by message and chat ID."""
+        result = await self.session.execute(
+            select(TranscriptionState).where(
+                and_(
+                    TranscriptionState.message_id == message_id,
+                    TranscriptionState.chat_id == chat_id,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def update(self, state: TranscriptionState) -> TranscriptionState:
+        """Update transcription state."""
+        state.updated_at = datetime.utcnow()
+        await self.session.flush()
+        await self.session.refresh(state)
+        return state
+
+
+class TranscriptionVariantRepository:
+    """Repository for TranscriptionVariant model operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self,
+        usage_id: int,
+        mode: str,
+        text_content: str,
+        length_level: str = "default",
+        emoji_level: int = 0,
+        timestamps_enabled: bool = False,
+        generated_by: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        processing_time_seconds: Optional[float] = None,
+    ) -> TranscriptionVariant:
+        """Create a new transcription variant."""
+        logger.debug(
+            f"TranscriptionVariantRepository.create(usage_id={usage_id}, "
+            f"mode={mode}, length={length_level})"
+        )
+        variant = TranscriptionVariant(
+            usage_id=usage_id,
+            mode=mode,
+            length_level=length_level,
+            emoji_level=emoji_level,
+            timestamps_enabled=timestamps_enabled,
+            text_content=text_content,
+            generated_by=generated_by,
+            llm_model=llm_model,
+            processing_time_seconds=processing_time_seconds,
+            created_at=datetime.utcnow(),
+            last_accessed_at=datetime.utcnow(),
+        )
+        self.session.add(variant)
+        await self.session.flush()
+        await self.session.refresh(variant)
+        logger.debug(f"TranscriptionVariant created: id={variant.id}")
+        return variant
+
+    async def get_variant(
+        self,
+        usage_id: int,
+        mode: str,
+        length_level: str = "default",
+        emoji_level: int = 0,
+        timestamps_enabled: bool = False,
+    ) -> Optional[TranscriptionVariant]:
+        """Get variant by parameters."""
+        result = await self.session.execute(
+            select(TranscriptionVariant).where(
+                and_(
+                    TranscriptionVariant.usage_id == usage_id,
+                    TranscriptionVariant.mode == mode,
+                    TranscriptionVariant.length_level == length_level,
+                    TranscriptionVariant.emoji_level == emoji_level,
+                    TranscriptionVariant.timestamps_enabled == timestamps_enabled,
+                )
+            )
+        )
+        variant = result.scalar_one_or_none()
+
+        # Update last_accessed_at if found
+        if variant:
+            variant.last_accessed_at = datetime.utcnow()
+            await self.session.flush()
+
+        return variant
+
+    async def get_by_usage_id(self, usage_id: int) -> list[TranscriptionVariant]:
+        """Get all variants for a usage record."""
+        result = await self.session.execute(
+            select(TranscriptionVariant)
+            .where(TranscriptionVariant.usage_id == usage_id)
+            .order_by(TranscriptionVariant.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+
+class TranscriptionSegmentRepository:
+    """Repository for TranscriptionSegment model operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_batch(
+        self, usage_id: int, segments: list[tuple[int, float, float, str]]
+    ) -> list[TranscriptionSegment]:
+        """
+        Create multiple segments in batch.
+
+        Args:
+            usage_id: Usage record ID
+            segments: List of (index, start_time, end_time, text) tuples
+
+        Returns:
+            List of created segments
+        """
+        logger.debug(
+            f"TranscriptionSegmentRepository.create_batch(usage_id={usage_id}, "
+            f"count={len(segments)})"
+        )
+        segment_objects = []
+        for index, start_time, end_time, text in segments:
+            segment = TranscriptionSegment(
+                usage_id=usage_id,
+                segment_index=index,
+                start_time=start_time,
+                end_time=end_time,
+                text=text,
+                created_at=datetime.utcnow(),
+            )
+            segment_objects.append(segment)
+            self.session.add(segment)
+
+        await self.session.flush()
+        logger.debug(f"Created {len(segment_objects)} segments for usage_id={usage_id}")
+        return segment_objects
+
+    async def get_by_usage_id(self, usage_id: int) -> list[TranscriptionSegment]:
+        """Get all segments for a usage record, ordered by index."""
+        result = await self.session.execute(
+            select(TranscriptionSegment)
+            .where(TranscriptionSegment.usage_id == usage_id)
+            .order_by(TranscriptionSegment.segment_index)
         )
         return list(result.scalars().all())
