@@ -1,9 +1,9 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status (2025-12-03)
+## Current Status (2025-12-04)
 
 **Phase**: Phase 10 - Interactive Transcription Processing 🚀
-**Stage**: Phase 10.1 COMPLETE ✅ → Ready for Phase 10.2 (Structured Mode)
+**Stage**: Phase 10.5 COMPLETE ✅ → Ready for Phase 10.6 (Timestamps)
 **Branch**: `docs/phase10-interactive-transcription-plan`
 **Production Version**: v0.0.3+
 **Production Status**: ✅ OPERATIONAL
@@ -37,6 +37,59 @@
 ---
 
 ## Recent Developments (Last 2 Weeks)
+
+### ✅ Phase 10.5: Interactive Transcription - Phase 5 (Emoji Option) COMPLETE (2025-12-04)
+
+**Achievement**: LLM-powered emoji enhancement for transcriptions with 4 levels of control
+
+**What Was Implemented**:
+1. **LLM Prompt** (`prompts/emoji.md`):
+   - Flexible template with {instruction} placeholder
+   - Requirements for natural emoji distribution
+   - Emoji placement guidelines (paragraphs, key phrases)
+
+2. **TextProcessor Emoji Method** (`src/services/text_processor.py:303-378`):
+   - `add_emojis()` method with 4 levels: 0 (none), 1 (few), 2 (moderate), 3 (many)
+   - Relative instructions that adapt to text length
+   - LLM refinement with graceful fallback
+
+3. **Keyboard Integration** (`src/bot/keyboards.py:205-255`):
+   - Row 4: Emoji controls
+   - Default button "😊 Смайлы" activates level 2 (moderate)
+   - Expanded controls: [Меньше/Убрать] [😊/😊😊/😊😊😊] [Больше]
+   - 3 emoji indicators showing current level
+
+4. **Callback Handlers** (`src/bot/callbacks.py:592-777`):
+   - `handle_emoji_toggle()` with 4-level logic
+   - Direction: "moderate" (default), "increase", "decrease"
+   - Variant caching and state management
+
+**User Feedback & Improvements**:
+- **Problem**: Initial 3-level implementation (0/1/2) with hard-coded counts (1-2, 3-5 emojis)
+  - User: "На маленький текст это норм. А вот если большой текст, то эти смайлы теряются"
+  - Fixed emoji counts didn't scale with text length
+  - Default button to level 1 gave too few emojis
+
+- **Solution**:
+  - Expanded to 4 levels (0/1/2/3) for finer control
+  - Changed default to level 2 (moderate) for balanced first impression
+  - Replaced hard counts with relative instructions ("минимальное количество", "умеренное количество", "щедрое количество")
+  - LLM now adapts emoji density to text length
+
+**Key Pattern Established**:
+**Relative LLM Instructions Over Hard Counts**: For features that scale with content size (emojis, summaries), use qualitative descriptions instead of specific numbers. This allows the LLM to adapt intelligently to varying text lengths - more emojis for long texts, fewer for short texts, all from the same prompt.
+
+**Files Modified**:
+- `prompts/emoji.md` (created)
+- `src/services/text_processor.py` (lines 303-378)
+- `src/bot/keyboards.py` (lines 205-255)
+- `src/bot/callbacks.py` (lines 592-777)
+
+**Testing**: ✅ All 121 tests passed
+**Status**: ✅ Complete, tested with user feedback, operational
+**Next**: Phase 10.6 - Timestamps Option
+
+---
 
 ### ✅ Phase 10.1: Interactive Transcription - Phase 1 COMPLETE (2025-12-03)
 
@@ -178,63 +231,61 @@
 
 ## Next Steps
 
-### Phase 10.2: Structured Text Mode (NEXT)
+### Phase 10.6: Timestamps Option (NEXT)
 
-**Goal**: LLM-based text formatting with punctuation and paragraphs
+**Goal**: Add word-level or segment-level timestamps to transcriptions for long audio (>5 min)
 
 **Implementation Tasks**:
-1. Create `src/services/text_processor.py`:
-   - `create_structured(text)` method
-   - LLM prompt for structuring
-   - Graceful fallback on errors
+1. **Keyboard Button** (`src/bot/keyboards.py`):
+   - Row 5: "🕒 Временные метки" toggle button
+   - Only show for audio >5 min (when segments saved)
+   - Toggle states: enabled/disabled
 
-2. Update `src/bot/keyboards.py`:
-   - Add "📝 Структурировать" button
-   - Update state indicator ("вы здесь")
+2. **Callback Handler** (`src/bot/callbacks.py`):
+   - `handle_timestamps_toggle()` method
+   - Toggle timestamps_enabled state
+   - Regenerate current variant with/without timestamps
 
-3. Update `src/bot/callbacks.py`:
-   - Implement structured mode handler
-   - Generate variant on first request
-   - Cache in database
-   - Update message text + keyboard
+3. **TextProcessor Method** (`src/services/text_processor.py`):
+   - `add_timestamps(text, segments, timestamps_enabled)` method
+   - Format: `[00:05] Text segment`
+   - Apply to any text mode (original, structured, summary)
 
-4. Save original variant in `src/bot/handlers.py`:
-   - After transcription, save as "original" mode
+4. **Segment Retrieval**:
+   - Load segments from database (already saved for audio >300s)
+   - Pass to text processor when timestamps_enabled=True
 
-5. Feature flag: `ENABLE_STRUCTURED_MODE` (already exists)
+5. **Feature Flag**: `ENABLE_TIMESTAMPS_OPTION` (already exists)
 
 **Expected User Experience**:
 ```
-[Transcription text]
+[Audio >5 min transcribed]
 
-[Исходный текст]
-[📝 Структурировать]  ← Click to format text
+[Row 1: Mode buttons]
+[Row 2: Length controls]
+[Row 3: Summary button]
+[Row 4: Emoji controls]
+[Row 5: 🕒 Временные метки]  ← Click to add timestamps
 
-→ Message updates with formatted text:
-- Proper punctuation
-- Paragraph breaks
-- Bullet lists (if appropriate)
+→ Text updates:
+[00:00] Первая фраза текста.
+[00:15] Вторая фраза текста.
+[00:32] Третья фраза текста.
 
-[Исходный текст]
-[📝 Структурировать (вы здесь)]  ← State indicator
+[Row 5: ✅ Временные метки]  ← Shows enabled state
 ```
 
 **Acceptance Criteria**:
-- ✅ Button appears when `ENABLE_STRUCTURED_MODE=true`
-- ✅ Click generates structured text via LLM
-- ✅ Variant cached in database (no regeneration on re-click)
-- ✅ Message updates with new text + keyboard state
-- ✅ Works with/without LLM enabled
+- ✅ Button only appears for audio >5 min (segments exist)
+- ✅ Toggle adds/removes timestamps from current text
+- ✅ Timestamps preserved when switching modes/length/emoji
+- ✅ Variant cached per timestamps state
 - ✅ All tests passing
 
-**Plan**: See `memory-bank/plans/2025-12-02-interactive-transcription-processing.md` Phase 2
+**Plan**: See `memory-bank/plans/2025-12-02-interactive-transcription-processing.md` Phase 6
 
-### Future Phases (Phase 10.3-10.8)
+### Future Phases (Phase 10.7-10.8)
 
-**Phase 3**: Length variations (5 levels: shorter ← short ← default → long → longer)
-**Phase 4**: Summary mode ("О чем текст?")
-**Phase 5**: Emoji option (0, 1-2, 3-5 levels)
-**Phase 6**: Timestamps (for audio >5 min)
 **Phase 7**: File handling (for text >4096 chars)
 **Phase 8**: Retranscription (two quality methods)
 

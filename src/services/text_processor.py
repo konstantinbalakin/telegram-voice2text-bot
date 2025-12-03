@@ -203,6 +203,178 @@ class TextProcessor:
         """
         return await self.adjust_length(current_text, "longer", current_level, mode)
 
+    async def summarize_text(self, original_text: str, length_level: str = "default") -> str:
+        """
+        Create text summary ("What's the text about?").
+
+        Phase 4: Generate concise summary with main topic and key points.
+
+        Args:
+            original_text: Original transcription text
+            length_level: Length level (default/short/shorter/long/longer)
+
+        Returns:
+            Summary text with topic and bullet points
+
+        Raises:
+            LLMError: If summarization fails
+        """
+        # Load prompt from file
+        try:
+            prompt_template = load_prompt("summary")
+        except (FileNotFoundError, IOError) as e:
+            logger.error(f"Failed to load summary prompt: {e}")
+            # Fallback to inline prompt
+            prompt_template = """Твоя задача: создать краткое резюме текста, отвечая на вопрос "О чем этот текст?"
+
+Исходный текст:
+{text}
+
+Требования:
+1. Выделить главную тему/идею одним предложением
+2. Перечислить ключевые моменты (3-5 пунктов буллетами)
+3. Объём резюме: примерно 25-30% от оригинала
+4. Структура:
+   - Первая строка: "О чем текст: <краткое описание темы>"
+   - Пустая строка
+   - "Ключевые моменты:"
+   - Буллеты (•) с основными пунктами
+5. Сохранить важные детали и факты
+6. НЕ выдумывать информацию
+7. НЕ добавлять ничего от себя
+
+Формат ответа:
+О чем текст: <краткое описание>
+
+Ключевые моменты:
+• <пункт 1>
+• <пункт 2>
+• <пункт 3>
+
+Верни ТОЛЬКО резюме в таком формате, без пояснений и комментариев."""
+
+        prompt = prompt_template.format(text=original_text)
+        logger.info(f"Creating summary text ({len(original_text)} chars)...")
+
+        try:
+            # Use custom prompt for summarization
+            summary_text = await self._refine_with_custom_prompt(original_text, prompt)
+            logger.info(f"Summary created: {len(original_text)} → {len(summary_text)} chars")
+
+            # If length level is not default, apply length adjustment
+            if length_level != "default":
+                logger.info(f"Adjusting summary to length level: {length_level}")
+                # Determine direction based on level
+                if length_level in ["short", "shorter"]:
+                    # Make shorter from default
+                    if length_level == "short":
+                        summary_text = await self.adjust_length(
+                            summary_text, "shorter", "default", mode="summary"
+                        )
+                    else:  # shorter
+                        temp = await self.adjust_length(
+                            summary_text, "shorter", "default", mode="summary"
+                        )
+                        summary_text = await self.adjust_length(
+                            temp, "shorter", "short", mode="summary"
+                        )
+                else:  # long or longer
+                    # Make longer from default
+                    if length_level == "long":
+                        summary_text = await self.adjust_length(
+                            summary_text, "longer", "default", mode="summary"
+                        )
+                    else:  # longer
+                        temp = await self.adjust_length(
+                            summary_text, "longer", "default", mode="summary"
+                        )
+                        summary_text = await self.adjust_length(
+                            temp, "longer", "long", mode="summary"
+                        )
+
+            return summary_text
+
+        except LLMError as e:
+            logger.error(f"Failed to create summary: {e}")
+            # Fallback: return original text
+            logger.warning("Falling back to original text")
+            return original_text
+
+    async def add_emojis(self, text: str, emoji_level: int, current_level: int = 0) -> str:
+        """
+        Add emojis to text based on level.
+
+        Phase 5: Add appropriate emojis to enhance text readability and emotional tone.
+        Uses relative instructions (add more/less) for smoother transitions.
+
+        Args:
+            text: Text to add emojis to (can be base text or text with existing emojis)
+            emoji_level: Target emoji level (0=none, 1=few, 2=moderate, 3=many)
+            current_level: Current emoji level (for incremental adjustments)
+
+        Returns:
+            Text with adjusted emoji count
+
+        Raises:
+            ValueError: If emoji_level is invalid
+            LLMError: If emoji addition fails
+        """
+        if emoji_level not in [0, 1, 2, 3]:
+            raise ValueError(f"Invalid emoji_level: {emoji_level}. Must be 0, 1, 2, or 3")
+
+        # Level 0 = no emojis, return original
+        if emoji_level == 0:
+            return text
+
+        # Determine instruction based on level
+        instructions = {
+            1: "Добавь минимальное количество эмодзи в текст. Чтобы прям не отвлекало.",
+            2: "Добавь немного эмодзи в текст, чтобы смотрелось не слишком избыточно и пёстро",
+            3: "Добавь щедрое количество эмодзи в текст",
+        }
+
+        instruction = instructions[emoji_level]
+
+        # Load prompt from file
+        try:
+            prompt_template = load_prompt("emoji")
+        except (FileNotFoundError, IOError) as e:
+            logger.warning(f"Failed to load emoji prompt: {e}, using fallback")
+            # Fallback inline prompt
+            prompt_template = """{instruction}
+
+Текст:
+{text}
+
+Требования:
+1. Эмодзи должны подчеркивать смысл
+2. Размещать в начале абзацев или перед важными фразами
+3. Использовать разнообразные эмодзи
+4. НЕ менять сам текст
+5. Распределяй эмодзи равномерно по всему тексту
+
+Верни текст с эмодзи."""
+
+        prompt = prompt_template.format(text=text, instruction=instruction)
+        logger.info(
+            f"Adding emojis to text: level={emoji_level} (from {current_level}), "
+            f"{len(text)} chars..."
+        )
+
+        try:
+            text_with_emojis = await self._refine_with_custom_prompt(text, prompt)
+            logger.info(
+                f"Emojis adjusted: {len(text)} → {len(text_with_emojis)} chars "
+                f"(level={emoji_level})"
+            )
+            return text_with_emojis
+
+        except LLMError as e:
+            logger.error(f"Failed to add emojis: {e}")
+            # Fallback: return original text
+            logger.warning("Falling back to original text")
+            return text
+
     async def _refine_with_custom_prompt(self, text: str, prompt: str) -> str:
         """
         Refine text with a custom prompt.

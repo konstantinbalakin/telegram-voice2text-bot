@@ -104,8 +104,23 @@ from src.services.prompt_loader import clear_cache
 clear_cache()
 ```
 
+### `summary.md`
+Used for creating text summaries (Phase 4: Summary Mode - "What's the text about?").
+
+**Purpose**: Create concise summary with main topic and key points in bullet format.
+
+**Placeholders**:
+- `{text}` - The original transcription text to summarize
+
+**Usage**:
+```python
+from src.services.prompt_loader import load_prompt
+
+prompt_template = load_prompt("summary")
+prompt = prompt_template.format(text="text to summarize...")
+```
+
 ## Future Prompts
 
 Planned prompts for upcoming phases:
-- `summary.md` - Text summarization (Phase 4)
 - `emoji.md` - Adding emojis to text (Phase 5)

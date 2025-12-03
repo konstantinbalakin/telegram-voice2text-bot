@@ -949,6 +949,30 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
 - **Rollout Plan**: Deploy → Enable for test users → Monitor → Gradual rollout
 - **Pattern**: Feature toggle for risk mitigation
 
+### 31. **Relative LLM Instructions Pattern** (added 2025-12-04)
+- **Where**: `prompts/emoji.md` and emoji level instructions in `TextProcessor.add_emojis()`
+- **Why**: Hard-coded values (e.g., "1-2 emojis") don't scale with varying text lengths
+- **Problem**: User feedback: "На маленький текст это норм. А вот если большой текст, то эти смайлы теряются"
+- **Benefit**: LLM adapts output to content size naturally, better UX across all text lengths
+- **Implementation**:
+  ```python
+  # BAD: Hard-coded counts
+  instructions = {
+      1: "Добавь 1-2 эмодзи в текст",  # Gets lost in long texts
+      2: "Добавь 3-5 эмодзи в текст",  # Too many for short texts
+  }
+
+  # GOOD: Relative qualitative descriptions
+  instructions = {
+      1: "Добавь минимальное количество эмодзи - только самые важные моменты.",
+      2: "Добавь умеренное количество эмодзи - выдели ключевые идеи и эмоции.",
+      3: "Добавь щедрое количество эмодзи - сделай текст живым и выразительным.",
+  }
+  ```
+- **Application**: Use for any LLM feature that scales with content (emojis, summaries, expansions, condensations)
+- **Key Insight**: LLMs are better at understanding qualitative goals than following rigid quantitative rules across varying contexts
+- **Pattern**: Qualitative descriptions + trust LLM adaptation > hard-coded numbers
+
 ## Development Workflow
 
 ### Git Strategy

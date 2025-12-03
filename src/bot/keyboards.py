@@ -146,9 +146,117 @@ def create_transcription_keyboard(
                 ]
             )
 
-    # Note: Rows 3-6 will be added in future phases
     # Row 3: Summary mode (Phase 4)
+    if settings.enable_summary_mode:
+        if state.active_mode == "summary" and settings.enable_length_variations:
+            # Phase 4: Dynamic 3-button layout for summary mode
+            row = []
+
+            # Left button: "Короче" (hide at leftmost boundary)
+            if state.length_level in ["short", "default", "long", "longer"]:
+                row.append(
+                    InlineKeyboardButton(
+                        "◀ Короче",
+                        callback_data=encode_callback_data(
+                            "length", state.usage_id, direction="shorter"
+                        ),
+                    )
+                )
+
+            # Center button: Length indicator (non-interactive)
+            level_indicators = {
+                "shorter": "💡─",  # Minimum
+                "short": "💡↓",  # Short
+                "default": "💡",  # Default/middle
+                "long": "💡↑",  # Long
+                "longer": "💡+",  # Maximum
+            }
+            indicator = level_indicators.get(state.length_level, "💡")
+            row.append(InlineKeyboardButton(indicator, callback_data="noop"))
+
+            # Right button: "Длиннее" (hide at rightmost boundary)
+            if state.length_level in ["shorter", "short", "default", "long"]:
+                row.append(
+                    InlineKeyboardButton(
+                        "Длиннее ▶",
+                        callback_data=encode_callback_data(
+                            "length", state.usage_id, direction="longer"
+                        ),
+                    )
+                )
+
+            keyboard.append(row)
+        else:
+            # Single button (not in summary mode, or length variations disabled)
+            label = (
+                "📌 О чем текст? (вы здесь)"
+                if state.active_mode == "summary"
+                else "📌 О чем текст?"
+            )
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        label,
+                        callback_data=encode_callback_data("mode", state.usage_id, mode="summary"),
+                    )
+                ]
+            )
+
     # Row 4: Emoji option (Phase 5)
+    if settings.enable_emoji_option:
+        # Emoji controls only available in "original" mode
+        # In "structured" or "summary" modes, show collapsed button regardless of emoji_level
+        if state.active_mode == "original" and state.emoji_level > 0:
+            # 3 buttons: [Меньше/Убрать] [Indicator] [Больше]
+            row = []
+
+            # Left button: Decrease emoji level
+            label = "Убрать" if state.emoji_level == 1 else "Меньше"
+            row.append(
+                InlineKeyboardButton(
+                    label,
+                    callback_data=encode_callback_data(
+                        "emoji", state.usage_id, direction="decrease"
+                    ),
+                )
+            )
+
+            # Center button: Emoji indicator (non-interactive)
+            # 4 levels: 0 (none), 1 (few), 2 (moderate), 3 (many)
+            emoji_indicators = {
+                1: "😊",  # Few
+                2: "😊😊",  # Moderate (default)
+                3: "😊😊😊",  # Many
+            }
+            indicator = emoji_indicators.get(state.emoji_level, "😊")
+            row.append(InlineKeyboardButton(indicator, callback_data="noop"))
+
+            # Right button: Increase emoji level (only if not at max)
+            if state.emoji_level < 3:
+                row.append(
+                    InlineKeyboardButton(
+                        "Больше",
+                        callback_data=encode_callback_data(
+                            "emoji", state.usage_id, direction="increase"
+                        ),
+                    )
+                )
+
+            keyboard.append(row)
+        else:
+            # Single button: Add emojis (defaults to level 2 - moderate)
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        "😊 Смайлы",
+                        callback_data=encode_callback_data(
+                            "emoji", state.usage_id, direction="moderate"
+                        ),
+                    )
+                ]
+            )
+
+    # Note: Rows 5-6 will be added in future phases
     # Row 5: Timestamps option (Phase 6)
     # Row 6: Retranscribe (Phase 8)
 

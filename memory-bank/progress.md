@@ -22,10 +22,14 @@
 - **Phase 8.3**: ✅ Complete (2025-11-24) - LLM performance tracking
 - **Phase 9**: ✅ Complete (2025-11-30) - Large file support (Telethon Client API)
 - **Phase 10.1**: ✅ Complete (2025-12-03) - Interactive transcription Phase 1 (infrastructure)
-- **Phase 10.2**: ⏳ NEXT - Interactive transcription Phase 2 (Structured Mode)
+- **Phase 10.2**: ✅ Complete (2025-12-03) - Interactive transcription Phase 2 (Structured Mode)
+- **Phase 10.3**: ✅ Complete (2025-12-03) - Interactive transcription Phase 3 (Length Variations)
+- **Phase 10.4**: ✅ Complete (2025-12-03) - Interactive transcription Phase 4 (Summary Mode)
+- **Phase 10.5**: ✅ Complete (2025-12-04) - Interactive transcription Phase 5 (Emoji Option) with improvements
+- **Phase 10.6**: ⏳ NEXT - Interactive transcription Phase 6 (Timestamps)
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1)
-- Current focus (2025-12-03): Phase 10.1 complete, ready for Phase 10.2 (Structured Mode)
+- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-5)
+- Current focus (2025-12-04): Phase 10.5 complete with user-requested improvements, ready for Phase 10.6 (Timestamps)
 
 ## Delivered Milestones
 
@@ -1709,3 +1713,73 @@ TIMESTAMPS_MIN_DURATION=300  # 5 minutes
 - Implementation plan: `memory-bank/plans/2025-12-02-interactive-transcription-processing.md`
 - Acceptance guide: `PHASE1_ACCEPTANCE.md` (Russian)
 - Memory Bank updated: `activeContext.md`, `progress.md`
+
+---
+
+### Phase 10.5: Interactive Transcription - Phase 5 (Emoji Option) ✅ COMPLETE (2025-12-04)
+
+**Achievement**: Emoji addition feature with 4 levels and improved UX based on user feedback
+
+**What Was Implemented (Initial)**:
+1. **Emoji Prompt** (`prompts/emoji.md`): LLM instructions for adding emojis
+2. **TextProcessor.add_emojis()** (`src/services/text_processor.py:303-378`):
+   - Emoji level processing (0/1/2/3)
+   - Relative instructions (no specific counts)
+3. **Callback Handler** (`src/bot/callbacks.py:592-777`): handle_emoji_toggle()
+4. **Keyboard Row 4** (`src/bot/keyboards.py:205-255`): Dynamic emoji buttons
+5. **Feature Flag**: `ENABLE_EMOJI_OPTION` (already existed in config.py)
+
+**User Feedback & Improvements**:
+**Problem**: Initial implementation (3 levels: 0/1/2) had issues:
+- 1-2 emojis worked for short text but got lost in long text
+- Hard-coded emoji counts (1-2, 3-5) not flexible
+- Default button went to level 1 (too few for long texts)
+
+**Solution Implemented**:
+1. **Expanded to 4 levels**: 0 (none) → 1 (few) → 2 (moderate) → 3 (many)
+2. **Default to level 2** (moderate): Button "😊 Смайлы" now activates level 2
+3. **Relative instructions**: Removed specific counts, use qualitative descriptions:
+   - Level 1: "минимальное количество - только самые важные моменты"
+   - Level 2: "умеренное количество - выдели ключевые идеи и эмоции"
+   - Level 3: "щедрое количество - сделай текст живым и выразительным"
+4. **Flexible prompt**: LLM adapts emoji count to text length
+5. **Three indicators**: 😊 (level 1), 😊😊 (level 2), 😊😊😊 (level 3)
+
+**User Experience**:
+```
+[Исходный текст]
+[😊 Смайлы]  ← Click once → Level 2 (moderate, balanced)
+     ↓
+[Меньше] [😊😊] [Больше]
+   ↓              ↓
+[Убрать] [😊]   [😊😊😊]
+```
+
+**Files Created**:
+- `prompts/emoji.md` - Flexible emoji prompt with {instruction} placeholder
+
+**Files Modified**:
+- `src/services/text_processor.py` - add_emojis() with 4 levels + relative instructions
+- `src/bot/keyboards.py` - Row 4 with 3 indicators, direction="moderate"
+- `src/bot/callbacks.py` - handle_emoji_toggle() with 4-level logic
+
+**Testing & Quality**:
+- ✅ All 121 tests passing
+- ✅ Ruff, Black, MyPy - all passing
+- ✅ User tested and confirmed: "Белиссимо! Все идеально вроде работает"
+
+**Key Pattern Established**:
+**Relative LLM Instructions Over Hard Counts**: For features that scale with content size (emojis, length adjustments), use qualitative instructions ("moderate amount") instead of hard numbers ("3-5 emojis"). LLM adapts better to varying text lengths.
+
+**Impact**:
+- ✅ Emojis work well on both short and long texts
+- ✅ One-click default (level 2) is balanced and practical
+- ✅ Clear navigation from moderate level (can go up or down)
+- ✅ LLM flexibility improves quality across text sizes
+
+**User Feedback**:
+- Initial: "На маленький текст норм. А вот если большой текст, то эти смайлы теряются"
+- After improvements: Testing confirmed improvements work correctly
+
+**Status**: ✅ COMPLETE - Improved based on user feedback, ready for Phase 6 (Timestamps)
+**Completion Date**: 2025-12-04
