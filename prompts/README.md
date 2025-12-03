@@ -44,6 +44,40 @@ prompt_template = load_prompt("structured")
 prompt = prompt_template.format(text="raw transcription...")
 ```
 
+### `length_shorter.md`
+Used for making text shorter while preserving key information (Phase 3: Length Variations).
+
+**Purpose**: Reduce text length by approximately 20% by removing less important details and repetitions.
+
+**Placeholders**:
+- `{text}` - The current text to shorten
+- `{mode}` - Text mode (structured/summary)
+
+**Usage**:
+```python
+from src.services.prompt_loader import load_prompt
+
+prompt_template = load_prompt("length_shorter")
+prompt = prompt_template.format(text="text to shorten", mode="structured")
+```
+
+### `length_longer.md`
+Used for making text longer with additional details (Phase 3: Length Variations).
+
+**Purpose**: Expand text length by approximately 20% by elaborating key points and adding context.
+
+**Placeholders**:
+- `{text}` - The current text to expand
+- `{mode}` - Text mode (structured/summary)
+
+**Usage**:
+```python
+from src.services.prompt_loader import load_prompt
+
+prompt_template = load_prompt("length_longer")
+prompt = prompt_template.format(text="text to expand", mode="structured")
+```
+
 ## Adding New Prompts
 
 1. Create a new `.md` file in this directory
@@ -75,5 +109,3 @@ clear_cache()
 Planned prompts for upcoming phases:
 - `summary.md` - Text summarization (Phase 4)
 - `emoji.md` - Adding emojis to text (Phase 5)
-- `longer.md` - Expanding text (Phase 3)
-- `shorter.md` - Condensing text (Phase 3)

@@ -88,21 +88,63 @@ def create_transcription_keyboard(
         ]
     )
 
-    # Row 2: Structured mode (Phase 2)
+    # Row 2: Structured mode (Phase 2 + Phase 3 length variations)
     if settings.enable_structured_mode:
-        label = (
-            "📝 Структурировать (вы здесь)"
-            if state.active_mode == "structured"
-            else "📝 Структурировать-Максимальная длина строчки?"
-        )
-        keyboard.append(
-            [
-                InlineKeyboardButton(
-                    label,
-                    callback_data=encode_callback_data("mode", state.usage_id, mode="structured"),
+        if state.active_mode == "structured" and settings.enable_length_variations:
+            # Phase 3: Dynamic 3-button layout [◀ Короче] [Indicator] [Длиннее ▶]
+            row = []
+
+            # Left button: "Короче" (hide at leftmost boundary)
+            if state.length_level in ["short", "default", "long", "longer"]:
+                row.append(
+                    InlineKeyboardButton(
+                        "◀ Короче",
+                        callback_data=encode_callback_data(
+                            "length", state.usage_id, direction="shorter"
+                        ),
+                    )
                 )
-            ]
-        )
+
+            # Center button: Length indicator (non-interactive)
+            level_indicators = {
+                "shorter": "📝─",  # Minimum
+                "short": "📝↓",  # Short
+                "default": "📝",  # Default/middle
+                "long": "📝↑",  # Long
+                "longer": "📝+",  # Maximum
+            }
+            indicator = level_indicators.get(state.length_level, "📝")
+            row.append(InlineKeyboardButton(indicator, callback_data="noop"))
+
+            # Right button: "Длиннее" (hide at rightmost boundary)
+            if state.length_level in ["shorter", "short", "default", "long"]:
+                row.append(
+                    InlineKeyboardButton(
+                        "Длиннее ▶",
+                        callback_data=encode_callback_data(
+                            "length", state.usage_id, direction="longer"
+                        ),
+                    )
+                )
+
+            keyboard.append(row)
+        else:
+            # Single button (not in structured mode, or length variations disabled)
+            label = (
+                "📝 Структурировать (вы здесь)"
+                if state.active_mode == "structured"
+                else "📝 Структурировать"
+            )
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        label,
+                        callback_data=encode_callback_data(
+                            "mode", state.usage_id, mode="structured"
+                        ),
+                    )
+                ]
+            )
 
     # Note: Rows 3-6 will be added in future phases
     # Row 3: Summary mode (Phase 4)
