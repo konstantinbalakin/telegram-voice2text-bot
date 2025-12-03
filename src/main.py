@@ -9,14 +9,31 @@ import os
 import sys
 from pathlib import Path
 
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram import Update
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+    TypeHandler,
+)
 
 from src.config import settings
-from src.storage.database import init_db, close_db
+from src.storage.database import init_db, close_db, get_session
+from src.storage.repositories import (
+    TranscriptionStateRepository,
+    TranscriptionVariantRepository,
+    TranscriptionSegmentRepository,
+)
 from src.transcription import get_transcription_router, shutdown_transcription_router, AudioHandler
+from src.services.prompt_loader import load_prompt
 from src.bot.handlers import BotHandlers
+from src.bot.callbacks import CallbackHandlers
 from src.services.queue_manager import QueueManager
 from src.services.llm_service import LLMFactory, LLMService
+from src.services.text_processor import TextProcessor
 from src.services.telegram_client import TelegramClientService
 from src.utils.logging_config import setup_logging, log_deployment_event, get_config_summary
 
@@ -82,11 +99,23 @@ async def main() -> None:
     llm_service = None
     if settings.llm_refinement_enabled:
         try:
+            # Load refinement prompt from file
+            try:
+                refinement_prompt = load_prompt("refinement")
+                logger.info("Loaded refinement prompt from file")
+            except (FileNotFoundError, IOError) as e:
+                logger.warning(f"Failed to load refinement prompt: {e}")
+                # Fallback to default prompt
+                refinement_prompt = """Ниже приведён текст из расшифровки аудиозаписи. Некоторые слова могут быть неточными. Если слово нормальное, то не нужно его изменять. А если не очень, то попробуй подобрать наиболее правильный по смыслу исправленный вариант. Отвечай только итоговым исправленным вариантом. Без другого лишнего текста. Вот исходный текст:
+
+{text}"""
+                logger.info("Using default refinement prompt")
+
             llm_provider = LLMFactory.create_provider(settings)
             if llm_provider:
                 llm_service = LLMService(
                     provider=llm_provider,
-                    prompt=settings.llm_refinement_prompt,
+                    prompt=refinement_prompt,
                 )
                 logger.info(
                     f"LLM service initialized (provider={settings.llm_provider}, "
@@ -132,12 +161,60 @@ async def main() -> None:
     # Build telegram bot application
     application = Application.builder().token(settings.telegram_bot_token).build()
 
+    # Debug: Log all incoming updates
+    async def debug_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Debug handler to log all incoming updates."""
+        logger.debug(f"=== INCOMING UPDATE === type: {type(update)}")
+        if update.callback_query:
+            logger.debug(f"  -> CallbackQuery detected! data: {update.callback_query.data}")
+        if update.message:
+            logger.debug(
+                f"  -> Message detected! text: {update.message.text if update.message.text else 'N/A'}"
+            )
+
+    # Register debug handler FIRST (lowest priority, runs for all updates)
+    application.add_handler(TypeHandler(Update, debug_all_updates), group=999)
+
     # Register handlers
     application.add_handler(CommandHandler("start", bot_handlers.start_command))
     application.add_handler(CommandHandler("help", bot_handlers.help_command))
     application.add_handler(CommandHandler("stats", bot_handlers.stats_command))
     application.add_handler(MessageHandler(filters.VOICE, bot_handlers.voice_message_handler))
     application.add_handler(MessageHandler(filters.AUDIO, bot_handlers.audio_message_handler))
+
+    # Register callback query handler for interactive transcription
+    if settings.interactive_mode_enabled:
+        # Create text processor for interactive modes (Phase 2+)
+        text_processor = None
+        if llm_service:
+            text_processor = TextProcessor(llm_service)
+            logger.info("TextProcessor created for interactive modes")
+        else:
+            logger.warning(
+                "LLM service not available - structured mode will be disabled even if flag is set"
+            )
+
+        # Create callback handlers with repositories (they need session, created on-demand)
+        async def callback_query_wrapper(
+            update: object, context: ContextTypes.DEFAULT_TYPE
+        ) -> None:
+            """Wrapper to create repositories with session for each callback."""
+            logger.debug(f"callback_query_wrapper called! update type: {type(update)}")
+            if hasattr(update, "callback_query"):
+                logger.debug(f"callback_query data: {update.callback_query.data if update.callback_query else 'None'}")  # type: ignore[attr-defined]
+            async with get_session() as session:
+                state_repo = TranscriptionStateRepository(session)
+                variant_repo = TranscriptionVariantRepository(session)
+                segment_repo = TranscriptionSegmentRepository(session)
+                callback_handlers = CallbackHandlers(
+                    state_repo, variant_repo, segment_repo, text_processor
+                )
+                await callback_handlers.handle_callback_query(update, context)  # type: ignore[arg-type]
+
+        application.add_handler(CallbackQueryHandler(callback_query_wrapper))
+        logger.info("Interactive transcription enabled - callback handlers registered")
+    else:
+        logger.info("Interactive transcription disabled")
 
     # Register error handler
     application.add_error_handler(bot_handlers.error_handler)
@@ -151,7 +228,11 @@ async def main() -> None:
             await application.initialize()
             await application.start()
             if application.updater:
-                await application.updater.start_polling(drop_pending_updates=True)
+                # IMPORTANT: allowed_updates must include "callback_query" for inline buttons to work
+                await application.updater.start_polling(
+                    drop_pending_updates=True,
+                    allowed_updates=Update.ALL_TYPES,
+                )
             logger.info("Bot is ready and running (polling mode)")
 
             # Log ready event

@@ -6,13 +6,19 @@ import time
 import uuid
 from datetime import timedelta
 from typing import Optional
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 
 from src.config import settings
 from src.storage.database import get_session
-from src.storage.repositories import UserRepository, UsageRepository
+from src.storage.repositories import (
+    UserRepository,
+    UsageRepository,
+    TranscriptionStateRepository,
+    TranscriptionSegmentRepository,
+    TranscriptionVariantRepository,
+)
 from src.transcription.routing.router import TranscriptionRouter
 from src.transcription.routing.strategies import HybridStrategy
 from src.transcription.audio_handler import AudioHandler
@@ -21,6 +27,7 @@ from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.progress_tracker import ProgressTracker
 from src.services.llm_service import LLMService
 from src.services.telegram_client import TelegramClientService
+from src.bot.keyboards import create_transcription_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -948,6 +955,87 @@ class BotHandlers:
             except Exception:
                 pass
 
+    async def _create_interactive_state_and_keyboard(
+        self,
+        usage_id: int,
+        message_id: int,
+        chat_id: int,
+        result: TranscriptionResult,
+        final_text: str,
+    ) -> Optional["InlineKeyboardMarkup"]:
+        """Create TranscriptionState, save segments, save original variant, and generate keyboard.
+
+        Args:
+            usage_id: Usage record ID
+            message_id: Telegram message ID where transcription was sent
+            chat_id: Telegram chat ID
+            result: TranscriptionResult with optional segments
+            final_text: The final text that was sent to the user (original variant)
+
+        Returns:
+            InlineKeyboardMarkup or None if interactive mode disabled
+        """
+        logger.debug(
+            f"_create_interactive_state_and_keyboard called: usage_id={usage_id}, "
+            f"message_id={message_id}, interactive_mode={settings.interactive_mode_enabled}"
+        )
+
+        if not settings.interactive_mode_enabled:
+            logger.debug("Interactive mode disabled, returning None")
+            return None
+
+        try:
+            async with get_session() as session:
+                state_repo = TranscriptionStateRepository(session)
+                segment_repo = TranscriptionSegmentRepository(session)
+                variant_repo = TranscriptionVariantRepository(session)
+
+                # Create TranscriptionState
+                state = await state_repo.create(
+                    usage_id=usage_id,
+                    message_id=message_id,
+                    chat_id=chat_id,
+                )
+                logger.debug(
+                    f"TranscriptionState created: id={state.id}, usage_id={usage_id}, "
+                    f"message_id={message_id}"
+                )
+
+                # Save original variant (Phase 2)
+                await variant_repo.create(
+                    usage_id=usage_id,
+                    mode="original",
+                    text_content=final_text,
+                    generated_by="transcription",
+                )
+                logger.debug(f"Saved original variant for usage_id={usage_id}")
+
+                # Save segments if available and duration exceeds threshold
+                has_segments = False
+                if result.segments and result.audio_duration >= settings.timestamps_min_duration:
+                    segments_data = [
+                        (i, seg.start, seg.end, seg.text) for i, seg in enumerate(result.segments)
+                    ]
+                    await segment_repo.create_batch(usage_id, segments_data)
+                    has_segments = True
+                    logger.debug(
+                        f"Saved {len(segments_data)} segments for usage_id={usage_id}, "
+                        f"duration={result.audio_duration:.1f}s"
+                    )
+                elif result.segments:
+                    logger.debug(
+                        f"Segments not saved (duration {result.audio_duration:.1f}s < "
+                        f"threshold {settings.timestamps_min_duration}s)"
+                    )
+
+                # Generate keyboard
+                keyboard = create_transcription_keyboard(state, has_segments, settings)
+                return keyboard
+
+        except Exception as e:
+            logger.error(f"Failed to create interactive state: {e}", exc_info=True)
+            return None
+
     async def _send_draft_messages(
         self,
         request: TranscriptionRequest,
@@ -1097,12 +1185,37 @@ class BotHandlers:
                         f"length={len(refined_text)}"
                     )
 
+                    sent_messages = []
                     for i, chunk in enumerate(text_chunks, 1):
-                        prefix = "✨ Готово!\n\n" if i == 1 else ""
+                        prefix = "" if i == 1 else ""
                         header = (
                             f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
                         )
-                        await request.user_message.reply_text(prefix + header + chunk)
+
+                        # Send message WITHOUT keyboard first
+                        msg = await request.user_message.reply_text(prefix + header + chunk)
+                        sent_messages.append(msg)
+
+                        # Add keyboard only to the LAST message AFTER sending
+                        if i == len(text_chunks):
+                            logger.debug(
+                                f"Creating keyboard for last message: usage_id={request.usage_id}, "
+                                f"message_id={msg.message_id}"
+                            )
+                            keyboard = await self._create_interactive_state_and_keyboard(
+                                usage_id=request.usage_id,
+                                message_id=msg.message_id,
+                                chat_id=request.user_message.chat_id,
+                                result=result,
+                                final_text=refined_text,
+                            )
+                            if keyboard:
+                                try:
+                                    await msg.edit_reply_markup(reply_markup=keyboard)
+                                    logger.debug(f"Keyboard added to message {msg.message_id}")
+                                except Exception as e:
+                                    logger.error(f"Failed to add keyboard: {e}", exc_info=True)
+
                         if i < len(text_chunks):
                             await asyncio.sleep(0.1)
 
@@ -1153,7 +1266,17 @@ class BotHandlers:
                 text_chunks = split_text(result.text)
 
                 if len(text_chunks) == 1:
-                    await request.status_message.edit_text(f"✅ Готово!\n\n{result.text}")
+                    # Single message - edit status_message with keyboard
+                    keyboard = await self._create_interactive_state_and_keyboard(
+                        usage_id=request.usage_id,
+                        message_id=request.status_message.message_id,
+                        chat_id=request.status_message.chat_id,
+                        result=result,
+                        final_text=result.text,
+                    )
+                    await request.status_message.edit_text(
+                        f"✅ Готово!\n\n{result.text}", reply_markup=keyboard
+                    )
                 else:
                     # Multiple messages needed
                     try:
@@ -1166,7 +1289,30 @@ class BotHandlers:
                         header = (
                             f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
                         )
-                        await request.user_message.reply_text(prefix + header + chunk)
+
+                        # Send message WITHOUT keyboard first
+                        msg = await request.user_message.reply_text(prefix + header + chunk)
+
+                        # Add keyboard only to the LAST message AFTER sending
+                        if i == len(text_chunks):
+                            logger.debug(
+                                f"Creating keyboard for last message: usage_id={request.usage_id}, "
+                                f"message_id={msg.message_id}"
+                            )
+                            keyboard = await self._create_interactive_state_and_keyboard(
+                                usage_id=request.usage_id,
+                                message_id=msg.message_id,
+                                chat_id=request.user_message.chat_id,
+                                result=result,
+                                final_text=result.text,
+                            )
+                            if keyboard:
+                                try:
+                                    await msg.edit_reply_markup(reply_markup=keyboard)
+                                    logger.debug(f"Keyboard added to message {msg.message_id}")
+                                except Exception as e:
+                                    logger.error(f"Failed to add keyboard: {e}", exc_info=True)
+
                         if i < len(text_chunks):
                             await asyncio.sleep(0.1)
 
@@ -1177,7 +1323,7 @@ class BotHandlers:
                     usage_id=request.usage_id,
                     model_size=result.model_name,
                     processing_time_seconds=result.processing_time,
-                    transcription_length=len(draft_text if needs_refinement else final_text),
+                    transcription_length=len(final_text),
                     llm_model=(
                         settings.llm_model if (needs_refinement and self.llm_service) else None
                     ),

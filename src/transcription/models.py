@@ -7,6 +7,15 @@ from typing import Optional
 
 
 @dataclass
+class TranscriptionSegment:
+    """Segment from faster-whisper with timestamp information."""
+
+    start: float  # Start time in seconds
+    end: float  # End time in seconds
+    text: str  # Segment text
+
+
+@dataclass
 class TranscriptionContext:
     """Context information for transcription and routing decisions."""
 
@@ -37,6 +46,9 @@ class TranscriptionResult:
     # Resource usage (for local models)
     peak_memory_mb: Optional[float] = None
     cpu_percent: Optional[float] = None
+
+    # Segments with timestamps (for interactive features)
+    segments: Optional[list[TranscriptionSegment]] = None
 
     # Metadata
     timestamp: datetime = field(default_factory=datetime.now)

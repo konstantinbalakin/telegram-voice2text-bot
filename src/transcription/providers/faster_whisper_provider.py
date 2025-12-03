@@ -11,7 +11,7 @@ import psutil
 from faster_whisper import WhisperModel  # type: ignore[import-untyped]
 
 from src.config import settings
-from src.transcription.models import TranscriptionContext, TranscriptionResult
+from src.transcription.models import TranscriptionContext, TranscriptionResult, TranscriptionSegment
 from src.transcription.providers.base import TranscriptionProvider
 
 logger = logging.getLogger(__name__)
@@ -144,6 +144,12 @@ class FastWhisperProvider(TranscriptionProvider):
             # Combine all segments into full text
             text = " ".join([segment.text.strip() for segment in segments])
 
+            # Convert faster-whisper segments to TranscriptionSegment objects
+            transcription_segments = [
+                TranscriptionSegment(start=seg.start, end=seg.end, text=seg.text.strip())
+                for seg in segments
+            ]
+
             processing_time = time.time() - start_time
             audio_duration = info.duration
 
@@ -171,6 +177,7 @@ class FastWhisperProvider(TranscriptionProvider):
                 provider_used="faster-whisper",
                 model_name=self.model_size,
                 peak_memory_mb=peak_memory,
+                segments=transcription_segments,
             )
 
         except asyncio.TimeoutError:
