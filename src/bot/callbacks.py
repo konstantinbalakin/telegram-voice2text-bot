@@ -91,8 +91,9 @@ class CallbackHandlers:
                 await self.handle_length_change(update, context)
             elif action == "emoji":
                 await self.handle_emoji_toggle(update, context)
+            elif action == "timestamps":
+                await self.handle_timestamps_toggle(update, context)
             # Note: Additional handlers will be added in future phases:
-            # - timestamps: Phase 6
             # - retranscribe_menu, retranscribe: Phase 8
             else:
                 logger.warning(f"Unknown callback action: {action}")
@@ -772,6 +773,123 @@ class CallbackHandlers:
             logger.info(
                 f"Emoji level changed successfully: usage_id={usage_id}, "
                 f"level={current_emoji}->{new_emoji}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to update message: {e}")
+            await query.answer("Не удалось обновить сообщение", show_alert=True)
+
+    async def handle_timestamps_toggle(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """
+        Handle timestamps toggle (on/off).
+
+        Phase 6: Implements timestamps formatting for segments (>5 min audio).
+        Timestamps are applied to any mode (original/structured/summary).
+
+        Args:
+            update: Telegram update
+            context: Bot context
+        """
+        query = update.callback_query
+        if not query or not query.data:
+            return
+
+        data = decode_callback_data(query.data)
+        usage_id = data["usage_id"]
+
+        logger.info(f"Timestamps toggle request: usage_id={usage_id}")
+
+        # Validate feature is enabled
+        if not settings.enable_timestamps_option:
+            await query.answer("Опция таймкодов отключена", show_alert=True)
+            return
+
+        # Get current state
+        state = await self.state_repo.get_by_usage_id(usage_id)
+        if not state:
+            await query.answer("Состояние не найдено", show_alert=True)
+            return
+
+        # Check if segments exist (required for timestamps)
+        segments = await self.segment_repo.get_by_usage_id(usage_id)
+        if not segments:
+            await query.answer("Таймкоды недоступны для этого аудио", show_alert=True)
+            return
+
+        new_timestamps = not state.timestamps_enabled
+        logger.info(f"Toggling timestamps: {state.timestamps_enabled} -> {new_timestamps}")
+
+        # Get base variant (without timestamps)
+        base_variant = await self.variant_repo.get_variant(
+            usage_id=usage_id,
+            mode=state.active_mode,
+            length_level=state.length_level,
+            emoji_level=state.emoji_level,
+            timestamps_enabled=False,
+        )
+
+        if not base_variant:
+            await query.answer("Базовый текст не найден", show_alert=True)
+            return
+
+        if new_timestamps:
+            # Enable timestamps: get or generate variant with timestamps
+            variant = await self.variant_repo.get_variant(
+                usage_id=usage_id,
+                mode=state.active_mode,
+                length_level=state.length_level,
+                emoji_level=state.emoji_level,
+                timestamps_enabled=True,
+            )
+
+            if not variant:
+                # Generate variant with timestamps
+                if not self.text_processor:
+                    await query.answer("Обработка текста недоступна", show_alert=True)
+                    return
+
+                # Acknowledge callback immediately
+                await query.answer("Добавляю таймкоды...")
+
+                # Format text with timestamps (synchronous operation)
+                text_with_timestamps = self.text_processor.format_with_timestamps(
+                    segments, base_variant.text_content, state.active_mode
+                )
+
+                # Save variant
+                variant = await self.variant_repo.create(
+                    usage_id=usage_id,
+                    mode=state.active_mode,
+                    text_content=text_with_timestamps,
+                    length_level=state.length_level,
+                    emoji_level=state.emoji_level,
+                    timestamps_enabled=True,
+                    generated_by="formatting",
+                )
+                logger.info(f"Generated timestamps variant: usage_id={usage_id}")
+
+            text = variant.text_content
+        else:
+            # Disable timestamps: use base variant
+            text = base_variant.text_content
+
+        # Update state
+        state.timestamps_enabled = new_timestamps
+        await self.state_repo.update(state)
+
+        # Get segments info (always true here since we checked above)
+        has_segments = len(segments) > 0
+
+        # Update keyboard (button label will change)
+        keyboard = create_transcription_keyboard(state, has_segments, settings)
+
+        # Update message with new text
+        try:
+            await query.edit_message_text(text, reply_markup=keyboard)
+            logger.info(
+                f"Timestamps toggled successfully: usage_id={usage_id}, "
+                f"enabled={new_timestamps}"
             )
         except Exception as e:
             logger.error(f"Failed to update message: {e}")

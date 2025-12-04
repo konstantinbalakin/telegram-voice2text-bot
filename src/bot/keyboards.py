@@ -256,8 +256,18 @@ def create_transcription_keyboard(
                 ]
             )
 
-    # Note: Rows 5-6 will be added in future phases
-    # Row 5: Timestamps option (Phase 6)
+    # Row 5: Timestamps option (Phase 6) - only if has segments (>5 min audio)
+    if settings.enable_timestamps_option and has_segments:
+        label = "Убрать таймкоды" if state.timestamps_enabled else "🕐 Таймкоды"
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    label, callback_data=encode_callback_data("timestamps", state.usage_id)
+                )
+            ]
+        )
+
+    # Note: Row 6 will be added in Phase 8
     # Row 6: Retranscribe (Phase 8)
 
     return InlineKeyboardMarkup(keyboard) if keyboard else None

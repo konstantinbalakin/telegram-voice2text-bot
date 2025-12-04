@@ -375,6 +375,77 @@ class TextProcessor:
             logger.warning("Falling back to original text")
             return text
 
+    def format_with_timestamps(self, segments: list, base_text: str, mode: str = "original") -> str:
+        """
+        Add timestamps to text from transcription segments.
+
+        Phase 6: Format segments as [MM:SS] text for better navigation.
+        For original/structured modes: each segment gets a timestamp.
+        For summary mode: simplified approach with first segment timestamp.
+
+        Args:
+            segments: List of TranscriptionSegment objects
+            base_text: Base text to add timestamps to (used for summary mode)
+            mode: Text mode (original/structured/summary)
+
+        Returns:
+            Text with timestamps in format [MM:SS] or [HH:MM:SS]
+        """
+        if not segments:
+            logger.warning("No segments provided for timestamp formatting")
+            return base_text
+
+        if mode == "summary":
+            # For summary: simplified approach - add first segment timestamp
+            return self._format_timestamps_summary(segments, base_text)
+        else:
+            # For original/structured: format each segment with timestamp
+            lines = []
+            for seg in segments:
+                timestamp = self._format_time(seg.start_time)
+                lines.append(f"[{timestamp}] {seg.text}")
+            return "\n".join(lines)
+
+    def _format_time(self, seconds: float) -> str:
+        """
+        Format seconds as MM:SS or HH:MM:SS.
+
+        Args:
+            seconds: Time in seconds
+
+        Returns:
+            Formatted time string
+        """
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        secs = int(seconds % 60)
+
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        else:
+            return f"{minutes:02d}:{secs:02d}"
+
+    def _format_timestamps_summary(self, segments: list, summary_text: str) -> str:
+        """
+        Format timestamps for summary mode.
+
+        Simplified approach: add timestamp of first segment before summary.
+        More sophisticated matching of bullet points to segments would be
+        complex and error-prone, so we use this simple heuristic.
+
+        Args:
+            segments: List of TranscriptionSegment objects
+            summary_text: Summary text
+
+        Returns:
+            Summary with timestamp prefix
+        """
+        if not segments:
+            return summary_text
+
+        first_timestamp = self._format_time(segments[0].start_time)
+        return f"[{first_timestamp}] {summary_text}"
+
     async def _refine_with_custom_prompt(self, text: str, prompt: str) -> str:
         """
         Refine text with a custom prompt.
