@@ -1010,9 +1010,13 @@ class BotHandlers:
                 )
                 logger.debug(f"Saved original variant for usage_id={usage_id}")
 
-                # Save segments if available and duration exceeds threshold
+                # Save segments if available, duration exceeds threshold, and feature is enabled
                 has_segments = False
-                if result.segments and result.audio_duration >= settings.timestamps_min_duration:
+                if (
+                    settings.enable_timestamps_option
+                    and result.segments
+                    and result.audio_duration >= settings.timestamps_min_duration
+                ):
                     segments_data = [
                         (i, seg.start, seg.end, seg.text) for i, seg in enumerate(result.segments)
                     ]
@@ -1021,6 +1025,11 @@ class BotHandlers:
                     logger.debug(
                         f"Saved {len(segments_data)} segments for usage_id={usage_id}, "
                         f"duration={result.audio_duration:.1f}s"
+                    )
+                elif result.segments and not settings.enable_timestamps_option:
+                    logger.debug(
+                        "Segments not saved (timestamps feature disabled: "
+                        "ENABLE_TIMESTAMPS_OPTION=false)"
                     )
                 elif result.segments:
                     logger.debug(
