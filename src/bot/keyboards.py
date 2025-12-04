@@ -204,47 +204,59 @@ def create_transcription_keyboard(
 
     # Row 4: Emoji option (Phase 5)
     if settings.enable_emoji_option:
-        # Emoji controls only available in "original" mode
-        # In "structured" or "summary" modes, show collapsed button regardless of emoji_level
-        if state.active_mode == "original" and state.emoji_level > 0:
-            # 3 buttons: [Меньше/Убрать] [Indicator] [Больше]
-            row = []
+        if state.emoji_level > 0:
+            # Emoji mode active: show controls
+            if state.active_mode == "original":
+                # Original mode: 3 buttons [Меньше/Убрать] [Indicator] [Больше]
+                row = []
 
-            # Left button: Decrease emoji level
-            label = "Убрать" if state.emoji_level == 1 else "Меньше"
-            row.append(
-                InlineKeyboardButton(
-                    label,
-                    callback_data=encode_callback_data(
-                        "emoji", state.usage_id, direction="decrease"
-                    ),
-                )
-            )
-
-            # Center button: Emoji indicator (non-interactive)
-            # 4 levels: 0 (none), 1 (few), 2 (moderate), 3 (many)
-            emoji_indicators = {
-                1: "😊",  # Few
-                2: "😊😊",  # Moderate (default)
-                3: "😊😊😊",  # Many
-            }
-            indicator = emoji_indicators.get(state.emoji_level, "😊")
-            row.append(InlineKeyboardButton(indicator, callback_data="noop"))
-
-            # Right button: Increase emoji level (only if not at max)
-            if state.emoji_level < 3:
+                # Left button: Decrease emoji level
+                label = "Убрать" if state.emoji_level == 1 else "Меньше"
                 row.append(
                     InlineKeyboardButton(
-                        "Больше",
+                        label,
                         callback_data=encode_callback_data(
-                            "emoji", state.usage_id, direction="increase"
+                            "emoji", state.usage_id, direction="decrease"
                         ),
                     )
                 )
 
-            keyboard.append(row)
+                # Center button: Emoji indicator (non-interactive)
+                # 4 levels: 0 (none), 1 (few), 2 (moderate), 3 (many)
+                emoji_indicators = {
+                    1: "😊",  # Few
+                    2: "😊😊",  # Moderate (default)
+                    3: "😊😊😊",  # Many
+                }
+                indicator = emoji_indicators.get(state.emoji_level, "😊")
+                row.append(InlineKeyboardButton(indicator, callback_data="noop"))
+
+                # Right button: Increase emoji level (only if not at max)
+                if state.emoji_level < 3:
+                    row.append(
+                        InlineKeyboardButton(
+                            "Больше",
+                            callback_data=encode_callback_data(
+                                "emoji", state.usage_id, direction="increase"
+                            ),
+                        )
+                    )
+
+                keyboard.append(row)
+            else:
+                # Structured/Summary modes: single toggle button to remove emojis
+                keyboard.append(
+                    [
+                        InlineKeyboardButton(
+                            "Убрать смайлы",
+                            callback_data=encode_callback_data(
+                                "emoji", state.usage_id, direction="decrease"
+                            ),
+                        )
+                    ]
+                )
         else:
-            # Single button: Add emojis (defaults to level 2 - moderate)
+            # No emojis: single button to add emojis (defaults to level 2 - moderate)
             keyboard.append(
                 [
                     InlineKeyboardButton(
