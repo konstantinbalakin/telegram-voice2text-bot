@@ -26,10 +26,12 @@
 - **Phase 10.3**: ✅ Complete (2025-12-03) - Interactive transcription Phase 3 (Length Variations)
 - **Phase 10.4**: ✅ Complete (2025-12-03) - Interactive transcription Phase 4 (Summary Mode)
 - **Phase 10.5**: ✅ Complete (2025-12-04) - Interactive transcription Phase 5 (Emoji Option) with improvements
-- **Phase 10.6**: ⏳ NEXT - Interactive transcription Phase 6 (Timestamps)
+- **Phase 10.6**: ✅ Complete (2025-12-05) - Interactive transcription Phase 6 (Timestamps)
+- **Phase 10.7**: ✅ Complete (2025-12-08) - Interactive transcription Phase 7 (File handling for text >4096 chars)
+- **Phase 10.8**: ⏳ NEXT - Interactive transcription Phase 8 (Retranscription with quality settings)
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-5)
-- Current focus (2025-12-04): Phase 10.5 complete with user-requested improvements, ready for Phase 10.6 (Timestamps)
+- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-7)
+- Current focus (2025-12-08): Phase 10.7 complete with file handling, ready for Phase 10.8 (Retranscription)
 
 ## Delivered Milestones
 
@@ -1783,3 +1785,276 @@ TIMESTAMPS_MIN_DURATION=300  # 5 minutes
 
 **Status**: ✅ COMPLETE - Improved based on user feedback, ready for Phase 6 (Timestamps)
 **Completion Date**: 2025-12-04
+
+---
+
+### Phase 10.6: Interactive Transcription - Phase 6 (Timestamps) ✅ COMPLETE (2025-12-05)
+
+**Achievement**: Timestamp formatting for long audio (>5 minutes) with toggle functionality
+
+**Problem Solved**:
+- Users with long audio recordings (>5 min) needed timestamps for navigation
+- Required different formatting strategies for different modes
+- Needed to work seamlessly with existing interactive features
+
+**Implementation** (3 commits):
+
+**Commit 1: TextProcessor Timestamp Methods**
+- Added `format_with_timestamps()` - Main formatting method
+  - Different strategies for original/structured vs summary
+  - Original/Structured: [MM:SS] prefix for each segment
+  - Summary: [MM:SS] prefix for first segment only
+- Added `_format_time()` - Converts seconds to [MM:SS] or [HH:MM:SS]
+  - Automatically chooses format based on duration
+  - Hours shown only when needed
+- Added `_format_timestamps_summary()` - Simplified strategy for summary mode
+- Location: `src/services/text_processor.py` lines 379-480
+
+**Commit 2: Keyboard & Callback Integration**
+- Updated `create_transcription_keyboard()` - Added Row 5 (Timestamps)
+  - Button: "🕐 Таймкоды" / "Убрать таймкоды"
+  - Only shown when has_segments=True (audio >5 min)
+  - Conditional on ENABLE_TIMESTAMPS_OPTION feature flag
+  - Location: `src/bot/keyboards.py` lines 271-280
+- Added `handle_timestamps_toggle()` - 120-line callback handler
+  - Validates feature flag and segment availability
+  - Toggles timestamps_enabled state
+  - Generates timestamped variants on-demand
+  - Caches formatted variants with generated_by="formatting"
+  - Location: `src/bot/callbacks.py` lines 778-931
+- Updated callback router to handle "timestamps" action
+
+**Commit 3: Bug Fixes & Optimizations**
+- **Emoji Button Fix** (`src/bot/keyboards.py:205-257`):
+  - Fixed emoji button logic for summary/structured modes
+  - Problem: When emoji_level > 0, showed non-functional "😊 Смайлы" button
+  - Solution: Show "Убрать смайлы" button instead when emoji_level > 0
+  - User feedback: "чет для 30секундного аудио изменения смайлов перестали работать"
+- **Segments Storage Optimization** (`src/bot/handlers.py`):
+  - Added ENABLE_TIMESTAMPS_OPTION check before saving segments
+  - Now only saves segments when feature is enabled
+  - Added debug logging: "Segments not saved (timestamps feature disabled)"
+  - Prevents unnecessary database storage when feature disabled
+
+**Testing**:
+- Created comprehensive test suite: `tests/unit/test_text_processor_timestamps.py` (169 lines)
+- **TestFormatTime** (6 tests):
+  - Seconds only, minutes+seconds, hours+minutes+seconds
+  - Exact boundaries (60s, 3600s), zero time
+- **TestFormatWithTimestamps** (6 tests):
+  - Single segment, multiple segments
+  - Different modes (original, structured, summary)
+  - Empty segments, long audio with hours
+- **TestFormatTimestampsSummary** (3 tests):
+  - First segment timestamp, empty segments, multiline preservation
+- ✅ All 136 tests passing (121 existing + 15 new)
+
+**Files Created** (1 file, 169 lines):
+- `tests/unit/test_text_processor_timestamps.py`
+
+**Files Modified** (4 files):
+- `src/services/text_processor.py` (+102 lines) - Timestamp formatting methods
+- `src/bot/keyboards.py` (+10 lines, bug fix) - Row 5 + emoji button fix
+- `src/bot/callbacks.py` (+154 lines) - Toggle handler
+- `src/bot/handlers.py` (+11 lines, -2 lines) - Segments optimization
+
+**User Experience**:
+```
+User sends 10-minute voice message
+  ↓
+Bot transcribes with faster-whisper (saves segments to DB)
+  ↓
+Bot sends transcription with 5 rows of buttons:
+[Исходный текст (вы здесь)]
+[📝 Структурировать]
+[💡 О чем текст?]
+[😊 Смайлы]
+[🕐 Таймкоды]  ← Click to enable timestamps
+  ↓
+Text updates with timestamps:
+[00:00] Добрый день, это тестовая запись...
+[00:15] В длинных аудио очень полезно видеть временные метки...
+[00:45] Например, если нужно найти конкретную часть разговора...
+[01:20] Это особенно важно для записей встреч...
+  ↓
+Button changes to "Убрать таймкоды"
+```
+
+**Key Features**:
+- ✅ Synchronous formatting (no LLM needed, fast)
+- ✅ Different strategies per mode (segment-level vs summary)
+- ✅ Smart time formatting ([MM:SS] vs [HH:MM:SS])
+- ✅ Variant caching for performance
+- ✅ Only shown for audio >5 minutes
+- ✅ Works with all other interactive features (emoji, length, mode)
+
+**Key Pattern Established**:
+**Synchronous Formatting for Non-LLM Features**: Timestamps don't require LLM processing, so they're implemented as synchronous formatting with `generated_by="formatting"` to distinguish from LLM-generated variants. This makes them fast and reliable.
+
+**Impact**:
+- ✅ Long audio recordings more navigable
+- ✅ Users can quickly jump to specific sections
+- ✅ Timestamps work across all modes and variations
+- ✅ No performance impact (synchronous formatting)
+- ✅ Proper caching reduces redundant formatting
+
+**Bug Fixes Impact**:
+- ✅ Emoji buttons now work correctly in all modes
+- ✅ Database storage optimized (segments only when needed)
+- ✅ Better resource usage when timestamps disabled
+
+**Next Steps**:
+- ⏳ Phase 7: File handling for text >4096 characters
+- ⏳ Phase 8: Retranscription with different quality settings
+
+**Status**: ✅ COMPLETE - All functionality implemented, tested, and optimized
+**Completion Date**: 2025-12-05
+**Branch**: `docs/phase10-interactive-transcription-plan` (documentation branch)
+
+---
+
+### Phase 10.7: Interactive Transcription - Phase 7 (File Handling) ✅ COMPLETE (2025-12-08)
+
+**Achievement**: Automatic file attachment for long transcription variants exceeding Telegram's 4096 character limit
+
+**Problem Solved**:
+- Telegram has 4096 character limit for messages
+- Long transcriptions (especially structured/summary modes) could exceed this
+- Needed seamless handling without breaking UX or losing data
+- All interactive features must continue working with files
+
+**Implementation** (3 major components):
+
+**1. File Handler Service** (`src/services/file_handler.py`, NEW FILE, 163 lines)
+- **FileHandler Class**:
+  - `export_transcription_to_file()` - Main export method
+    - Generates .txt files with UTF-8 encoding
+    - Returns file path for sending
+    - Thread-safe temp directory management
+  - `_get_filename()` - Descriptive filename generation
+    - Format: `transcription_[mode]_[timestamp].txt`
+    - Example: `transcription_structured_20251208_143052.txt`
+  - `_get_caption()` - Informative caption generation
+    - Shows mode with emoji (📝, 💡, etc.)
+    - Displays character count
+    - Example: "📝 Структурированный текст\nДлина: 6234 символов"
+  - Automatic cleanup after file send
+- **Key Features**:
+  - UTF-8 encoding for Cyrillic text
+  - Thread-safe temp directory usage
+  - Descriptive filenames with timestamps
+  - Proper error handling and logging
+
+**2. Callback Handler Enhancement** (`src/bot/callbacks.py`)
+- **Enhanced `_send_variant_message()` method** (lines 171-302):
+  - **Length Detection**: Checks text length before sending
+    - Threshold: 4096 characters (Telegram limit)
+    - Dynamically chooses send method
+  - **File Path Scenario** (text > 4096 chars):
+    - Creates file via FileHandler
+    - Sends as document with caption
+    - Attaches keyboard markup to caption
+    - Replies to user's message for threading
+    - Automatic file cleanup after send
+  - **Edit Scenario** (text ≤ 4096 chars):
+    - Edits existing message text
+    - Updates keyboard markup
+    - Preserves message threading
+  - **Error Handling**:
+    - Graceful fallback on file send errors
+    - User-friendly error messages
+    - Proper cleanup in all scenarios
+
+**3. Comprehensive Testing** (`tests/unit/test_file_handler.py`, NEW FILE, 183 lines)
+- **TestFileHandler** (12 tests):
+  - **Filename Generation** (3 tests):
+    - Original mode: `transcription_original_*.txt`
+    - Structured mode: `transcription_structured_*.txt`
+    - Summary mode: `transcription_summary_*.txt`
+  - **Caption Formatting** (3 tests):
+    - Original: "📄 Исходный текст"
+    - Structured: "📝 Структурированный текст"
+    - Summary: "💡 О чем текст?"
+    - All include character count
+  - **File Export** (3 tests):
+    - Creates file with correct content
+    - UTF-8 encoding preserved
+    - File exists at returned path
+  - **Cleanup** (3 tests):
+    - File deletion after use
+    - Handles missing files gracefully
+    - No errors on cleanup failure
+- ✅ All 148 tests passing (136 existing + 12 new)
+
+**User Experience**:
+```
+User requests structured mode for 10-minute audio
+  ↓
+Bot generates structured text (6234 characters)
+  ↓
+Bot detects: 6234 > 4096 (file needed)
+  ↓
+Bot sends document:
+📄 transcription_structured_20251208_143052.txt
+Caption:
+  📝 Структурированный текст
+  Длина: 6234 символов
+
+  [Исходный текст]
+  [📝 Структурировать (вы здесь)]
+  [💡 О чем текст?]
+  [😊 Смайлы]
+  [🕐 Таймкоды]
+  ↓
+User can:
+- Download .txt file for full content
+- Click buttons to switch modes
+- All interactive features work normally
+```
+
+**Files Created** (2 files, 346 lines):
+- `src/services/file_handler.py` (163 lines)
+- `tests/unit/test_file_handler.py` (183 lines)
+
+**Files Modified** (2 files):
+- `src/bot/callbacks.py` (+132 lines, -0 lines) - Enhanced `_send_variant_message()`
+- `src/services/__init__.py` (+2 lines) - Export FileHandler
+
+**Testing & Quality**:
+- ✅ All 148 unit tests passing (136 + 12 new)
+- ✅ Type checking (mypy): Success, no issues found
+- ✅ Linting (ruff): All checks passed
+- ✅ Code formatting (black): Applied
+
+**Key Patterns Established**:
+1. **Length-Based Delivery Method**: Check text length and choose appropriate delivery (message vs file)
+2. **Descriptive Filenames**: Include mode and timestamp for easy file identification
+3. **Informative Captions**: Show metadata (mode, character count) in file captions
+4. **Keyboard in Caption**: Interactive buttons work even when content is file
+5. **Automatic Cleanup**: Always clean up temp files after successful send
+6. **Thread-Safe Temp Directory**: Use `tempfile.gettempdir()` for proper temp file management
+7. **Graceful Degradation**: Handle all error scenarios without breaking UX
+
+**Impact**:
+- ✅ Supports transcriptions of unlimited length
+- ✅ No data truncation or loss
+- ✅ Clean UX with file downloads for long texts
+- ✅ All interactive features functional with files
+- ✅ Proper error handling and cleanup
+- ✅ Thread-safe file operations
+- ✅ Descriptive filenames for easy identification
+
+**Production Configuration**:
+- No new environment variables needed
+- Works seamlessly with existing configuration
+- Automatic feature, always active
+
+**Next Steps** (Phase 10.8: Retranscription):
+- ⏳ Implement retranscribe button for different quality settings
+- ⏳ Support model switching (medium → large)
+- ⏳ Support provider switching (faster-whisper → OpenAI Whisper API)
+- ⏳ Show comparison between original and retranscribed versions
+
+**Status**: ✅ COMPLETE - All functionality implemented, tested, and ready for deployment
+**Completion Date**: 2025-12-08
+**Branch**: `docs/phase10-interactive-transcription-plan` (documentation branch)
