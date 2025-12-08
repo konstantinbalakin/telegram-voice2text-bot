@@ -296,13 +296,20 @@ class CallbackHandlers:
             await query.answer("Функция будет доступна в следующих версиях", show_alert=True)
             return
 
-        # Get or generate variant
+        # Reset formatting parameters when switching modes
+        # This ensures consistency: when switching modes, we start with default formatting
+        # Users can then adjust emoji/length/timestamps for the new mode
+        target_emoji_level = 0
+        target_length_level = "default"
+        target_timestamps_enabled = False
+
+        # Get or generate variant with default parameters
         variant = await self.variant_repo.get_variant(
             usage_id=usage_id,
             mode=new_mode,
-            length_level=state.length_level,
-            emoji_level=state.emoji_level,
-            timestamps_enabled=state.timestamps_enabled,
+            length_level=target_length_level,
+            emoji_level=target_emoji_level,
+            timestamps_enabled=target_timestamps_enabled,
         )
 
         if not variant:
@@ -457,9 +464,9 @@ class CallbackHandlers:
                 try:
                     start_time = time.time()
 
-                    # Run text processing
+                    # Run text processing with default length level
                     summary_text = await self.text_processor.summarize_text(
-                        original_variant.text_content, length_level=state.length_level
+                        original_variant.text_content, length_level=target_length_level
                     )
 
                     processing_time = time.time() - start_time
@@ -471,9 +478,9 @@ class CallbackHandlers:
                     existing_variant = await self.variant_repo.get_variant(
                         usage_id=usage_id,
                         mode="summary",
-                        length_level=state.length_level,
-                        emoji_level=state.emoji_level,
-                        timestamps_enabled=state.timestamps_enabled,
+                        length_level=target_length_level,
+                        emoji_level=target_emoji_level,
+                        timestamps_enabled=target_timestamps_enabled,
                     )
 
                     if existing_variant:
@@ -489,9 +496,9 @@ class CallbackHandlers:
                             usage_id=usage_id,
                             mode="summary",
                             text_content=summary_text,
-                            length_level=state.length_level,
-                            emoji_level=state.emoji_level,
-                            timestamps_enabled=state.timestamps_enabled,
+                            length_level=target_length_level,
+                            emoji_level=target_emoji_level,
+                            timestamps_enabled=target_timestamps_enabled,
                             generated_by="llm",
                             llm_model=settings.llm_model,
                             processing_time_seconds=processing_time,
@@ -540,8 +547,11 @@ class CallbackHandlers:
             await query.answer("Внутренняя ошибка", show_alert=True)
             return
 
-        # Update state
+        # Update state with new mode and reset formatting parameters to defaults
         state.active_mode = new_mode
+        state.emoji_level = target_emoji_level
+        state.length_level = target_length_level
+        state.timestamps_enabled = target_timestamps_enabled
         await self.state_repo.update(state)
 
         # Get segments info
