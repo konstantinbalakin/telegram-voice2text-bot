@@ -1035,6 +1035,119 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
 - **Pattern**: Import inside function > module-level import when circular dependency exists
 - **Critical for**: Bot startup - without this fix, bot crashes on initialization
 
+### 34. **Parent-Child Usage Tracking Pattern** (added 2025-12-09)
+- **Where**: Usage model and retranscription logic
+- **Why**: Need to preserve original statistics when retranscribing while tracking full history
+- **Problem**: Overwriting usage record loses original data, prevents analytics on retranscription patterns
+- **Benefit**: Complete history preserved, enables analytics, supports future features (retranscription history UI)
+- **Implementation**:
+  ```python
+  # Database schema
+  class Usage(Base):
+      id: Mapped[int] = mapped_column(Integer, primary_key=True)
+      parent_usage_id: Mapped[Optional[int]] = mapped_column(
+          Integer, ForeignKey("usage.id", ondelete="CASCADE"), nullable=True, index=True
+      )
+      # Other fields...
+
+  # Creating child usage record
+  child_usage = await usage_repo.create(
+      user_id=usage.user_id,
+      voice_file_id=usage.voice_file_id,
+      voice_duration_seconds=usage.voice_duration_seconds,
+      model_size=result.model_name,  # New model
+      processing_time_seconds=result.processing_time,  # New time
+      transcription_length=len(result.text),  # New length
+      parent_usage_id=usage_id,  # Link to original
+      original_file_path=usage.original_file_path,  # Preserve file path
+  )
+
+  # Update state to point to child for continued interaction
+  state.usage_id = child_usage.id
+  ```
+- **Use Cases**:
+  - Retranscription with better model
+  - Multiple retranscription attempts
+  - A/B testing different models
+  - Cost analysis (how many retranscriptions per original?)
+- **Key Features**:
+  - Supports chains: original → child1 → child2 → ...
+  - CASCADE delete: parent deletion removes all children
+  - State migration: subsequent operations link to child
+  - Analytics queries: JOIN on parent_usage_id to build full chain
+- **Pattern**: Database relationship > overwriting records for preserving history
+
+### 35. **Progress Bar with Dynamic Duration Pattern** (added 2025-12-09)
+- **Where**: Retranscription progress tracking
+- **Why**: Different retranscription methods have vastly different processing times
+- **Problem**: Fixed duration progress bars misleading when actual time varies (RTF 0.5 vs fixed 30s)
+- **Benefit**: Accurate time estimates, better UX, realistic user expectations
+- **Implementation**:
+  ```python
+  # Calculate duration based on method
+  if method == "free":
+      # Free method: faster-whisper medium model, RTF-based
+      progress_duration = int(
+          usage.voice_duration_seconds * settings.retranscribe_free_model_rtf
+      )
+  else:
+      # Paid method: OpenAI API, fixed duration
+      progress_duration = settings.llm_processing_duration
+
+  # Create progress tracker with calculated duration
+  progress = ProgressTracker(
+      message=cast(Message, query.message),
+      duration_seconds=progress_duration,
+      rtf=1.0,  # Duration already calculated above
+      update_interval=settings.progress_update_interval,
+  )
+  await progress.start()
+  ```
+- **Key Insight**: Use RTF for compute-based methods, fixed duration for API-based methods
+- **Configuration**:
+  - `RETRANSCRIBE_FREE_MODEL_RTF=0.5` - RTF for local model
+  - `LLM_PROCESSING_DURATION=30` - Fixed duration for API calls
+- **Pattern**: Method-specific duration calculation > single fixed duration
+
+### 36. **Refinement Control via Context Pattern** (added 2025-12-09)
+- **Where**: TranscriptionContext flag propagated through transcription pipeline
+- **Why**: Retranscription uses quality models that don't need LLM refinement
+- **Problem**: Hybrid strategy always ran refinement for long audio, wasting time during retranscription
+- **Benefit**: Faster retranscription, cost savings, cleaner separation of concerns
+- **Implementation**:
+  ```python
+  # 1. Add flag to context model
+  @dataclass
+  class TranscriptionContext:
+      language: str = "ru"
+      provider_preference: Optional[str] = None
+      disable_refinement: bool = False  # NEW
+
+  # 2. Pass flag when retranscribing
+  transcription_context = TranscriptionContext(
+      language="ru",
+      provider_preference=provider_name,
+      disable_refinement=True,  # Skip refinement for retranscription
+  )
+
+  # 3. Check flag in handler before refinement
+  needs_refinement = False
+  if isinstance(self.transcription_router.strategy, HybridStrategy):
+      needs_refinement = self.transcription_router.strategy.requires_refinement(
+          request.duration_seconds
+      )
+
+  # Skip refinement if explicitly disabled
+  if request.context.disable_refinement:
+      needs_refinement = False
+      logger.info("LLM refinement disabled by context")
+  ```
+- **Benefits**:
+  - Behavior modification without code changes
+  - Reusable for other scenarios (testing, specific user preferences)
+  - Clear separation: context dictates behavior, handler executes
+- **Pattern**: Context flags > hardcoded behavior for flexible control
+
 ## Development Workflow
 
 ### Git Strategy

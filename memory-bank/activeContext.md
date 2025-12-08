@@ -1,10 +1,10 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status (2025-12-08)
+## Current Status (2025-12-09)
 
 **Phase**: Phase 10 - Interactive Transcription Processing 🚀
-**Stage**: Phase 10.8 IN PROGRESS 🔄 (Implementation complete, testing)
-**Branch**: Working branch (not yet merged)
+**Stage**: Phase 10.9 COMPLETE ✅ (Retranscription improvements)
+**Branch**: main (ready for merge/testing)
 **Production Version**: v0.0.3+
 **Production Status**: ✅ OPERATIONAL
 
@@ -38,7 +38,138 @@
 
 ## Recent Developments (Last 2 Weeks)
 
-### 🔄 Phase 10.8: Interactive Transcription - Phase 8 (Retranscription) IN PROGRESS (2025-12-08)
+### ✅ Phase 10.9: Retranscription Progress Bar & Parent-Child Usage Tracking COMPLETE (2025-12-09)
+
+**Achievement**: Enhanced retranscription UX with progress feedback and preserved statistics through parent-child relationship tracking
+
+**Problem Identified**:
+After implementing interactive mode buttons (Phase 10.8), retranscription logic had critical UX and data integrity issues:
+1. **No Progress Bar**: Users waited without feedback during retranscription (could take 30-90s)
+   - Free method uses better model (RTF 0.5)
+   - Paid method uses OpenAI (~30s fixed)
+2. **Lost Statistics**: Usage record was overwritten, losing original transcription data
+   - No retranscription history tracking
+   - Analytics limited (no parent-child relationship)
+3. **Unnecessary Refinement**: Retranscription ran LLM refinement despite already using good model
+
+**Implementation Complete**: ✅
+
+**What Was Implemented**:
+
+1. **Database Migration** (`alembic/versions/f0514e20f750_add_parent_usage_id_to_usage_table.py`):
+   - Added `parent_usage_id` column to `usage` table (nullable, indexed)
+   - Foreign key constraint with CASCADE delete
+   - SQLite batch mode for safe migration
+   - Migration applied successfully: verified in production database
+
+2. **Usage Model Update** (`src/storage/models.py:97-99`):
+   - Added `parent_usage_id` field to Usage model
+   - Enables parent-child relationship tracking for retranscriptions
+   - Supports retranscription chains (original → child1 → child2)
+
+3. **Repository Enhancement** (`src/storage/repositories.py:124-158`):
+   - Updated `UsageRepository.create()` to accept `parent_usage_id` and `original_file_path` parameters
+   - Enables creation of child usage records linked to parent
+
+4. **TranscriptionContext Extension** (`src/transcription/models.py:28`):
+   - Added `disable_refinement` flag to TranscriptionContext
+   - Allows skipping LLM refinement for retranscription (saves time)
+
+5. **Progress Bar Implementation** (`src/bot/retranscribe_handlers.py`):
+   - **Free retranscription**: Duration = `voice_duration * RETRANSCRIBE_FREE_MODEL_RTF` (RTF 0.5)
+   - **Paid retranscription**: Duration = `LLM_PROCESSING_DURATION` (fixed 30 seconds)
+   - ProgressTracker starts before transcription, stops on completion or error
+   - Visual feedback: `🔄 [████████░░░░] 40% (~45с осталось)`
+
+6. **Parent-Child Usage Record Creation** (`src/bot/retranscribe_handlers.py:221-260`):
+   - Creates NEW child usage record instead of overwriting
+   - Links to original via `parent_usage_id`
+   - Preserves original statistics (model, time, length)
+   - Updates `state.usage_id` to point to child usage for continued interaction
+   - All subsequent operations (variants, segments, mode changes) link to child usage
+
+7. **Refinement Control** (`src/bot/handlers.py:1268-1271`):
+   - Handler respects `disable_refinement` flag from context
+   - Skips LLM refinement when `disable_refinement=True`
+   - Logged for debugging: "LLM refinement disabled by context"
+
+**User Experience**:
+```
+User clicks [⚡ Могу лучше] button
+  ↓
+Menu appears:
+[🆓 Бесплатно (лучше, ~1м 30с)]
+[💰 Платно (~2.0₽) - OpenAI]
+[◀️ Назад]
+  ↓
+User selects free method
+  ↓
+Progress bar appears:
+🔄 Ретранскрибирую...
+[████████░░░░] 40% (~54с осталось)
+  ↓
+Retranscription completes
+✨ Готово!
+[New transcription with improved quality]
+  ↓
+Database:
+- Original usage record preserved (id=123, model=small/beam1, time=10s)
+- Child usage record created (id=456, parent_usage_id=123, model=medium/int8, time=45s)
+- State updated to child (state.usage_id=456)
+```
+
+**Files Modified**:
+- `alembic/versions/f0514e20f750_add_parent_usage_id_to_usage_table.py` (NEW, 54 lines)
+- `src/storage/models.py` (+3 lines) - parent_usage_id field
+- `src/storage/repositories.py` (+2 params, +2 fields in create())
+- `src/transcription/models.py` (+1 line) - disable_refinement flag
+- `src/bot/retranscribe_handlers.py` (+60 lines) - progress bar + parent-child logic
+- `src/bot/handlers.py` (+4 lines) - refinement control
+
+**Files Created**:
+- `memory-bank/plans/2025-12-08-retranscription-improvements-plan.md` (detailed implementation plan)
+
+**Key Patterns Established**:
+1. **Progress Bar with Dynamic Duration**: Use RTF for free method, fixed duration for paid method
+2. **Parent-Child Usage Tracking**: Preserve history through database relationships instead of overwriting
+3. **State Migration on Retranscription**: Update state.usage_id to child for seamless continuation
+4. **Refinement Control via Context**: Pass flags through TranscriptionContext for behavior modification
+5. **Cascading Deletes**: Parent deletion removes children (prevents orphaned records)
+
+**Edge Cases Handled**:
+- Multiple retranscriptions: Creates chain (original → child1 → child2)
+- State management: state.usage_id updated to latest child
+- Progress bar errors: Stopped on exception, no hanging progress
+- Orphaned children: CASCADE delete on foreign key
+
+**Testing Status**:
+- ✅ Database migration applied successfully (f0514e20f750)
+- ✅ parent_usage_id column verified in production database
+- ✅ Code changes complete and ready for testing
+- ⏳ Manual testing required:
+  - Free retranscription with progress bar (RTF 0.5)
+  - Paid retranscription with progress bar (30s fixed)
+  - Parent-child relationship in database
+  - State.usage_id update verification
+  - Interactive modes after retranscription (mode switch, length, emoji, timestamps)
+  - Multiple retranscriptions (chain creation)
+
+**Impact**:
+- ✅ Users now see progress during retranscription (major UX improvement)
+- ✅ Original statistics preserved for analytics
+- ✅ Retranscription history tracked via parent_usage_id
+- ✅ Faster processing (no unnecessary refinement)
+- ✅ Enables future features (retranscription history UI, cost tracking, usage patterns)
+
+**Implementation Plan**: Documented in `memory-bank/plans/2025-12-08-retranscription-improvements-plan.md`
+
+**Status**: ✅ COMPLETE - Code implemented, migration applied, ready for testing
+**Completion Date**: 2025-12-09
+**Next**: Manual testing with real bot, verify all scenarios work correctly
+
+---
+
+### 🔄 Phase 10.8: Interactive Transcription - Phase 8 (Retranscription) COMPLETE (2025-12-08)
 
 **Achievement**: Allow users to retranscribe audio with improved quality settings
 
@@ -529,6 +660,25 @@ Text updates:
 - Example: `src/bot/retranscribe_handlers.py` importing CallbackHandlers
 - Prevents initialization cycle while maintaining functionality
 
+**9. Parent-Child Usage Tracking** (Phase 10.9)
+- Preserve statistics through database relationships instead of overwriting
+- Pattern: Create child usage record with `parent_usage_id` foreign key
+- Enables retranscription chains: original → child1 → child2
+- State migration: Update `state.usage_id` to child for continued interaction
+- CASCADE delete: Parent deletion removes children automatically
+
+**10. Progress Bar with Dynamic Duration** (Phase 10.9)
+- RTF-based duration for compute methods (free retranscription)
+- Fixed duration for API methods (paid retranscription)
+- Pattern: `duration = voice_duration * RTF` vs `duration = FIXED_DURATION`
+- Provides accurate time estimates based on processing method
+
+**11. Refinement Control via Context** (Phase 10.9)
+- Pass behavior flags through TranscriptionContext
+- Pattern: `disable_refinement=True` skips LLM processing
+- Reusable for testing, user preferences, quality vs speed trade-offs
+- Clean separation: context dictates behavior, handler executes
+
 ### Queue System Patterns (Phase 6-7, Oct 2025)
 
 **1. Atomic Counter Pattern**
@@ -571,15 +721,24 @@ Text updates:
 
 ## Next Steps
 
-### Immediate (Phase 10.8 Testing)
-1. ⏳ Complete manual testing with user
-2. ⏳ Verify button texts (wait time, cost calculation)
-3. ⏳ Test retranscription with free method (medium model)
-4. ⏳ Test state reset and variant cleanup
-5. ⏳ Merge to main after successful testing
+### Immediate (Phase 10.9 Testing & Deployment)
+1. ⏳ Manual testing with real bot:
+   - Test free retranscription with progress bar (RTF 0.5 duration)
+   - Test paid retranscription with progress bar (30s fixed duration)
+   - Verify parent-child relationship in database
+   - Test interactive modes after retranscription (mode switch, length, emoji)
+   - Test multiple retranscriptions (chain creation)
+2. ⏳ Database verification:
+   - Query parent-child relationships: `SELECT * FROM usage WHERE parent_usage_id IS NOT NULL`
+   - Verify cascade delete works correctly
+   - Check state.usage_id update after retranscription
+3. ⏳ Create commit with conventional format
+4. ⏳ Push to GitHub and create PR
+5. ⏳ Merge to main after testing
 6. ⏳ Deploy to production
 
 ### Future Phases (Post Phase 10)
+- **Phase 10.10** (optional): Retranscription history UI (show user their retranscription chain)
 - **Phase 11**: Analytics dashboard for usage metrics
 - **Phase 12**: User quotas and billing system
 - **Phase 13**: Multi-language support

@@ -132,6 +132,8 @@ class UsageRepository:
         language: Optional[str] = None,
         llm_model: Optional[str] = None,
         llm_processing_time_seconds: Optional[float] = None,
+        original_file_path: Optional[str] = None,
+        parent_usage_id: Optional[int] = None,
     ) -> Usage:
         """Create a new usage record (Stage 1: on file download).
 
@@ -149,6 +151,8 @@ class UsageRepository:
             language=language,
             llm_model=llm_model,
             llm_processing_time_seconds=llm_processing_time_seconds,
+            original_file_path=original_file_path,
+            parent_usage_id=parent_usage_id,
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
