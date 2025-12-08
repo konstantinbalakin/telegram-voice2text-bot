@@ -2216,3 +2216,223 @@ All variants/segments reset, keyboard restored
 **Status**: 🔄 Implementation complete, testing in progress
 **Completion Date**: 2025-12-08 (implementation)
 **Branch**: Working branch (not yet merged)
+
+---
+
+### Phase 10.7.1: File Handling Bug Fixes & Extensions ✅ COMPLETE (2025-12-08)
+
+**Achievement**: Extended file handling to cover all message types (initial results, drafts, retranscription) and fixed critical bugs
+
+**Problem Solved**:
+- Phase 10.7 implemented file handling only for interactive variant messages (`_send_variant_message()`)
+- Initial transcription results still split into multiple parts despite `FILE_THRESHOLD_CHARS=3000` setting
+- Draft messages (during LLM refinement) also split into parts instead of sending files
+- Retranscription failed with `Message_too_long` error for large texts
+- Circular import between `callbacks.py` and `retranscribe_handlers.py` prevented bot startup
+
+**Root Causes Identified**:
+1. **Missing implementation**: File threshold feature was documented in Phase 7 plan but never implemented for initial transcription
+2. **Incomplete integration**: Only interactive variants used file handling, not initial results or drafts
+3. **Old message editing logic**: Retranscription used `query.edit_message_text()` which has 4096 char limit
+4. **Import cycle**: Top-level imports between callback modules created circular dependency
+
+**Implementation** (4 major fixes):
+
+**1. Initial Transcription File Handling** (`src/bot/handlers.py`)
+- Created `_send_transcription_result()` helper method (lines ~750-800)
+- Two-message pattern for files:
+  - Info message with keyboard: "📝 Транскрипция готова! Файл ниже ↓"
+  - File message with document: `transcription_{usage_id}.txt`
+- Integrated into refined result sending (line ~850)
+- Integrated into direct result sending (line ~920)
+```python
+async def _send_transcription_result(
+    self,
+    request: TranscriptionRequest,
+    text: str,
+    keyboard: Optional[InlineKeyboardMarkup],
+    usage_id: int,
+    prefix: str = "✅ Готово!\n\n",
+) -> tuple[Message, Optional[Message]]:
+    """Send transcription result as text message or file based on length."""
+    if len(text) <= settings.file_threshold_chars:
+        # Short text: single message with keyboard
+        msg = await request.user_message.reply_text(prefix + text, reply_markup=keyboard)
+        return (msg, None)
+    else:
+        # Long text: info message + file
+        info_msg = await request.user_message.reply_text(
+            "📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard
+        )
+        file_obj = io.BytesIO(text.encode("utf-8"))
+        file_obj.name = f"transcription_{usage_id}.txt"
+        file_msg = await request.user_message.reply_document(
+            document=file_obj,
+            filename=file_obj.name,
+            caption=f"📄 Транскрипция ({len(text)} символов)",
+        )
+        return (info_msg, file_msg)
+```
+
+**2. Draft Message File Handling** (`src/bot/handlers.py`)
+- Updated `_send_draft_messages()` to use file threshold (lines ~640-670)
+- Removed old `split_text()` logic for drafts
+- Sends file for long drafts instead of splitting
+```python
+async def _send_draft_messages(self, request: TranscriptionRequest, draft_text: str) -> None:
+    """Send draft text (as text or file based on length)."""
+    try:
+        await request.status_message.delete()
+    except Exception as e:
+        logger.warning(f"Failed to delete status message: {e}")
+
+    if len(draft_text) <= settings.file_threshold_chars:
+        # Short draft: text message
+        message = await request.user_message.reply_text(
+            f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст..."
+        )
+        request.draft_messages.append(message)
+    else:
+        # Long draft: file
+        info_msg = await request.user_message.reply_text(
+            "✅ Черновик готов! Файл ниже ↓\n\n🔄 Улучшаю текст..."
+        )
+        request.draft_messages.append(info_msg)
+
+        file_obj = io.BytesIO(draft_text.encode("utf-8"))
+        file_obj.name = f"draft_{request.usage_id}.txt"
+        file_msg = await request.user_message.reply_document(
+            document=file_obj, filename=file_obj.name,
+            caption=f"📄 Черновик ({len(draft_text)} символов)"
+        )
+        request.draft_messages.append(file_msg)
+```
+
+**3. Retranscription Display Update** (`src/bot/callbacks.py`)
+- Created `update_transcription_display()` method (lines ~305-450)
+- Handles 4 transition scenarios:
+  1. **Text → Text**: Simple message edit
+  2. **File → File**: Delete old file, send new file, update state
+  3. **Text → File**: Convert message to info, send file, update state
+  4. **File → Text**: Delete file, update to text message, update state
+- Integrated into `src/bot/retranscribe_handlers.py`:
+  - Removed top-level `CallbackHandlers` import (circular import fix)
+  - Import inside `handle_retranscribe()` function
+  - Create CallbackHandlers instance with repositories
+  - Call `update_transcription_display()` with state tracking
+```python
+async def update_transcription_display(
+    self, query, context, state, new_text: str, keyboard
+) -> None:
+    """Update transcription display (text or file) based on state and length."""
+    if not state.is_file_message and len(new_text) <= settings.file_threshold_chars:
+        # Scenario 1: Text → Text (simple edit)
+        await query.edit_message_text(new_text, reply_markup=keyboard)
+
+    elif state.is_file_message and len(new_text) > settings.file_threshold_chars:
+        # Scenario 2: File → File (delete old, send new)
+        # ... implementation
+
+    elif not state.is_file_message and len(new_text) > settings.file_threshold_chars:
+        # Scenario 3: Text → File (convert message to info + file)
+        # ... implementation
+
+    else:
+        # Scenario 4: File → Text (delete file, update to text)
+        # ... implementation
+```
+
+**4. Circular Import Fix** (`src/bot/retranscribe_handlers.py`)
+- **Problem**: Top-level import caused circular dependency during module initialization
+  ```python
+  # ❌ Old (circular import)
+  from src.bot.callbacks import CallbackHandlers  # Top of file
+  ```
+- **Solution**: Move import inside function to avoid initialization cycle
+  ```python
+  # ✅ New (no circular import)
+  async def handle_retranscribe(...):
+      from src.bot.callbacks import CallbackHandlers  # Inside function
+      callback_handlers = CallbackHandlers(...)
+      await callback_handlers.update_transcription_display(...)
+  ```
+- Line 23 of `src/bot/retranscribe_handlers.py`
+
+**5. State Tracking** (`src/storage/models.py` + `src/bot/handlers.py`)
+- Updated `_create_interactive_state_and_keyboard()` to accept:
+  - `is_file_message: bool` - Whether result was sent as file
+  - `file_message_id: int | None` - Message ID of file for deletion
+- TranscriptionState now tracks:
+  - `is_file_message` - Current display mode (text vs file)
+  - `file_message_id` - Reference for file deletion
+- Enables seamless transitions between text and file formats
+
+**Files Modified** (4 files):
+- `src/bot/handlers.py` (+100 lines) - Added file handling for initial results and drafts
+- `src/bot/callbacks.py` (+150 lines) - Added `update_transcription_display()` method
+- `src/bot/retranscribe_handlers.py` (~5 lines) - Moved import inside function
+- `src/storage/models.py` (documented, changes from Phase 10.7)
+
+**Testing & Quality**:
+- ✅ User tested with large file (>3000 chars)
+- ✅ Confirmed file sent instead of split messages
+- ✅ Retranscription working without errors
+- ✅ Bot starts successfully (circular import resolved)
+- ✅ All interactive features work with files
+
+**User Experience**:
+```
+User sends long voice message (large transcription)
+  ↓
+Bot transcribes (result is 4500 characters)
+  ↓
+Bot detects: 4500 > 3000 (file threshold)
+  ↓
+Bot sends:
+  Message 1: "📝 Транскрипция готова! Файл ниже ↓" + keyboard
+  Message 2: transcription_123.txt (4500 chars)
+  ↓
+User clicks "📝 Структурировать" (result: 6000 chars)
+  ↓
+Bot deletes old file, sends new file
+  ↓
+User clicks "Retranscribe" (result: 2500 chars)
+  ↓
+Bot deletes file, updates to text message
+```
+
+**Configuration**:
+```bash
+# File threshold (from src/config.py)
+FILE_THRESHOLD_CHARS=3000  # Text longer than this sent as .txt file
+```
+
+**Key Patterns Established**:
+1. **Consistent File Handling**: All message types (initial, draft, variant, retranscription) use same threshold logic
+2. **Two-Message Pattern**: Info message with keyboard + separate file message for long texts
+3. **State Tracking**: `is_file_message` and `file_message_id` enable dynamic format switching
+4. **Graceful Transitions**: Support all 4 scenarios (text↔text, file↔file, text↔file, file↔text)
+5. **Circular Import Resolution**: Move imports inside functions to avoid initialization cycles
+6. **io.BytesIO Pattern**: Create in-memory file objects for Telegram document sending
+
+**Impact**:
+- ✅ File threshold now works for ALL message types
+- ✅ No more split messages for long transcriptions
+- ✅ Retranscription works correctly with large texts
+- ✅ Bot startup successful (circular import fixed)
+- ✅ Seamless format switching when using interactive features
+- ✅ Consistent UX across all transcription paths
+
+**Bug Resolution Timeline**:
+1. User reported split messages despite FILE_THRESHOLD_CHARS setting
+2. Investigation revealed feature only documented, never implemented
+3. Implemented file handling for initial results
+4. Fixed draft messages to use file threshold
+5. Fixed retranscription to support files
+6. Resolved circular import preventing bot startup
+
+**Status**: ✅ COMPLETE - All bugs fixed, feature fully integrated
+**Completion Date**: 2025-12-08
+**Branch**: `docs/phase10-interactive-transcription-plan` (same as Phase 10.7)
+
+---

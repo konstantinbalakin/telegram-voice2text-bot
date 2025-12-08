@@ -973,6 +973,68 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
 - **Key Insight**: LLMs are better at understanding qualitative goals than following rigid quantitative rules across varying contexts
 - **Pattern**: Qualitative descriptions + trust LLM adaptation > hard-coded numbers
 
+### 32. **Threshold-Based File Delivery Pattern** (added 2025-12-08)
+- **Where**: All message sending paths (`_send_transcription_result()`, `_send_draft_messages()`, `_send_variant_message()`, `update_transcription_display()`)
+- **Why**: Telegram has 4096 character hard limit for messages; long transcriptions must be sent as files
+- **Problem**: Phase 10.7 only implemented file handling for interactive variants, initial results and drafts still split into multiple parts
+- **Benefit**: Consistent UX across all message types, no data loss, no split messages
+- **Implementation**:
+  ```python
+  FILE_THRESHOLD_CHARS = 3000  # Conservative threshold (< 4096 limit)
+
+  if len(text) <= FILE_THRESHOLD_CHARS:
+      # Send as message
+      await message.reply_text(text, reply_markup=keyboard)
+  else:
+      # Send as file (two-message pattern)
+      info_msg = await message.reply_text("📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard)
+      file_obj = io.BytesIO(text.encode("utf-8"))
+      file_obj.name = f"transcription_{usage_id}.txt"
+      file_msg = await message.reply_document(document=file_obj, filename=file_obj.name)
+  ```
+- **Two-Message Pattern**: Info message with keyboard + separate file message
+  - Info message: Keeps keyboard accessible, provides context
+  - File message: Contains full transcription content
+- **State Tracking**: `is_file_message` and `file_message_id` in TranscriptionState
+  - Enables dynamic transitions between text and file formats
+  - Supports 4 scenarios: text↔text, file↔file, text↔file, file↔text
+- **Application**: Initial transcription, draft messages, variant messages, retranscription updates
+- **Key Insight**: Use consistent threshold across ALL message types to avoid user confusion
+- **Bug Fix Context**: Was only implemented for variants (Phase 10.7), extended to all paths in Phase 10.7.1
+
+### 33. **Circular Import Resolution Pattern** (added 2025-12-08)
+- **Where**: `src/bot/retranscribe_handlers.py` importing `CallbackHandlers` from `src/bot/callbacks.py`
+- **Why**: Top-level imports between callback modules created circular dependency preventing bot startup
+- **Problem**: `ImportError: cannot import name 'CallbackHandlers' from partially initialized module 'src.bot.callbacks'`
+- **Benefit**: Maintains modularity while avoiding initialization cycles
+- **Implementation**:
+  ```python
+  # ❌ BAD: Top-level import (circular dependency)
+  from src.bot.callbacks import CallbackHandlers
+
+  async def handle_retranscribe(...):
+      callback_handlers = CallbackHandlers(...)
+      await callback_handlers.update_transcription_display(...)
+
+  # ✅ GOOD: Function-level import (no circular dependency)
+  async def handle_retranscribe(...):
+      from src.bot.callbacks import CallbackHandlers  # Import inside function
+      callback_handlers = CallbackHandlers(...)
+      await callback_handlers.update_transcription_display(...)
+  ```
+- **When to Use**: When two modules need to import each other's classes/functions
+- **Trade-offs**:
+  - ✅ Avoids circular import errors
+  - ✅ Maintains code organization
+  - ⚠️ Slight performance overhead (import on every call)
+  - ⚠️ Less obvious dependencies (not visible at module level)
+- **Alternative Solutions**:
+  1. **Dependency Injection**: Pass CallbackHandlers instance as parameter (preferred for frequent calls)
+  2. **Shared Module**: Move shared code to third module imported by both
+  3. **TYPE_CHECKING**: Use for type hints only (doesn't solve runtime imports)
+- **Pattern**: Import inside function > module-level import when circular dependency exists
+- **Critical for**: Bot startup - without this fix, bot crashes on initialization
+
 ## Development Workflow
 
 ### Git Strategy

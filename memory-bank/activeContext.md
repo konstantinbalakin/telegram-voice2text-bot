@@ -203,7 +203,91 @@ Keyboard with buttons still appears in caption
 **Testing**: ✅ All 148 tests passed (136 + 12 new file handler tests)
 **Status**: ✅ Complete, tested, ready for Phase 8 (Retranscription)
 **Completion Date**: 2025-12-08
-**Next**: Phase 10.8 - Retranscription with different quality settings
+
+---
+
+### ✅ Phase 10.7.1: File Handling Bug Fixes & Extensions COMPLETE (2025-12-08)
+
+**Achievement**: Extended file handling to initial results, drafts, and retranscription - fixed critical bugs preventing feature from working
+
+**Root Problem**: Phase 10.7 only implemented file handling for interactive variants (`_send_variant_message()`), but initial transcription results still split into multiple parts despite `FILE_THRESHOLD_CHARS=3000` configuration.
+
+**Bug Fixes Implemented**:
+
+1. **Initial Transcription File Handling** (`src/bot/handlers.py`):
+   - Created `_send_transcription_result()` method (~50 lines)
+   - Two-message pattern: info message with keyboard + file message
+   - Threshold: 3000 characters (configurable via `FILE_THRESHOLD_CHARS`)
+   - Integrated into both LLM refined and direct result paths
+
+2. **Draft Message File Handling** (`src/bot/handlers.py`):
+   - Updated `_send_draft_messages()` to send files for long drafts
+   - Removed old `split_text()` logic
+   - Draft files: `draft_{usage_id}.txt`
+
+3. **Retranscription Display Update** (`src/bot/callbacks.py`):
+   - Created `update_transcription_display()` method (~130 lines)
+   - Handles 4 transition scenarios:
+     - Text → Text (simple edit)
+     - File → File (delete old, send new)
+     - Text → File (convert to file)
+     - File → Text (delete file, edit message)
+   - Integrated into `src/bot/retranscribe_handlers.py`
+
+4. **Circular Import Fix** (`src/bot/retranscribe_handlers.py`):
+   - Moved `from src.bot.callbacks import CallbackHandlers` inside function
+   - Prevents circular dependency during module initialization
+   - Critical fix: bot wouldn't start without this
+
+5. **State Tracking** (`src/storage/models.py` + handlers):
+   - Added `is_file_message` and `file_message_id` to TranscriptionState
+   - Tracks whether current display is text or file
+   - Enables seamless transitions between formats
+
+**User Experience**:
+```
+Long audio (4500 chars result)
+  ↓
+Bot sends file: transcription_123.txt
++ keyboard in info message
+  ↓
+User clicks "📝 Структурировать" (6000 chars)
+  ↓
+Bot deletes old file, sends new file
+  ↓
+User clicks "Retranscribe" (2500 chars)
+  ↓
+Bot deletes file, updates to text message
+```
+
+**Files Modified**:
+- `src/bot/handlers.py` (+100 lines) - File handling for initial/draft
+- `src/bot/callbacks.py` (+150 lines) - Display update method
+- `src/bot/retranscribe_handlers.py` (~5 lines) - Circular import fix
+- `src/storage/models.py` (state tracking fields)
+
+**Key Patterns Established**:
+1. **Consistent File Handling**: Same threshold logic for ALL message types (initial, draft, variant, retranscription)
+2. **Two-Message Pattern**: Info with keyboard + file message for long texts
+3. **State Tracking**: `is_file_message` enables dynamic format switching
+4. **Circular Import Resolution**: Move imports inside functions
+5. **io.BytesIO Pattern**: In-memory file objects for Telegram
+
+**Testing**:
+- ✅ User confirmed file sent instead of split messages
+- ✅ Retranscription working without Message_too_long error
+- ✅ Bot starts successfully (circular import fixed)
+- ✅ All interactive features work with files
+
+**Impact**:
+- ✅ File threshold NOW WORKS for all transcription paths
+- ✅ No more split messages for long transcriptions
+- ✅ Retranscription supports large texts
+- ✅ Seamless format switching in interactive mode
+
+**Status**: ✅ COMPLETE - All bugs fixed, feature fully operational
+**Completion Date**: 2025-12-08
+**Next**: Phase 10.8 - Retranscription with quality settings
 
 ---
 
@@ -431,6 +515,19 @@ Text updates:
 - Master switch: `INTERACTIVE_MODE_ENABLED`
 - Phase-specific flags: `ENABLE_STRUCTURED_MODE`, etc.
 - Gradual rollout strategy
+
+**7. File Handling Patterns (Phase 10.7-10.7.1)**
+- Consistent threshold logic: `FILE_THRESHOLD_CHARS=3000`
+- Two-message pattern: info with keyboard + file message
+- State tracking: `is_file_message`, `file_message_id`
+- 4 transition scenarios supported (text↔text, file↔file, text↔file, file↔text)
+- io.BytesIO for in-memory file creation
+
+**8. Circular Import Resolution**
+- Move imports inside functions when circular dependency exists
+- Pattern: Import at function level instead of module level
+- Example: `src/bot/retranscribe_handlers.py` importing CallbackHandlers
+- Prevents initialization cycle while maintaining functionality
 
 ### Queue System Patterns (Phase 6-7, Oct 2025)
 
