@@ -214,9 +214,7 @@ class Settings(BaseSettings):
     retranscribe_free_model: str = Field(
         default="medium", description="Model for free retranscription (higher quality)"
     )
-    retranscribe_free_model_rtf: float = Field(
-        default=0.5, description="RTF 0.5 for medium model"
-    )
+    retranscribe_free_model_rtf: float = Field(default=0.5, description="RTF 0.5 for medium model")
     retranscribe_paid_provider: str = Field(
         default="openai", description="Provider for paid retranscription"
     )

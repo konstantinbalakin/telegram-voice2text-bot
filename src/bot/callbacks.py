@@ -553,7 +553,9 @@ class CallbackHandlers:
 
         # Update message with new text (handles both text and file messages)
         try:
-            await self.update_transcription_display(query, context, state, variant.text_content, keyboard)
+            await self.update_transcription_display(
+                query, context, state, variant.text_content, keyboard
+            )
             logger.info(f"Mode changed successfully: usage_id={usage_id}, mode={new_mode}")
         except Exception as e:
             logger.error(f"Failed to update message: {e}")
@@ -731,7 +733,9 @@ class CallbackHandlers:
 
         # Update message with new text (handles both text and file messages)
         try:
-            await self.update_transcription_display(query, context, state, variant.text_content, keyboard)
+            await self.update_transcription_display(
+                query, context, state, variant.text_content, keyboard
+            )
             logger.info(
                 f"Length changed successfully: usage_id={usage_id}, "
                 f"level={current_level}->{new_level}"
@@ -919,7 +923,9 @@ class CallbackHandlers:
 
         # Update message with new text (handles both text and file messages)
         try:
-            await self.update_transcription_display(query, context, state, variant.text_content, keyboard)
+            await self.update_transcription_display(
+                query, context, state, variant.text_content, keyboard
+            )
             logger.info(
                 f"Emoji level changed successfully: usage_id={usage_id}, "
                 f"level={current_emoji}->{new_emoji}"

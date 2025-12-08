@@ -60,7 +60,9 @@ async def handle_retranscribe_menu(update: Update, context: ContextTypes.DEFAULT
 
     # Calculate wait time for free option (RTF 0.5 for medium model)
     duration_seconds = usage.voice_duration_seconds if usage.voice_duration_seconds else 0
-    wait_time_seconds = int(duration_seconds * settings.retranscribe_free_model_rtf)  # RTF 0.5 for medium model
+    wait_time_seconds = int(
+        duration_seconds * settings.retranscribe_free_model_rtf
+    )  # RTF 0.5 for medium model
 
     # Format wait time
     if wait_time_seconds < 60:

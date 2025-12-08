@@ -215,7 +215,9 @@ class HybridStrategy(RoutingStrategy):
                 # Look for provider that contains the preference in its name
                 for provider_name in providers.keys():
                     if preferred.lower() in provider_name.lower():
-                        logger.info(f"Using provider {provider_name} matching preference: {preferred}")
+                        logger.info(
+                            f"Using provider {provider_name} matching preference: {preferred}"
+                        )
                         return provider_name
                 logger.warning(
                     f"Provider preference '{preferred}' not found, falling back to strategy"
