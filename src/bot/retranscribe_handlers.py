@@ -2,9 +2,9 @@
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.ext import ContextTypes
 
 from src.bot.keyboards import (
@@ -21,6 +21,7 @@ from src.storage.repositories import (
 from src.storage.database import get_session
 from src.config import settings
 from src.transcription.models import TranscriptionContext
+from src.services.progress_tracker import ProgressTracker
 
 if TYPE_CHECKING:
     from src.bot.handlers import BotHandlers
@@ -193,17 +194,36 @@ async def handle_retranscribe(
         transcription_context = TranscriptionContext(
             language="ru",
             provider_preference=provider_name,  # e.g., "faster-whisper-medium"
+            disable_refinement=True,  # Skip refinement for retranscription
+        )
+        # Calculate progress duration based on RTF
+        progress_duration = int(
+            (usage.voice_duration_seconds or 0) * settings.retranscribe_free_model_rtf
         )
     else:
         # Paid: Use OpenAI
         transcription_context = TranscriptionContext(
             language="ru",
             provider_preference=settings.retranscribe_paid_provider,  # "openai"
+            disable_refinement=True,  # Skip refinement for retranscription
         )
+        # Use fixed duration for paid method
+        progress_duration = settings.llm_processing_duration
 
     logger.info(
-        f"Retranscribing with context: provider={transcription_context.provider_preference}"
+        f"Retranscribing with context: provider={transcription_context.provider_preference}, "
+        f"disable_refinement=True, progress_duration={progress_duration}s"
     )
+
+    # Start progress tracker
+    progress = ProgressTracker(
+        message=cast(Message, query.message),
+        duration_seconds=progress_duration,
+        rtf=1.0,  # Duration already calculated above
+        update_interval=settings.progress_update_interval,
+    )
+    await progress.start()
+    logger.info(f"Progress tracker started: duration={progress_duration}s, method={method}")
 
     # Perform retranscription
     try:
@@ -213,21 +233,48 @@ async def handle_retranscribe(
             transcription_context,
         )
 
+        # Stop progress tracker
+        await progress.stop()
+
         logger.info(
             f"Retranscription completed: usage_id={usage_id}, "
             f"provider={result.provider_used}, text_length={len(result.text)}"
         )
 
-        # Update usage record with new transcription stats
+        # Create child usage record (preserves original)
         async with get_session() as session:
             usage_repo = UsageRepository(session)
-            await usage_repo.update(
-                usage_id=usage_id,
+
+            # Create child usage record
+            child_usage = await usage_repo.create(
+                user_id=usage.user_id,
+                voice_file_id=usage.voice_file_id,
+                voice_duration_seconds=usage.voice_duration_seconds,
                 model_size=result.model_name or result.provider_used,
                 processing_time_seconds=result.processing_time,
                 transcription_length=len(result.text),
+                language="ru",
+                parent_usage_id=usage_id,  # Link to parent
+                original_file_path=usage.original_file_path,  # Preserve file path
             )
+
+            logger.info(
+                f"Created child usage record: child_id={child_usage.id}, "
+                f"parent_id={usage_id}, method={method}"
+            )
+
+            # Update state to point to new child usage
+            state_repo = TranscriptionStateRepository(session)
+            state = await state_repo.get_by_usage_id(usage_id)
+            if state:
+                state.usage_id = child_usage.id
+                await state_repo.update(state)
+                logger.info(f"Updated state.usage_id: {usage_id} -> {child_usage.id}")
+
             await session.commit()
+
+            # Update usage_id variable for subsequent code
+            usage_id = child_usage.id
 
         # Get current state and create callback handlers
         # Import here to avoid circular import
@@ -274,6 +321,9 @@ async def handle_retranscribe(
                     pass  # Query too old, ignore
 
     except Exception as e:
+        # Stop progress tracker on error
+        await progress.stop()
+
         logger.error(f"Retranscription failed: {e}", exc_info=True)
         try:
             await query.edit_message_text(

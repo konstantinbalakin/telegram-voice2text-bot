@@ -94,6 +94,9 @@ class Usage(Base):
 
     # Retranscription support (Phase 8)
     original_file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    parent_usage_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("usage.id", ondelete="CASCADE"), nullable=True, index=True
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

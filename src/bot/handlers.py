@@ -1265,6 +1265,11 @@ class BotHandlers:
                     request.duration_seconds
                 )
 
+            # Skip refinement if explicitly disabled (e.g., for retranscription)
+            if request.context.disable_refinement:
+                needs_refinement = False
+                logger.info("LLM refinement disabled by context")
+
             final_text = result.text
 
             if needs_refinement and self.llm_service:

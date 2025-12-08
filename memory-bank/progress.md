@@ -28,10 +28,11 @@
 - **Phase 10.5**: ✅ Complete (2025-12-04) - Interactive transcription Phase 5 (Emoji Option) with improvements
 - **Phase 10.6**: ✅ Complete (2025-12-05) - Interactive transcription Phase 6 (Timestamps)
 - **Phase 10.7**: ✅ Complete (2025-12-08) - Interactive transcription Phase 7 (File handling for text >4096 chars)
-- **Phase 10.8**: 🔄 IN PROGRESS (2025-12-08) - Interactive transcription Phase 8 (Retranscription)
+- **Phase 10.8**: ✅ Complete (2025-12-08) - Interactive transcription Phase 8 (Retranscription)
+- **Phase 10.9**: ✅ Complete (2025-12-09) - Retranscription UX improvements (Progress bar + Parent-child usage tracking)
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-7)
-- Current focus (2025-12-08): Phase 10.8 implementation complete, currently testing retranscription functionality
+- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-8 + retranscription improvements)
+- Current focus (2025-12-09): Phase 10.9 implementation complete, ready for manual testing
 
 ## Delivered Milestones
 
@@ -2061,7 +2062,92 @@ User can:
 
 ---
 
-### Phase 10.8: Interactive Transcription - Phase 8 (Retranscription) 🔄 IN PROGRESS (2025-12-08)
+### Phase 10.9: Retranscription UX Improvements ✅ COMPLETE (2025-12-09)
+
+**Achievement**: Enhanced retranscription with progress feedback and complete statistics preservation through parent-child usage tracking
+
+**Problem Context**: After Phase 10.8 implementation, retranscription had critical UX and data integrity issues:
+1. **No Progress Bar**: Users waited 30-90s without feedback
+2. **Lost Statistics**: Original usage record overwritten, history lost
+3. **Unnecessary Refinement**: LLM refinement ran despite using quality model
+
+**Implementation Complete**: ✅
+
+**What Was Implemented**:
+
+**1. Database Migration** (`f0514e20f750_add_parent_usage_id_to_usage_table.py`)
+- Added `parent_usage_id` column to `usage` table (nullable, indexed)
+- Foreign key constraint with CASCADE delete (SQLite batch mode)
+- Enables parent-child relationship tracking for retranscriptions
+- Migration verified: column exists in production database
+
+**2. Usage Model Enhancement** (`src/storage/models.py:97-99`)
+- Added `parent_usage_id: Mapped[Optional[int]]` field
+- Supports retranscription chains (original → child1 → child2)
+- CASCADE delete ensures orphaned records cleaned up
+
+**3. Repository Extension** (`src/storage/repositories.py:124-158`)
+- `UsageRepository.create()` accepts `parent_usage_id` parameter
+- Enables creation of child usage records linked to parent
+- Also accepts `original_file_path` to preserve file reference
+
+**4. TranscriptionContext Flag** (`src/transcription/models.py:28`)
+- Added `disable_refinement: bool = False` flag
+- Allows skipping LLM refinement when using quality models
+- Saves processing time and API costs
+
+**5. Progress Bar Implementation** (`src/bot/retranscribe_handlers.py:188-225`)
+- **Free method**: `duration = voice_duration * RETRANSCRIBE_FREE_MODEL_RTF` (RTF 0.5)
+- **Paid method**: `duration = LLM_PROCESSING_DURATION` (fixed 30s)
+- ProgressTracker created before transcription, stopped on completion/error
+- Visual feedback during processing
+
+**6. Parent-Child Usage Creation** (`src/bot/retranscribe_handlers.py:227-260`)
+- Creates NEW child usage record (preserves original)
+- Links to parent via `parent_usage_id`
+- Updates `state.usage_id` to child for continued interaction
+- All subsequent operations (variants, segments) link to child
+
+**7. Refinement Control** (`src/bot/handlers.py:1268-1271`)
+- Checks `request.context.disable_refinement` flag
+- Skips LLM refinement when disabled
+- Logged for debugging
+
+**Key Patterns Established**:
+- **Parent-Child Usage Tracking**: Database relationships > overwriting for history preservation
+- **Dynamic Progress Duration**: RTF-based for compute, fixed for API calls
+- **State Migration**: Update state.usage_id to child for seamless continuation
+- **Context Flags**: Pass behavior flags through TranscriptionContext
+
+**User Experience**:
+```
+[⚡ Могу лучше] button clicked
+  ↓
+Menu: [🆓 Бесплатно] [💰 Платно]
+  ↓
+Progress bar: 🔄 [████░░] 40% (~54с)
+  ↓
+Database: Original preserved, child created, state migrated
+```
+
+**Testing Status**:
+- ✅ Migration applied (f0514e20f750)
+- ✅ Code complete
+- ⏳ Manual testing required
+
+**Impact**:
+- ✅ Users see progress (major UX win)
+- ✅ Statistics preserved
+- ✅ History tracked
+- ✅ Faster (no unnecessary refinement)
+
+**Files Modified**: 7 files (migration, models, repos, context, handlers)
+**Documentation**: `memory-bank/plans/2025-12-08-retranscription-improvements-plan.md`
+**Completion Date**: 2025-12-09
+
+---
+
+### Phase 10.8: Interactive Transcription - Phase 8 (Retranscription) ✅ COMPLETE (2025-12-08)
 
 **Achievement**: Allow users to retranscribe audio with improved quality settings (better model or different provider)
 

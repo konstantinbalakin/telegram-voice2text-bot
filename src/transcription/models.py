@@ -25,6 +25,7 @@ class TranscriptionContext:
     language: Optional[str] = "ru"
     priority: str = "normal"  # normal, high
     provider_preference: Optional[str] = None  # Preferred provider or model
+    disable_refinement: bool = False  # Skip LLM refinement (for retranscription)
 
 
 @dataclass
