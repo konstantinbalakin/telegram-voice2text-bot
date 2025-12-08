@@ -198,7 +198,7 @@ async def handle_retranscribe(
         )
         # Calculate progress duration based on RTF
         progress_duration = int(
-            usage.voice_duration_seconds * settings.retranscribe_free_model_rtf
+            (usage.voice_duration_seconds or 0) * settings.retranscribe_free_model_rtf
         )
     else:
         # Paid: Use OpenAI
