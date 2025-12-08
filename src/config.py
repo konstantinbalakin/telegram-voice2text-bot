@@ -115,6 +115,9 @@ class Settings(BaseSettings):
         default=5, description="Progress bar update interval (seconds)"
     )
     progress_rtf: float = Field(default=0.3, description="Estimated RTF for progress calculation")
+    llm_processing_duration: int = Field(
+        default=30, description="Estimated LLM processing duration in seconds (for progress bar)"
+    )
 
     # Quotas
     default_daily_quota_seconds: int = Field(
@@ -136,14 +139,6 @@ class Settings(BaseSettings):
     llm_api_key: str | None = Field(default=None, description="LLM API key")
     llm_model: str = Field(default="deepseek-chat", description="LLM model name")
     llm_base_url: str = Field(default="https://api.deepseek.com", description="LLM API base URL")
-    llm_refinement_prompt: str = Field(
-        default="""Улучши транскрипцию голосового сообщения:
-- Исправь орфографические и пунктуационные ошибки
-- Добавь правильную пунктуацию и заглавные буквы
-- Сохрани исходный смысл и стиль речи
-- Верни только исправленный текст без комментариев""",
-        description="System prompt for text refinement",
-    )
     llm_timeout: int = Field(default=30, description="LLM request timeout in seconds")
     llm_debug_mode: bool = Field(
         default=False,
@@ -176,6 +171,60 @@ class Settings(BaseSettings):
     )
     audio_speed_multiplier: float = Field(
         default=1.0, description="Audio speed multiplier (0.5-2.0, 1.0=original)"
+    )
+
+    # Interactive Transcription Features (Phase 1-8)
+    interactive_mode_enabled: bool = Field(
+        default=False, description="Enable interactive transcription mode with inline buttons"
+    )
+    enable_structured_mode: bool = Field(
+        default=False, description="Enable 'Structured' text mode (Phase 2)"
+    )
+    enable_summary_mode: bool = Field(default=False, description="Enable 'Summary' mode (Phase 4)")
+    enable_emoji_option: bool = Field(default=False, description="Enable emoji option (Phase 5)")
+    enable_timestamps_option: bool = Field(
+        default=False, description="Enable timestamps option (Phase 6)"
+    )
+    enable_length_variations: bool = Field(
+        default=False, description="Enable length variations (shorter/longer) (Phase 3)"
+    )
+    enable_retranscribe: bool = Field(
+        default=False, description="Enable retranscription option (Phase 8)"
+    )
+
+    # Interactive Transcription Limits
+    max_cached_variants_per_transcription: int = Field(
+        default=10, description="Maximum number of cached variants per transcription"
+    )
+    variant_cache_ttl_days: int = Field(
+        default=7, description="Days to keep cached variants before cleanup"
+    )
+    timestamps_min_duration: int = Field(
+        default=300, description="Minimum audio duration (seconds) to save segments for timestamps"
+    )
+
+    # Retranscription Configuration (Phase 8)
+    persistent_audio_dir: str = Field(
+        default="./data/audio_files",
+        description="Directory for storing audio files for retranscription",
+    )
+    persistent_audio_ttl_days: int = Field(
+        default=7, description="How long to keep audio files (days)"
+    )
+    retranscribe_free_model: str = Field(
+        default="medium", description="Model for free retranscription (higher quality)"
+    )
+    retranscribe_free_model_rtf: float = Field(default=0.5, description="RTF 0.5 for medium model")
+    retranscribe_paid_provider: str = Field(
+        default="openai", description="Provider for paid retranscription"
+    )
+    retranscribe_paid_cost_per_minute: float = Field(
+        default=1.0, description="Estimated cost per minute for paid retranscription (rubles)"
+    )
+
+    # File Handling (Phase 7)
+    file_threshold_chars: int = Field(
+        default=3000, description="Text longer than this is sent as .txt file instead of message"
     )
 
     # Logging

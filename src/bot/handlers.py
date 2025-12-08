@@ -1,18 +1,27 @@
 """Telegram bot handlers for voice message processing."""
 
 import asyncio
+import io
 import logging
+import shutil
 import time
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from typing import Optional
-from telegram import Update
+from telegram import Update, InlineKeyboardMarkup, Message
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 
 from src.config import settings
 from src.storage.database import get_session
-from src.storage.repositories import UserRepository, UsageRepository
+from src.storage.repositories import (
+    UserRepository,
+    UsageRepository,
+    TranscriptionStateRepository,
+    TranscriptionSegmentRepository,
+    TranscriptionVariantRepository,
+)
 from src.transcription.routing.router import TranscriptionRouter
 from src.transcription.routing.strategies import HybridStrategy
 from src.transcription.audio_handler import AudioHandler
@@ -21,6 +30,7 @@ from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.progress_tracker import ProgressTracker
 from src.services.llm_service import LLMService
 from src.services.telegram_client import TelegramClientService
+from src.bot.keyboards import create_transcription_keyboard
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +103,43 @@ def split_text(
         text = text[effective_max:]
 
     return chunks
+
+
+def save_audio_file_for_retranscription(
+    temp_file_path: Path, usage_id: int, file_id: str
+) -> Optional[Path]:
+    """Save audio file to persistent storage for retranscription (Phase 8).
+
+    Args:
+        temp_file_path: Temporary file path from audio handler
+        usage_id: Usage record ID
+        file_id: Telegram file ID
+
+    Returns:
+        Path to saved file or None if saving failed or retranscription is disabled
+    """
+    if not settings.enable_retranscribe:
+        logger.debug("Retranscription disabled, skipping file save")
+        return None
+
+    try:
+        # Create persistent directory if doesn't exist
+        persistent_dir = Path(settings.persistent_audio_dir)
+        persistent_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create unique filename
+        file_extension = temp_file_path.suffix or ".ogg"
+        permanent_path = persistent_dir / f"{usage_id}_{file_id}{file_extension}"
+
+        # Copy file to permanent storage
+        shutil.copy2(temp_file_path, permanent_path)
+        logger.info(f"Audio file saved for retranscription: {permanent_path}")
+
+        return permanent_path
+
+    except Exception as e:
+        logger.error(f"Failed to save audio file for retranscription: {e}", exc_info=True)
+        return None
 
 
 class BotHandlers:
@@ -448,12 +495,18 @@ class BotHandlers:
 
             logger.info(f"File downloaded: {file_path}")
 
-            # STAGE 2: Update with duration after download
+            # Phase 8: Save audio file for retranscription
+            persistent_path = save_audio_file_for_retranscription(
+                Path(file_path), usage.id, voice.file_id
+            )
+
+            # STAGE 2: Update with duration after download (+ file path for retranscription)
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
                 await usage_repo.update(
                     usage_id=usage.id,
                     voice_duration_seconds=duration_seconds,
+                    original_file_path=str(persistent_path) if persistent_path else None,
                 )
                 logger.info(f"Usage record {usage.id} updated with duration {duration_seconds}s")
 
@@ -773,12 +826,18 @@ class BotHandlers:
 
             logger.info(f"File downloaded: {file_path}")
 
-            # STAGE 2: Update with duration after download
+            # Phase 8: Save audio file for retranscription
+            persistent_path = save_audio_file_for_retranscription(
+                Path(file_path), usage.id, audio.file_id
+            )
+
+            # STAGE 2: Update with duration after download (+ file path for retranscription)
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
                 await usage_repo.update(
                     usage_id=usage.id,
                     voice_duration_seconds=duration_seconds,
+                    original_file_path=str(persistent_path) if persistent_path else None,
                 )
                 logger.info(f"Usage record {usage.id} updated with duration {duration_seconds}s")
 
@@ -948,50 +1007,209 @@ class BotHandlers:
             except Exception:
                 pass
 
+    async def _create_interactive_state_and_keyboard(
+        self,
+        usage_id: int,
+        message_id: int,
+        chat_id: int,
+        result: TranscriptionResult,
+        final_text: str,
+        is_file_message: bool = False,
+        file_message_id: Optional[int] = None,
+    ) -> Optional["InlineKeyboardMarkup"]:
+        """Create TranscriptionState, save segments, save original variant, and generate keyboard.
+
+        Args:
+            usage_id: Usage record ID
+            message_id: Telegram message ID where transcription was sent (main message with keyboard)
+            chat_id: Telegram chat ID
+            result: TranscriptionResult with optional segments
+            final_text: The final text that was sent to the user (original variant)
+            is_file_message: Whether transcription was sent as file (True) or text (False)
+            file_message_id: Message ID of the file message (if sent as file)
+
+        Returns:
+            InlineKeyboardMarkup or None if interactive mode disabled
+        """
+        logger.debug(
+            f"_create_interactive_state_and_keyboard called: usage_id={usage_id}, "
+            f"message_id={message_id}, is_file_message={is_file_message}, "
+            f"file_message_id={file_message_id}, interactive_mode={settings.interactive_mode_enabled}"
+        )
+
+        if not settings.interactive_mode_enabled:
+            logger.debug("Interactive mode disabled, returning None")
+            return None
+
+        try:
+            async with get_session() as session:
+                state_repo = TranscriptionStateRepository(session)
+                segment_repo = TranscriptionSegmentRepository(session)
+                variant_repo = TranscriptionVariantRepository(session)
+
+                # Get existing state or create new one
+                state = await state_repo.get_by_usage_id(usage_id)
+                if not state:
+                    # Create TranscriptionState
+                    state = await state_repo.create(
+                        usage_id=usage_id,
+                        message_id=message_id,
+                        chat_id=chat_id,
+                        is_file_message=is_file_message,
+                        file_message_id=file_message_id,
+                    )
+                    logger.debug(
+                        f"TranscriptionState created: id={state.id}, usage_id={usage_id}, "
+                        f"message_id={message_id}, is_file={is_file_message}, file_msg_id={file_message_id}"
+                    )
+                else:
+                    logger.debug(
+                        f"Using existing TranscriptionState: id={state.id}, usage_id={usage_id}"
+                    )
+
+                # Save original variant (Phase 2)
+                await variant_repo.create(
+                    usage_id=usage_id,
+                    mode="original",
+                    text_content=final_text,
+                    generated_by="transcription",
+                )
+                logger.debug(f"Saved original variant for usage_id={usage_id}")
+
+                # Save segments if available, duration exceeds threshold, and feature is enabled
+                has_segments = False
+                if (
+                    settings.enable_timestamps_option
+                    and result.segments
+                    and result.audio_duration >= settings.timestamps_min_duration
+                ):
+                    segments_data = [
+                        (i, seg.start, seg.end, seg.text) for i, seg in enumerate(result.segments)
+                    ]
+                    await segment_repo.create_batch(usage_id, segments_data)
+                    has_segments = True
+                    logger.debug(
+                        f"Saved {len(segments_data)} segments for usage_id={usage_id}, "
+                        f"duration={result.audio_duration:.1f}s"
+                    )
+                elif result.segments and not settings.enable_timestamps_option:
+                    logger.debug(
+                        "Segments not saved (timestamps feature disabled: "
+                        "ENABLE_TIMESTAMPS_OPTION=false)"
+                    )
+                elif result.segments:
+                    logger.debug(
+                        f"Segments not saved (duration {result.audio_duration:.1f}s < "
+                        f"threshold {settings.timestamps_min_duration}s)"
+                    )
+
+                # Generate keyboard
+                keyboard = create_transcription_keyboard(state, has_segments, settings)
+                return keyboard
+
+        except Exception as e:
+            logger.error(f"Failed to create interactive state: {e}", exc_info=True)
+            return None
+
+    async def _send_transcription_result(
+        self,
+        request: TranscriptionRequest,
+        text: str,
+        keyboard: Optional[InlineKeyboardMarkup],
+        usage_id: int,
+        prefix: str = "✅ Готово!\n\n",
+    ) -> tuple[Message, Optional[Message]]:
+        """Send transcription result as text message or file based on length.
+
+        Args:
+            request: Transcription request
+            text: Text content to send
+            keyboard: Inline keyboard markup (optional)
+            usage_id: Usage record ID
+            prefix: Optional prefix for short messages
+
+        Returns:
+            (main_message, file_message): Main message (with keyboard) and optional file message
+        """
+        if len(text) <= settings.file_threshold_chars:
+            # Short text: send as single message
+            msg = await request.user_message.reply_text(prefix + text, reply_markup=keyboard)
+            logger.debug(
+                f"Sent text result: usage_id={usage_id}, length={len(text)}, "
+                f"threshold={settings.file_threshold_chars}"
+            )
+            return (msg, None)
+        else:
+            # Long text: send as file
+            # Message 1: Info + keyboard
+            info_msg = await request.user_message.reply_text(
+                "📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard
+            )
+
+            # Message 2: File
+            file_obj = io.BytesIO(text.encode("utf-8"))
+            file_obj.name = f"transcription_{usage_id}.txt"
+
+            file_msg = await request.user_message.reply_document(
+                document=file_obj,
+                filename=file_obj.name,
+                caption=f"📄 Транскрипция ({len(text)} символов)",
+            )
+
+            logger.debug(
+                f"Sent file result: usage_id={usage_id}, length={len(text)}, "
+                f"threshold={settings.file_threshold_chars}"
+            )
+            return (info_msg, file_msg)
+
     async def _send_draft_messages(
         self,
         request: TranscriptionRequest,
         draft_text: str,
     ) -> None:
-        """Send draft text in multiple messages if needed.
+        """Send draft text (as text or file based on length).
 
         Args:
             request: Transcription request (will populate draft_messages)
             draft_text: Draft transcription text to send
         """
-        text_chunks = split_text(draft_text)
+        # Delete status message first
+        try:
+            await request.status_message.delete()
+        except Exception as e:
+            logger.warning(f"Failed to delete status message: {e}")
 
-        if len(text_chunks) == 1:
-            # Short draft: use status_message as before
-            logger.debug(f"Sending short draft: request_id={request.id}, length={len(draft_text)}")
-            await request.status_message.edit_text(
+        if len(draft_text) <= settings.file_threshold_chars:
+            # Short draft: send as text message
+            logger.debug(
+                f"Sending short draft as text: request_id={request.id}, length={len(draft_text)}"
+            )
+            message = await request.user_message.reply_text(
                 f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст..."
             )
+            request.draft_messages.append(message)
         else:
-            # Long draft: send multiple messages
+            # Long draft: send as file
             logger.debug(
-                f"Sending long draft: request_id={request.id}, chunks={len(text_chunks)}, "
-                f"length={len(draft_text)}"
+                f"Sending long draft as file: request_id={request.id}, length={len(draft_text)}"
             )
 
-            # Delete status message first
-            try:
-                await request.status_message.delete()
-            except Exception as e:
-                logger.warning(f"Failed to delete status message: {e}")
+            # Message 1: Info
+            info_msg = await request.user_message.reply_text(
+                "✅ Черновик готов! Файл ниже ↓\n\n🔄 Улучшаю текст..."
+            )
+            request.draft_messages.append(info_msg)
 
-            # Send each chunk
-            for i, chunk in enumerate(text_chunks, 1):
-                header = f"📝 Черновик - Часть {i}/{len(text_chunks)}\n\n"
-                footer = "\n\n🔄 Улучшаю текст..."
-                message = await request.user_message.reply_text(header + chunk + footer)
-                request.draft_messages.append(message)
-                logger.debug(
-                    f"Sent draft chunk {i}/{len(text_chunks)}: request_id={request.id}, "
-                    f"chunk_length={len(chunk)}"
-                )
-                if i < len(text_chunks):
-                    await asyncio.sleep(0.1)  # Rate limit protection
+            # Message 2: File
+            file_obj = io.BytesIO(draft_text.encode("utf-8"))
+            file_obj.name = f"draft_{request.usage_id}.txt"
+
+            file_msg = await request.user_message.reply_document(
+                document=file_obj,
+                filename=file_obj.name,
+                caption=f"📄 Черновик ({len(draft_text)} символов)",
+            )
+            request.draft_messages.append(file_msg)
 
     async def _process_transcription(self, request: TranscriptionRequest) -> TranscriptionResult:
         """Process transcription request (called by queue worker).
@@ -1090,21 +1308,39 @@ class BotHandlers:
                         except Exception as e:
                             logger.warning(f"Failed to delete status message: {e}")
 
-                    # Send refined in parts
-                    text_chunks = split_text(refined_text)
-                    logger.debug(
-                        f"Sending refined text: request_id={request.id}, chunks={len(text_chunks)}, "
-                        f"length={len(refined_text)}"
+                    # Create keyboard
+                    keyboard = await self._create_interactive_state_and_keyboard(
+                        usage_id=request.usage_id,
+                        message_id=0,  # Will be updated after sending
+                        chat_id=request.user_message.chat_id,
+                        result=result,
+                        final_text=refined_text,
                     )
 
-                    for i, chunk in enumerate(text_chunks, 1):
-                        prefix = "✨ Готово!\n\n" if i == 1 else ""
-                        header = (
-                            f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
-                        )
-                        await request.user_message.reply_text(prefix + header + chunk)
-                        if i < len(text_chunks):
-                            await asyncio.sleep(0.1)
+                    # Send refined text (as text or file based on length)
+                    main_msg, file_msg = await self._send_transcription_result(
+                        request=request,
+                        text=refined_text,
+                        keyboard=keyboard,
+                        usage_id=request.usage_id,
+                        prefix="",
+                    )
+
+                    # Update state with correct message IDs
+                    if keyboard:
+                        async with get_session() as session:
+                            state_repo = TranscriptionStateRepository(session)
+                            state = await state_repo.get_by_usage_id(request.usage_id)
+                            if state:
+                                state.message_id = main_msg.message_id
+                                state.is_file_message = file_msg is not None
+                                state.file_message_id = file_msg.message_id if file_msg else None
+                                await state_repo.update(state)
+                                logger.debug(
+                                    f"Updated state: message_id={main_msg.message_id}, "
+                                    f"is_file={file_msg is not None}, "
+                                    f"file_msg_id={file_msg.message_id if file_msg else None}"
+                                )
 
                     # === DEBUG MODE: Send comparison ===
                     if settings.llm_debug_mode:
@@ -1150,25 +1386,45 @@ class BotHandlers:
 
             else:
                 # === Direct result (short audio or non-hybrid) ===
-                text_chunks = split_text(result.text)
+                # Delete status message
+                try:
+                    await request.status_message.delete()
+                except Exception as e:
+                    logger.warning(f"Failed to delete status message: {e}")
 
-                if len(text_chunks) == 1:
-                    await request.status_message.edit_text(f"✅ Готово!\n\n{result.text}")
-                else:
-                    # Multiple messages needed
-                    try:
-                        await request.status_message.delete()
-                    except Exception as e:
-                        logger.warning(f"Failed to delete status message: {e}")
+                # Create keyboard
+                keyboard = await self._create_interactive_state_and_keyboard(
+                    usage_id=request.usage_id,
+                    message_id=0,  # Will be updated after sending
+                    chat_id=request.user_message.chat_id,
+                    result=result,
+                    final_text=result.text,
+                )
 
-                    for i, chunk in enumerate(text_chunks, 1):
-                        prefix = "✅ Готово!\n\n" if i == 1 else ""
-                        header = (
-                            f"📝 Часть {i}/{len(text_chunks)}\n\n" if len(text_chunks) > 1 else ""
-                        )
-                        await request.user_message.reply_text(prefix + header + chunk)
-                        if i < len(text_chunks):
-                            await asyncio.sleep(0.1)
+                # Send result (as text or file based on length)
+                main_msg, file_msg = await self._send_transcription_result(
+                    request=request,
+                    text=result.text,
+                    keyboard=keyboard,
+                    usage_id=request.usage_id,
+                    prefix="✅ Готово!\n\n",
+                )
+
+                # Update state with correct message IDs
+                if keyboard:
+                    async with get_session() as session:
+                        state_repo = TranscriptionStateRepository(session)
+                        state = await state_repo.get_by_usage_id(request.usage_id)
+                        if state:
+                            state.message_id = main_msg.message_id
+                            state.is_file_message = file_msg is not None
+                            state.file_message_id = file_msg.message_id if file_msg else None
+                            await state_repo.update(state)
+                            logger.debug(
+                                f"Updated state: message_id={main_msg.message_id}, "
+                                f"is_file={file_msg is not None}, "
+                                f"file_msg_id={file_msg.message_id if file_msg else None}"
+                            )
 
             # === STAGE 3: Update database with Whisper results ===
             async with get_session() as session:
@@ -1177,7 +1433,7 @@ class BotHandlers:
                     usage_id=request.usage_id,
                     model_size=result.model_name,
                     processing_time_seconds=result.processing_time,
-                    transcription_length=len(draft_text if needs_refinement else final_text),
+                    transcription_length=len(final_text),
                     llm_model=(
                         settings.llm_model if (needs_refinement and self.llm_service) else None
                     ),

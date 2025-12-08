@@ -7,14 +7,24 @@ from typing import Optional
 
 
 @dataclass
+class TranscriptionSegment:
+    """Segment from faster-whisper with timestamp information."""
+
+    start: float  # Start time in seconds
+    end: float  # End time in seconds
+    text: str  # Segment text
+
+
+@dataclass
 class TranscriptionContext:
     """Context information for transcription and routing decisions."""
 
-    user_id: int
-    duration_seconds: float
-    file_size_bytes: int
+    user_id: int = 0
+    duration_seconds: float = 0.0
+    file_size_bytes: int = 0
     language: Optional[str] = "ru"
     priority: str = "normal"  # normal, high
+    provider_preference: Optional[str] = None  # Preferred provider or model
 
 
 @dataclass
@@ -37,6 +47,9 @@ class TranscriptionResult:
     # Resource usage (for local models)
     peak_memory_mb: Optional[float] = None
     cpu_percent: Optional[float] = None
+
+    # Segments with timestamps (for interactive features)
+    segments: Optional[list[TranscriptionSegment]] = None
 
     # Metadata
     timestamp: datetime = field(default_factory=datetime.now)

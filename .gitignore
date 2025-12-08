@@ -62,6 +62,7 @@ venv.bak/
 # Project specific
 data/*.db
 data/*.db-*
+data/audio_files/
 *.log
 .DS_Store
 

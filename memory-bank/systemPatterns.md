@@ -949,6 +949,92 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
 - **Rollout Plan**: Deploy → Enable for test users → Monitor → Gradual rollout
 - **Pattern**: Feature toggle for risk mitigation
 
+### 31. **Relative LLM Instructions Pattern** (added 2025-12-04)
+- **Where**: `prompts/emoji.md` and emoji level instructions in `TextProcessor.add_emojis()`
+- **Why**: Hard-coded values (e.g., "1-2 emojis") don't scale with varying text lengths
+- **Problem**: User feedback: "На маленький текст это норм. А вот если большой текст, то эти смайлы теряются"
+- **Benefit**: LLM adapts output to content size naturally, better UX across all text lengths
+- **Implementation**:
+  ```python
+  # BAD: Hard-coded counts
+  instructions = {
+      1: "Добавь 1-2 эмодзи в текст",  # Gets lost in long texts
+      2: "Добавь 3-5 эмодзи в текст",  # Too many for short texts
+  }
+
+  # GOOD: Relative qualitative descriptions
+  instructions = {
+      1: "Добавь минимальное количество эмодзи - только самые важные моменты.",
+      2: "Добавь умеренное количество эмодзи - выдели ключевые идеи и эмоции.",
+      3: "Добавь щедрое количество эмодзи - сделай текст живым и выразительным.",
+  }
+  ```
+- **Application**: Use for any LLM feature that scales with content (emojis, summaries, expansions, condensations)
+- **Key Insight**: LLMs are better at understanding qualitative goals than following rigid quantitative rules across varying contexts
+- **Pattern**: Qualitative descriptions + trust LLM adaptation > hard-coded numbers
+
+### 32. **Threshold-Based File Delivery Pattern** (added 2025-12-08)
+- **Where**: All message sending paths (`_send_transcription_result()`, `_send_draft_messages()`, `_send_variant_message()`, `update_transcription_display()`)
+- **Why**: Telegram has 4096 character hard limit for messages; long transcriptions must be sent as files
+- **Problem**: Phase 10.7 only implemented file handling for interactive variants, initial results and drafts still split into multiple parts
+- **Benefit**: Consistent UX across all message types, no data loss, no split messages
+- **Implementation**:
+  ```python
+  FILE_THRESHOLD_CHARS = 3000  # Conservative threshold (< 4096 limit)
+
+  if len(text) <= FILE_THRESHOLD_CHARS:
+      # Send as message
+      await message.reply_text(text, reply_markup=keyboard)
+  else:
+      # Send as file (two-message pattern)
+      info_msg = await message.reply_text("📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard)
+      file_obj = io.BytesIO(text.encode("utf-8"))
+      file_obj.name = f"transcription_{usage_id}.txt"
+      file_msg = await message.reply_document(document=file_obj, filename=file_obj.name)
+  ```
+- **Two-Message Pattern**: Info message with keyboard + separate file message
+  - Info message: Keeps keyboard accessible, provides context
+  - File message: Contains full transcription content
+- **State Tracking**: `is_file_message` and `file_message_id` in TranscriptionState
+  - Enables dynamic transitions between text and file formats
+  - Supports 4 scenarios: text↔text, file↔file, text↔file, file↔text
+- **Application**: Initial transcription, draft messages, variant messages, retranscription updates
+- **Key Insight**: Use consistent threshold across ALL message types to avoid user confusion
+- **Bug Fix Context**: Was only implemented for variants (Phase 10.7), extended to all paths in Phase 10.7.1
+
+### 33. **Circular Import Resolution Pattern** (added 2025-12-08)
+- **Where**: `src/bot/retranscribe_handlers.py` importing `CallbackHandlers` from `src/bot/callbacks.py`
+- **Why**: Top-level imports between callback modules created circular dependency preventing bot startup
+- **Problem**: `ImportError: cannot import name 'CallbackHandlers' from partially initialized module 'src.bot.callbacks'`
+- **Benefit**: Maintains modularity while avoiding initialization cycles
+- **Implementation**:
+  ```python
+  # ❌ BAD: Top-level import (circular dependency)
+  from src.bot.callbacks import CallbackHandlers
+
+  async def handle_retranscribe(...):
+      callback_handlers = CallbackHandlers(...)
+      await callback_handlers.update_transcription_display(...)
+
+  # ✅ GOOD: Function-level import (no circular dependency)
+  async def handle_retranscribe(...):
+      from src.bot.callbacks import CallbackHandlers  # Import inside function
+      callback_handlers = CallbackHandlers(...)
+      await callback_handlers.update_transcription_display(...)
+  ```
+- **When to Use**: When two modules need to import each other's classes/functions
+- **Trade-offs**:
+  - ✅ Avoids circular import errors
+  - ✅ Maintains code organization
+  - ⚠️ Slight performance overhead (import on every call)
+  - ⚠️ Less obvious dependencies (not visible at module level)
+- **Alternative Solutions**:
+  1. **Dependency Injection**: Pass CallbackHandlers instance as parameter (preferred for frequent calls)
+  2. **Shared Module**: Move shared code to third module imported by both
+  3. **TYPE_CHECKING**: Use for type hints only (doesn't solve runtime imports)
+- **Pattern**: Import inside function > module-level import when circular dependency exists
+- **Critical for**: Bot startup - without this fix, bot crashes on initialization
+
 ## Development Workflow
 
 ### Git Strategy
@@ -1503,3 +1589,211 @@ on:
 6. workflow_run limitations (deploy didn't trigger)
 
 **Learning**: Test workflows incrementally, expect multiple iterations, document issues for future reference.
+
+---
+
+## Interactive Transcription Architecture (Phase 10, Dec 2025)
+
+### Pattern 1: Callback Data Encoding
+**Problem**: Telegram has 64-byte limit for inline button callback_data.
+
+**Solution**: Compact encoding format
+```python
+# Format: "action:usage_id:param1=val1,param2=val2"
+encode_callback_data("mode", 125, mode="structured")
+# Result: "mode:125:mode=structured" (24 bytes)
+```
+
+**Validation**: Raises ValueError if exceeds 64 bytes
+**Decoding**: Parse back to dict with action, usage_id, params
+
+### Pattern 2: allowed_updates Configuration ⚠️ CRITICAL
+**Problem**: Inline buttons don't respond, show "Загрузка..." indefinitely.
+
+**Root Cause**: python-telegram-bot doesn't receive callback_query updates by default.
+
+**Solution**: Explicitly specify allowed_updates in start_polling()
+```python
+await application.updater.start_polling(
+    drop_pending_updates=True,
+    allowed_updates=Update.ALL_TYPES,  # CRITICAL: Required for callbacks
+)
+```
+
+**Location**: `src/main.py:219`
+
+**Impact**: Without this, callback_query events never reach the bot. Non-obvious requirement that caused significant debugging.
+
+### Pattern 3: Send Message Before Keyboard
+**Problem**: Need message_id to create TranscriptionState, but keyboard depends on state.
+
+**Solution**: Two-step process
+1. Send message without keyboard
+2. Create TranscriptionState with message_id
+3. Add keyboard via `edit_reply_markup()`
+
+```python
+# Step 1: Send message
+sent_message = await context.bot.send_message(...)
+
+# Step 2: Create state
+state = await state_repo.create(
+    usage_id=usage_id,
+    message_id=sent_message.message_id,  # Now we have ID
+    ...
+)
+
+# Step 3: Add keyboard
+keyboard = create_transcription_keyboard(state, ...)
+await context.bot.edit_message_reply_markup(
+    chat_id=chat_id,
+    message_id=sent_message.message_id,
+    reply_markup=keyboard
+)
+```
+
+**Why**: Avoids race conditions, ensures message_id exists before state creation.
+
+### Pattern 4: Session Management for Callbacks
+**Problem**: Callbacks need database access but invoked per-request.
+
+**Solution**: Async wrapper with session context manager
+```python
+async def callback_query_wrapper(update, context):
+    async with get_session() as session:
+        state_repo = TranscriptionStateRepository(session)
+        variant_repo = TranscriptionVariantRepository(session)
+        segment_repo = TranscriptionSegmentRepository(session)
+
+        callback_handlers = CallbackHandlers(
+            state_repo, variant_repo, segment_repo, text_processor
+        )
+        await callback_handlers.handle_callback_query(update, context)
+
+application.add_handler(CallbackQueryHandler(callback_query_wrapper))
+```
+
+**Why**: Creates fresh session per callback, ensures proper transaction management.
+
+### Pattern 5: Variant Caching Strategy
+**Design Decision**: On-demand generation with database caching
+
+**Implementation**:
+```python
+# Check if variant exists
+variant = await variant_repo.get_variant(
+    usage_id=usage_id,
+    mode="structured",
+    length_level="default",
+    emoji_level=0,
+    timestamps_enabled=False
+)
+
+if not variant:
+    # Generate on first request
+    structured_text = await text_processor.create_structured(original_text)
+
+    # Cache in database
+    variant = await variant_repo.create(
+        usage_id=usage_id,
+        mode="structured",
+        text_content=structured_text,
+        ...
+    )
+```
+
+**Benefits**:
+- Avoid regenerating same variant
+- Minimize LLM API calls (cost control)
+- Fast re-display on mode switch
+- Composite unique key prevents duplicates
+
+### Pattern 6: Feature Flag System
+**Design**: Master switch + phase-specific flags
+
+```python
+# Master switch
+interactive_mode_enabled: bool = False
+
+# Phase-specific flags (Phase 2+)
+enable_structured_mode: bool = False
+enable_summary_mode: bool = False
+enable_emoji_option: bool = False
+enable_timestamps_option: bool = False
+enable_length_variations: bool = False
+enable_retranscribe: bool = False
+```
+
+**Benefits**:
+- Gradual rollout per feature
+- Test in production with specific users
+- Quick disable if issues found
+- Infrastructure deployed before features enabled
+
+### Pattern 7: Segment Storage Threshold
+**Design Decision**: Only save segments for long audio (>300s / 5 minutes)
+
+**Rationale**:
+- Segments needed for timestamp feature
+- Timestamps only useful for long audio
+- Reduces database storage for short messages
+- Configurable via `TIMESTAMPS_MIN_DURATION`
+
+```python
+# Save segments conditionally
+segments = await self.segment_repo.get_by_usage_id(usage_id)
+has_segments = len(segments) > 0
+
+if result.duration_seconds > settings.timestamps_min_duration:
+    # Save segments for long audio
+    await segment_repo.bulk_create_segments(usage_id, result.segments)
+```
+
+### Pattern 8: State Indicator in Keyboard
+**UX Pattern**: Show current state with "(вы здесь)" marker
+
+```python
+def create_transcription_keyboard(state, ...):
+    keyboard = []
+
+    # Original mode button
+    label = "Исходный текст (вы здесь)" if state.active_mode == "original" else "Исходный текст"
+    keyboard.append([InlineKeyboardButton(label, callback_data=...)])
+
+    # Structured mode button (if enabled)
+    if settings.enable_structured_mode:
+        label = "📝 Структурировать (вы здесь)" if state.active_mode == "structured" else "📝 Структурировать"
+        keyboard.append([InlineKeyboardButton(label, callback_data=...)])
+```
+
+**Benefits**:
+- Clear visual feedback of current state
+- Prevents confusion about which mode is active
+- Standard Telegram keyboard UX pattern
+
+### Database Schema Design
+
+**TranscriptionState**:
+- Tracks UI state per message
+- Fields: usage_id, message_id, chat_id, active_mode, length_level, emoji_level, timestamps_enabled
+- One state per transcription result
+
+**TranscriptionVariant**:
+- Caches generated text variations
+- Composite unique key: (usage_id, mode, length_level, emoji_level, timestamps_enabled)
+- Tracks: generated_by, llm_model, processing_time_seconds, last_accessed_at
+- Max 10 variants per transcription (configurable)
+
+**TranscriptionSegment**:
+- Stores faster-whisper segments with timestamps
+- Fields: usage_id, segment_index, start_time, end_time, text
+- Only for long audio (>300s)
+- Enables timestamp feature (Phase 6)
+
+### Key Implementation Lessons
+
+1. **allowed_updates is CRITICAL**: Most time spent debugging was this non-obvious requirement
+2. **Two-step keyboard addition**: Avoids race conditions with message_id
+3. **On-demand generation**: Don't generate all variants upfront, wait for user request
+4. **Feature flags first**: Deploy infrastructure before enabling features
+5. **Segment threshold**: Optimize storage by only saving when needed

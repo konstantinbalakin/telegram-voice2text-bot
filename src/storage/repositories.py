@@ -6,10 +6,18 @@ import logging
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
-from src.storage.models import User, Usage, Transaction
+from src.storage.models import (
+    User,
+    Usage,
+    Transaction,
+    TranscriptionState,
+    TranscriptionVariant,
+    TranscriptionSegment,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +173,7 @@ class UsageRepository:
         language: Optional[str] = None,
         llm_model: Optional[str] = None,
         llm_processing_time_seconds: Optional[float] = None,
+        original_file_path: Optional[str] = None,
     ) -> Usage:
         """Update usage record with new data (Stage 2, 3, or 4).
 
@@ -174,7 +183,7 @@ class UsageRepository:
             f"UsageRepository.update(usage_id={usage_id}, duration={voice_duration_seconds}, "
             f"model={model_size}, processing_time={processing_time_seconds}, "
             f"text_length={transcription_length}, llm_model={llm_model}, "
-            f"llm_time={llm_processing_time_seconds})"
+            f"llm_time={llm_processing_time_seconds}, file_path={original_file_path})"
         )
         usage = await self.get_by_id(usage_id)
         if not usage:
@@ -194,6 +203,8 @@ class UsageRepository:
             usage.llm_model = llm_model
         if llm_processing_time_seconds is not None:
             usage.llm_processing_time_seconds = llm_processing_time_seconds
+        if original_file_path is not None:
+            usage.original_file_path = original_file_path
 
         usage.updated_at = datetime.utcnow()
         await self.session.flush()
@@ -216,6 +227,46 @@ class UsageRepository:
         result = await self.session.execute(select(Usage).where(Usage.user_id == user_id))
         usages = result.scalars().all()
         return sum(u.voice_duration_seconds or 0 for u in usages)
+
+    async def cleanup_old_audio_files(self, ttl_days: int) -> int:
+        """Delete audio files older than TTL (Phase 8).
+
+        Args:
+            ttl_days: Time to live in days
+
+        Returns:
+            Number of files deleted
+        """
+        from pathlib import Path
+        from datetime import timedelta
+
+        cutoff_date = datetime.utcnow() - timedelta(days=ttl_days)
+        logger.info(f"Cleaning up audio files older than {ttl_days} days (before {cutoff_date})")
+
+        # Get all usage records with files older than TTL
+        result = await self.session.execute(
+            select(Usage).where(
+                and_(Usage.created_at < cutoff_date, Usage.original_file_path.isnot(None))
+            )
+        )
+        old_usages = list(result.scalars().all())
+
+        count = 0
+        for usage in old_usages:
+            if usage.original_file_path:
+                file_path = Path(usage.original_file_path)
+                try:
+                    if file_path.exists():
+                        file_path.unlink()
+                        logger.debug(f"Deleted audio file: {file_path}")
+                        count += 1
+                    usage.original_file_path = None
+                except Exception as e:
+                    logger.error(f"Failed to delete file {file_path}: {e}")
+
+        await self.session.flush()
+        logger.info(f"Cleanup completed: {count} files deleted")
+        return count
 
 
 class TransactionRepository:
@@ -278,3 +329,246 @@ class TransactionRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+
+class TranscriptionStateRepository:
+    """Repository for TranscriptionState model operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self,
+        usage_id: int,
+        message_id: int,
+        chat_id: int,
+        is_file_message: bool = False,
+        file_message_id: Optional[int] = None,
+    ) -> TranscriptionState:
+        """Create a new transcription state."""
+        logger.debug(
+            f"TranscriptionStateRepository.create(usage_id={usage_id}, "
+            f"message_id={message_id}, chat_id={chat_id})"
+        )
+        state = TranscriptionState(
+            usage_id=usage_id,
+            message_id=message_id,
+            chat_id=chat_id,
+            active_mode="original",
+            length_level="default",
+            emoji_level=0,
+            timestamps_enabled=False,
+            is_file_message=is_file_message,
+            file_message_id=file_message_id,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow(),
+        )
+        self.session.add(state)
+        await self.session.flush()
+        await self.session.refresh(state)
+        logger.debug(f"TranscriptionState created: id={state.id}")
+        return state
+
+    async def get_by_id(self, state_id: int) -> Optional[TranscriptionState]:
+        """Get state by ID."""
+        result = await self.session.execute(
+            select(TranscriptionState).where(TranscriptionState.id == state_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_usage_id(self, usage_id: int) -> Optional[TranscriptionState]:
+        """Get state by usage ID."""
+        result = await self.session.execute(
+            select(TranscriptionState).where(TranscriptionState.usage_id == usage_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_message(self, message_id: int, chat_id: int) -> Optional[TranscriptionState]:
+        """Get state by message and chat ID."""
+        result = await self.session.execute(
+            select(TranscriptionState).where(
+                and_(
+                    TranscriptionState.message_id == message_id,
+                    TranscriptionState.chat_id == chat_id,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def update(self, state: TranscriptionState) -> TranscriptionState:
+        """Update transcription state."""
+        state.updated_at = datetime.utcnow()
+        await self.session.flush()
+        await self.session.refresh(state)
+        return state
+
+
+class TranscriptionVariantRepository:
+    """Repository for TranscriptionVariant model operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(
+        self,
+        usage_id: int,
+        mode: str,
+        text_content: str,
+        length_level: str = "default",
+        emoji_level: int = 0,
+        timestamps_enabled: bool = False,
+        generated_by: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        processing_time_seconds: Optional[float] = None,
+    ) -> TranscriptionVariant:
+        """Create a new transcription variant."""
+        logger.debug(
+            f"TranscriptionVariantRepository.create(usage_id={usage_id}, "
+            f"mode={mode}, length={length_level})"
+        )
+        variant = TranscriptionVariant(
+            usage_id=usage_id,
+            mode=mode,
+            length_level=length_level,
+            emoji_level=emoji_level,
+            timestamps_enabled=timestamps_enabled,
+            text_content=text_content,
+            generated_by=generated_by,
+            llm_model=llm_model,
+            processing_time_seconds=processing_time_seconds,
+            created_at=datetime.utcnow(),
+            last_accessed_at=datetime.utcnow(),
+        )
+        self.session.add(variant)
+        await self.session.flush()
+        await self.session.refresh(variant)
+        logger.debug(f"TranscriptionVariant created: id={variant.id}")
+        return variant
+
+    async def get_variant(
+        self,
+        usage_id: int,
+        mode: str,
+        length_level: str = "default",
+        emoji_level: int = 0,
+        timestamps_enabled: bool = False,
+    ) -> Optional[TranscriptionVariant]:
+        """Get variant by parameters."""
+        result = await self.session.execute(
+            select(TranscriptionVariant).where(
+                and_(
+                    TranscriptionVariant.usage_id == usage_id,
+                    TranscriptionVariant.mode == mode,
+                    TranscriptionVariant.length_level == length_level,
+                    TranscriptionVariant.emoji_level == emoji_level,
+                    TranscriptionVariant.timestamps_enabled == timestamps_enabled,
+                )
+            )
+        )
+        variant = result.scalar_one_or_none()
+
+        # Update last_accessed_at if found
+        if variant:
+            variant.last_accessed_at = datetime.utcnow()
+            await self.session.flush()
+
+        return variant
+
+    async def get_by_usage_id(self, usage_id: int) -> list[TranscriptionVariant]:
+        """Get all variants for a usage record."""
+        result = await self.session.execute(
+            select(TranscriptionVariant)
+            .where(TranscriptionVariant.usage_id == usage_id)
+            .order_by(TranscriptionVariant.created_at.desc())
+        )
+        return list(result.scalars().all())
+
+    async def delete_by_usage_id(self, usage_id: int) -> int:
+        """Delete all variants for a usage record (Phase 8).
+
+        Args:
+            usage_id: Usage record ID
+
+        Returns:
+            Number of variants deleted
+        """
+        logger.debug(f"Deleting all variants for usage_id={usage_id}")
+        variants = await self.get_by_usage_id(usage_id)
+        count = len(variants)
+
+        for variant in variants:
+            await self.session.delete(variant)
+
+        await self.session.flush()
+        logger.info(f"Deleted {count} variants for usage_id={usage_id}")
+        return count
+
+
+class TranscriptionSegmentRepository:
+    """Repository for TranscriptionSegment model operations."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_batch(
+        self, usage_id: int, segments: list[tuple[int, float, float, str]]
+    ) -> list[TranscriptionSegment]:
+        """
+        Create multiple segments in batch.
+
+        Args:
+            usage_id: Usage record ID
+            segments: List of (index, start_time, end_time, text) tuples
+
+        Returns:
+            List of created segments
+        """
+        logger.debug(
+            f"TranscriptionSegmentRepository.create_batch(usage_id={usage_id}, "
+            f"count={len(segments)})"
+        )
+        segment_objects = []
+        for index, start_time, end_time, text in segments:
+            segment = TranscriptionSegment(
+                usage_id=usage_id,
+                segment_index=index,
+                start_time=start_time,
+                end_time=end_time,
+                text=text,
+                created_at=datetime.utcnow(),
+            )
+            segment_objects.append(segment)
+            self.session.add(segment)
+
+        await self.session.flush()
+        logger.debug(f"Created {len(segment_objects)} segments for usage_id={usage_id}")
+        return segment_objects
+
+    async def get_by_usage_id(self, usage_id: int) -> list[TranscriptionSegment]:
+        """Get all segments for a usage record, ordered by index."""
+        result = await self.session.execute(
+            select(TranscriptionSegment)
+            .where(TranscriptionSegment.usage_id == usage_id)
+            .order_by(TranscriptionSegment.segment_index)
+        )
+        return list(result.scalars().all())
+
+    async def delete_by_usage_id(self, usage_id: int) -> int:
+        """
+        Delete all segments for a usage record (Phase 8: retranscription cleanup).
+
+        Args:
+            usage_id: Usage record ID
+
+        Returns:
+            Number of segments deleted
+        """
+        logger.debug(f"TranscriptionSegmentRepository.delete_by_usage_id(usage_id={usage_id})")
+
+        result: CursorResult = await self.session.execute(  # type: ignore[assignment]
+            delete(TranscriptionSegment).where(TranscriptionSegment.usage_id == usage_id)
+        )
+
+        deleted_count = result.rowcount or 0
+        logger.info(f"Deleted {deleted_count} segments for usage_id={usage_id}")
+        return deleted_count

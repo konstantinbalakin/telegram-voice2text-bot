@@ -194,15 +194,35 @@ class HybridStrategy(RoutingStrategy):
         providers: dict[str, TranscriptionProvider],
     ) -> str:
         """
-        Select provider based on audio duration.
+        Select provider based on audio duration or explicit preference.
 
         Args:
-            context: Transcription context with duration
+            context: Transcription context with duration and optional provider_preference
             providers: Available providers
 
         Returns:
             Provider name to use
         """
+        # Check if explicit provider preference is set (for retranscription)
+        if context.provider_preference:
+            preferred = context.provider_preference
+            # Check if it's a provider name or model name
+            if preferred in providers:
+                logger.info(f"Using explicit provider preference: {preferred}")
+                return preferred
+            else:
+                # Try to find provider by model name (e.g., "openai" for retranscription)
+                # Look for provider that contains the preference in its name
+                for provider_name in providers.keys():
+                    if preferred.lower() in provider_name.lower():
+                        logger.info(
+                            f"Using provider {provider_name} matching preference: {preferred}"
+                        )
+                        return provider_name
+                logger.warning(
+                    f"Provider preference '{preferred}' not found, falling back to strategy"
+                )
+
         duration = context.duration_seconds
 
         if duration < self.short_threshold:
