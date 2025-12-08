@@ -4,11 +4,12 @@ import io
 import logging
 import time
 from typing import Optional, cast, TYPE_CHECKING
-from telegram import Update, Message
+from telegram import Update, Message, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import ContextTypes
 from src.storage.database import get_session
 
 from src.bot.keyboards import decode_callback_data, create_transcription_keyboard
+from src.storage.models import TranscriptionState
 from src.storage.repositories import (
     TranscriptionStateRepository,
     TranscriptionVariantRepository,
@@ -64,11 +65,11 @@ class CallbackHandlers:
 
     async def update_transcription_display(
         self,
-        query,
+        query: CallbackQuery,
         context: ContextTypes.DEFAULT_TYPE,
-        state,
+        state: TranscriptionState,
         new_text: str,
-        keyboard,
+        keyboard: InlineKeyboardMarkup | None,
     ) -> None:
         """Update transcription display (text or file) based on state and length.
 
@@ -86,7 +87,8 @@ class CallbackHandlers:
 
         elif state.is_file_message and len(new_text) > settings.file_threshold_chars:
             # File message, stays file message
-            chat_id = query.message.chat_id
+            message = cast(Message, query.message)
+            chat_id = message.chat_id
 
             # Get mode label
             mode_labels = {
@@ -134,7 +136,8 @@ class CallbackHandlers:
 
         elif not state.is_file_message and len(new_text) > settings.file_threshold_chars:
             # Text message → needs to become file message
-            chat_id = query.message.chat_id
+            message = cast(Message, query.message)
+            chat_id = message.chat_id
 
             mode_labels = {
                 "original": "Исходный текст",
@@ -174,9 +177,10 @@ class CallbackHandlers:
         else:
             # File message → becomes text message (rare, but possible)
             # Delete file
+            message = cast(Message, query.message)
             if state.file_message_id:
                 try:
-                    await context.bot.delete_message(query.message.chat_id, state.file_message_id)
+                    await context.bot.delete_message(message.chat_id, state.file_message_id)
                     logger.debug(f"Deleted file: message_id={state.file_message_id}")
                 except Exception as e:
                     logger.warning(f"Could not delete file: {e}")

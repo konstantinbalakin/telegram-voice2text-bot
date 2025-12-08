@@ -8,6 +8,7 @@ from typing import Optional
 
 from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.storage.models import (
     User,
@@ -564,7 +565,7 @@ class TranscriptionSegmentRepository:
         """
         logger.debug(f"TranscriptionSegmentRepository.delete_by_usage_id(usage_id={usage_id})")
 
-        result = await self.session.execute(
+        result: CursorResult = await self.session.execute(  # type: ignore[assignment]
             delete(TranscriptionSegment).where(TranscriptionSegment.usage_id == usage_id)
         )
 
