@@ -3,8 +3,8 @@
 ## Current Status (2025-12-08)
 
 **Phase**: Phase 10 - Interactive Transcription Processing 🚀
-**Stage**: Phase 10.7 COMPLETE ✅ → Ready for Phase 10.8 (Retranscription)
-**Branch**: `docs/phase10-interactive-transcription-plan`
+**Stage**: Phase 10.8 IN PROGRESS 🔄 (Implementation complete, testing)
+**Branch**: Working branch (not yet merged)
 **Production Version**: v0.0.3+
 **Production Status**: ✅ OPERATIONAL
 
@@ -37,6 +37,97 @@
 ---
 
 ## Recent Developments (Last 2 Weeks)
+
+### 🔄 Phase 10.8: Interactive Transcription - Phase 8 (Retranscription) IN PROGRESS (2025-12-08)
+
+**Achievement**: Allow users to retranscribe audio with improved quality settings
+
+**Implementation Status**: ✅ Complete, ⏳ Testing in progress
+
+**What Was Implemented**:
+
+1. **Database Schema** (`src/storage/models.py`):
+   - Added `original_file_path` field to Usage model for storing audio files
+   - Migration: `4a34681766dc_add_original_file_path_to_usage.py`
+
+2. **Audio File Persistence** (`src/bot/handlers.py:107-141`):
+   - `save_audio_file_for_retranscription()` - Saves files to `./data/audio_files/`
+   - Naming: `{usage_id}_{file_id}{extension}`
+   - Only saves when `ENABLE_RETRANSCRIBE=true`
+
+3. **Retranscription Handlers** (`src/bot/retranscribe_handlers.py` NEW, 257 lines):
+   - `handle_retranscribe_menu()` - Shows two options:
+     - Free: "🆓 Бесплатно (лучше, ~Xм Yс)" with wait time (RTF 0.5)
+     - Paid: "💰 Платно (~X.X₽) - OpenAI" with cost calculation
+   - `handle_retranscribe()` - Complete retranscription flow:
+     - Validates file existence
+     - Deletes old variants/segments
+     - Resets state
+     - Calls TranscriptionRouter with new settings
+     - Updates message with new result
+
+4. **Architecture Integration**:
+   - Added `bot_handlers` parameter to CallbackHandlers
+   - Pass TranscriptionRouter through callback chain
+   - Used TYPE_CHECKING to avoid circular imports
+
+5. **Repository Methods** (`src/storage/repositories.py`):
+   - Extended UsageRepository.update() with original_file_path
+   - Added cleanup_old_audio_files() for TTL-based deletion
+   - Added delete_by_usage_id() for variants and segments
+
+6. **Configuration** (`src/config.py:206-222`):
+   - persistent_audio_dir, persistent_audio_ttl_days
+   - retranscribe_free_model, retranscribe_paid_provider
+   - retranscribe_paid_cost_per_minute, enable_retranscribe
+
+**User Experience**:
+```
+[Transcription with keyboard buttons]
+[⚡ Могу лучше]  ← New button (Row 6)
+  ↓
+Menu:
+[🆓 Бесплатно (лучше, ~1м 30с)]
+[💰 Платно (~2.0₽) - OpenAI]
+[◀️ Назад]
+  ↓
+Retranscription with improved quality
+All state reset, keyboard restored
+```
+
+**Bug Fixes**:
+- Import error: Fixed `from src.transcription.context` → `from src.transcription.models`
+  - TranscriptionContext is in models.py, not context.py
+
+**Files Created**:
+- `src/bot/retranscribe_handlers.py` (257 lines)
+- `alembic/versions/4a34681766dc_add_original_file_path_to_usage.py`
+
+**Files Modified**:
+- `src/storage/models.py`, `src/bot/handlers.py`, `src/config.py`
+- `src/bot/keyboards.py`, `src/bot/callbacks.py`, `src/main.py`
+- `src/storage/repositories.py`
+
+**Testing**:
+- ✅ All 136 unit tests passing
+- ✅ Type checking, linting, formatting - all pass
+- ⏳ Manual testing in progress by user
+
+**Key Patterns**:
+1. Audio file persistence only when feature enabled
+2. TTL-based cleanup for storage management
+3. Full state reset on retranscription for clean start
+4. TranscriptionRouter reuse for consistency
+5. Transparent wait time and cost estimates
+
+**Current Status**:
+- Implementation: ✅ COMPLETE
+- Testing: ⏳ IN PROGRESS
+- User feedback: Awaiting test results
+
+**Next**: Complete testing, merge, deploy to production
+
+---
 
 ### ✅ Phase 10.7: Interactive Transcription - Phase 7 (File Handling) COMPLETE (2025-12-08)
 
@@ -383,15 +474,19 @@ Text updates:
 
 ## Next Steps
 
-### Phase 10.8: Retranscription (FUTURE)
+### Immediate (Phase 10.8 Testing)
+1. ⏳ Complete manual testing with user
+2. ⏳ Verify button texts (wait time, cost calculation)
+3. ⏳ Test retranscription with free method (medium model)
+4. ⏳ Test state reset and variant cleanup
+5. ⏳ Merge to main after successful testing
+6. ⏳ Deploy to production
 
-**Goal**: Allow users to retranscribe with different quality settings
-
-**Two Approaches**:
-1. **Method 1: Different Model** - Use higher quality model (large vs medium)
-2. **Method 2: Different Provider** - Use OpenAI Whisper API for reference quality
-
-**Plan**: See Phase 8 in implementation plan
+### Future Phases (Post Phase 10)
+- **Phase 11**: Analytics dashboard for usage metrics
+- **Phase 12**: User quotas and billing system
+- **Phase 13**: Multi-language support
+- **Phase 14**: Custom vocabulary/terminology support
 
 ---
 

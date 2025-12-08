@@ -244,7 +244,7 @@ jobs:
             TELETHON_SESSION_NAME=bot_client
 
             # Transcription Provider Configuration
-            WHISPER_PROVIDERS=["faster-whisper"]
+            WHISPER_PROVIDERS=["faster-whisper", "openai"]
             WHISPER_ROUTING_STRATEGY=hybrid #single, fallback, benchmark, hybrid
             PRIMARY_PROVIDER=faster-whisper
             BENCHMARK_MODE=false
@@ -262,7 +262,7 @@ jobs:
             # OpenAI Whisper API Configuration
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             OPENAI_MODEL=whisper-1
-            OPENAI_TIMEOUT=60
+            OPENAI_TIMEOUT=90
 
             # Fallback Configuration
             FALLBACK_PROVIDER=openai
@@ -271,11 +271,11 @@ jobs:
             # Hybrid Strategy Configuration (disabled in production)
             HYBRID_SHORT_THRESHOLD=0
             HYBRID_DRAFT_PROVIDER=faster-whisper
-            HYBRID_DRAFT_MODEL=small
+            HYBRID_DRAFT_MODEL=base
             HYBRID_QUALITY_PROVIDER=faster-whisper
-            HYBRID_QUALITY_MODEL=small
+            HYBRID_QUALITY_MODEL=base
 
-            # LLM Text Refinement (disabled in production)
+            # LLM Text Refinement
             LLM_REFINEMENT_ENABLED=true
             LLM_PROVIDER=deepseek
             LLM_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
@@ -287,7 +287,7 @@ jobs:
             # Audio Preprocessing
             AUDIO_CONVERT_TO_MONO=true
             AUDIO_TARGET_SAMPLE_RATE=16000
-            AUDIO_SPEED_MULTIPLIER=1.7
+            AUDIO_SPEED_MULTIPLIER=1.0
 
             # Database
             DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
@@ -306,6 +306,23 @@ jobs:
 
             # Quota
             DEFAULT_DAILY_QUOTA_SECONDS=60
+
+            # Buttons
+            INTERACTIVE_MODE_ENABLED=true
+            ENABLE_STRUCTURED_MODE=true
+            ENABLE_SUMMARY_MODE=true
+            ENABLE_LENGTH_VARIATIONS=true
+            ENABLE_EMOJI_OPTION=true
+            ENABLE_TIMESTAMPS_OPTION=false
+            FILE_THRESHOLD_CHARS=3000 # Сколько символов для определения большого файла
+            ENABLE_RETRANSCRIBE=true #повторная транскрибация в лучшем качестве
+            PERSISTENT_AUDIO_DIR=./data/audio_files
+            PERSISTENT_AUDIO_TTL_DAYS=1
+            RETRANSCRIBE_FREE_MODEL=medium
+            RETRANSCRIBE_FREE_MODEL_RTF=0.6
+            RETRANSCRIBE_PAID_PROVIDER=openai
+            RETRANSCRIBE_PAID_COST_PER_MINUTE=1.0 # Стоимость 1й минуты для расчета стоимости на кнопке
+            LLM_PROCESSING_DURATION=30  # Длительность прогресс-бара при обработке LLM по кнопке
 
             # Application Version (for centralized logging)
             APP_VERSION=$VERSION

@@ -19,11 +19,12 @@ class TranscriptionSegment:
 class TranscriptionContext:
     """Context information for transcription and routing decisions."""
 
-    user_id: int
-    duration_seconds: float
-    file_size_bytes: int
+    user_id: int = 0
+    duration_seconds: float = 0.0
+    file_size_bytes: int = 0
     language: Optional[str] = "ru"
     priority: str = "normal"  # normal, high
+    provider_preference: Optional[str] = None  # Preferred provider or model
 
 
 @dataclass

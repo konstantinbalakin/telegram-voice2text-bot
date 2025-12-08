@@ -92,6 +92,9 @@ class Usage(Base):
     llm_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Stage 3
     llm_processing_time_seconds: Mapped[Optional[float]] = mapped_column(nullable=True)  # Stage 4
 
+    # Retranscription support (Phase 8)
+    original_file_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False

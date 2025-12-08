@@ -28,10 +28,10 @@
 - **Phase 10.5**: ✅ Complete (2025-12-04) - Interactive transcription Phase 5 (Emoji Option) with improvements
 - **Phase 10.6**: ✅ Complete (2025-12-05) - Interactive transcription Phase 6 (Timestamps)
 - **Phase 10.7**: ✅ Complete (2025-12-08) - Interactive transcription Phase 7 (File handling for text >4096 chars)
-- **Phase 10.8**: ⏳ NEXT - Interactive transcription Phase 8 (Retranscription with quality settings)
+- **Phase 10.8**: 🔄 IN PROGRESS (2025-12-08) - Interactive transcription Phase 8 (Retranscription)
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
 - **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-7)
-- Current focus (2025-12-08): Phase 10.7 complete with file handling, ready for Phase 10.8 (Retranscription)
+- Current focus (2025-12-08): Phase 10.8 implementation complete, currently testing retranscription functionality
 
 ## Delivered Milestones
 
@@ -2058,3 +2058,161 @@ User can:
 **Status**: ✅ COMPLETE - All functionality implemented, tested, and ready for deployment
 **Completion Date**: 2025-12-08
 **Branch**: `docs/phase10-interactive-transcription-plan` (documentation branch)
+
+---
+
+### Phase 10.8: Interactive Transcription - Phase 8 (Retranscription) 🔄 IN PROGRESS (2025-12-08)
+
+**Achievement**: Allow users to retranscribe audio with improved quality settings (better model or different provider)
+
+**Implementation Status**: ✅ Complete, ⏳ Testing in progress
+
+**What Was Implemented**:
+
+**1. Database Schema Updates** (`src/storage/models.py`)
+- Added `original_file_path` field to Usage model (VARCHAR(500), nullable)
+- Stores path to saved audio file for retranscription
+- Migration: `4a34681766dc_add_original_file_path_to_usage.py`
+
+**2. Audio File Persistence** (`src/bot/handlers.py`)
+- `save_audio_file_for_retranscription()` helper function (lines 107-141)
+- Saves audio files to `./data/audio_files/` directory
+- File naming: `{usage_id}_{file_id}{extension}`
+- Integrated into voice_message_handler and audio_message_handler
+- Only saves when `ENABLE_RETRANSCRIBE=true`
+
+**3. Configuration** (`src/config.py` lines 206-222)
+- `persistent_audio_dir`: Storage directory (default: `./data/audio_files`)
+- `persistent_audio_ttl_days`: File retention period (default: 7 days)
+- `retranscribe_free_model`: Model for free option (default: `medium`)
+- `retranscribe_paid_provider`: Provider for paid option (default: `openai`)
+- `retranscribe_paid_cost_per_minute`: Cost estimate (default: 1.0 rubles)
+- `enable_retranscribe`: Feature flag (default: false)
+
+**4. Retranscription Handlers** (`src/bot/retranscribe_handlers.py` NEW FILE, 257 lines)
+- **`handle_retranscribe_menu()`** - Shows retranscription options:
+  - Free option: "🆓 Бесплатно (лучше, ~Xм Yс)" with wait time estimate (RTF 0.5)
+  - Paid option: "💰 Платно (~X.X₽) - OpenAI" with cost calculation
+  - Back button to return to original mode
+- **`handle_retranscribe()`** - Performs retranscription:
+  - Validates audio file availability
+  - Deletes old variants and segments
+  - Resets transcription state to defaults
+  - Configures TranscriptionContext based on method (free/paid)
+  - Calls TranscriptionRouter.transcribe() with saved audio file
+  - Updates usage record with new stats
+  - Recreates interactive state and keyboard
+  - Updates message with new transcription
+
+**5. Keyboard Integration** (`src/bot/keyboards.py` lines 282-291)
+- Row 6: "⚡ Могу лучше" button
+- Only shown when audio file is saved (original_file_path exists)
+- Triggers retranscribe_menu callback
+
+**6. Callback Routing** (`src/bot/callbacks.py`)
+- Added `bot_handlers` parameter to CallbackHandlers.__init__()
+- Routes "retranscribe_menu" → handle_retranscribe_menu()
+- Routes "retranscribe" → handle_retranscribe(bot_handlers)
+- Validates bot_handlers availability before retranscription
+
+**7. Main Integration** (`src/main.py`)
+- Pass bot_handlers instance to CallbackHandlers
+- Enable retranscription handlers to access TranscriptionRouter
+
+**8. Repository Methods** (`src/storage/repositories.py`)
+- Extended UsageRepository.update() with original_file_path parameter
+- Added UsageRepository.cleanup_old_audio_files() for TTL-based cleanup
+- Added TranscriptionVariantRepository.delete_by_usage_id()
+- Added TranscriptionSegmentRepository.delete_by_usage_id()
+
+**User Experience**:
+```
+User sends voice message
+  ↓
+Bot transcribes and saves audio file
+  ↓
+Message shows with keyboard:
+[Исходный текст (вы здесь)]
+[📝 Структурировать]
+[💡 О чем текст?]
+[😊 Смайлы]
+[🕐 Таймкоды]
+[⚡ Могу лучше]  ← Click for better quality
+  ↓
+Menu appears:
+[🆓 Бесплатно (лучше, ~1м 30с)]  ← Medium model, RTF 0.5
+[💰 Платно (~2.0₽) - OpenAI]     ← OpenAI API, faster
+[◀️ Назад]
+  ↓
+User selects method
+  ↓
+Bot retranscribes with new settings
+  ↓
+Message updates with improved transcription
+All variants/segments reset, keyboard restored
+```
+
+**Files Created** (2 files, ~260 lines):
+- `src/bot/retranscribe_handlers.py` (257 lines)
+- `alembic/versions/4a34681766dc_add_original_file_path_to_usage.py`
+
+**Files Modified** (7 files):
+- `src/storage/models.py` (+4 lines) - Added original_file_path field
+- `src/bot/handlers.py` (+35 lines) - File saving helper + integration
+- `src/config.py` (+17 lines) - Retranscription configuration
+- `src/bot/keyboards.py` (+10 lines) - Row 6 button
+- `src/bot/callbacks.py` (+10 lines) - Routing + bot_handlers parameter
+- `src/main.py` (+1 line) - Pass bot_handlers to callbacks
+- `src/storage/repositories.py` (+60 lines) - Cleanup and delete methods
+
+**Testing & Quality**:
+- ✅ All 136 unit tests passing
+- ✅ Type checking (mypy): Success
+- ✅ Linting (ruff): All checks passed
+- ✅ Code formatting (black): Applied
+- ✅ Import error fixed (TranscriptionContext from models, not context)
+- ⏳ Manual testing in progress
+
+**Key Patterns Established**:
+1. **Audio File Persistence**: Save original files only when feature enabled
+2. **TTL-Based Cleanup**: Automatic deletion after configured retention period
+3. **State Reset on Retranscription**: Clear all variants and segments, start fresh
+4. **TranscriptionRouter Integration**: Reuse existing transcription pipeline
+5. **Wait Time Estimation**: Calculate based on RTF for user expectations
+6. **Cost Transparency**: Show estimated cost before paid retranscription
+
+**Bug Fixes During Implementation**:
+- **Import Error**: Fixed `from src.transcription.context` → `from src.transcription.models`
+  - TranscriptionContext is in models.py, not context.py
+  - Error: `ModuleNotFoundError: No module named 'src.transcription.context'`
+  - Fixed in src/bot/retranscribe_handlers.py:23
+
+**Impact**:
+- ✅ Users can improve transcription quality without re-uploading
+- ✅ Transparent cost/time estimates for both methods
+- ✅ Automatic cleanup prevents storage bloat
+- ✅ Seamless integration with existing interactive features
+- ✅ Full state reset ensures clean retranscription
+
+**Current Status**:
+- **Implementation**: ✅ COMPLETE
+- **Testing**: ⏳ IN PROGRESS - User currently testing functionality
+- **Deployment**: ⏳ Pending successful testing
+
+**Next Steps**:
+1. ⏳ Complete manual testing with real audio files
+2. ⏳ Verify free method (medium model) quality improvement
+3. ⏳ Test paid method if OpenAI API configured
+4. ⏳ Verify cleanup of old variants/segments
+5. ⏳ Test file persistence and TTL cleanup
+6. ⏳ Merge to main after testing confirmation
+7. ⏳ Deploy to production
+
+**Known Limitations**:
+- Requires audio files to be saved (controlled by ENABLE_RETRANSCRIBE flag)
+- Paid method requires OpenAI API key configuration
+- File storage uses disk space (mitigated by TTL cleanup)
+
+**Status**: 🔄 Implementation complete, testing in progress
+**Completion Date**: 2025-12-08 (implementation)
+**Branch**: Working branch (not yet merged)

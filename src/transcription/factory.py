@@ -41,6 +41,37 @@ def create_transcription_router() -> TranscriptionRouter:
     # For hybrid strategy, we need to create providers based on hybrid config
     # not on WHISPER_PROVIDERS list
     if is_hybrid_strategy:
+        # Create OpenAI provider if enabled (for retranscription support)
+        if "openai" in settings.whisper_providers:
+            if not settings.openai_api_key:
+                logger.warning(
+                    "OpenAI provider enabled but OPENAI_API_KEY not set. "
+                    "Provider will fail at initialization."
+                )
+            else:
+                providers["openai"] = OpenAIProvider(
+                    api_key=settings.openai_api_key,
+                    model=settings.openai_model,
+                    timeout=settings.openai_timeout,
+                )
+                logger.info(f"✓ Configured provider: openai (model={settings.openai_model})")
+
+        # Create faster-whisper provider with retranscribe_free_model for retranscription
+        if "faster-whisper" in settings.whisper_providers and settings.retranscribe_free_model:
+            # Only create if model is different from draft and quality models
+            free_model = settings.retranscribe_free_model
+            if free_model not in [settings.hybrid_draft_model, settings.hybrid_quality_model]:
+                providers[f"faster-whisper-{free_model}"] = FastWhisperProvider(
+                    model_size=free_model,
+                    device=settings.faster_whisper_device,
+                    compute_type=settings.faster_whisper_compute_type,
+                    beam_size=settings.faster_whisper_beam_size,
+                    vad_filter=settings.faster_whisper_vad_filter,
+                )
+                logger.info(
+                    f"✓ Configured provider: faster-whisper-{free_model} (for free retranscription)"
+                )
+
         # Create draft provider
         if settings.hybrid_draft_provider == "faster-whisper":
             providers["faster-whisper-draft"] = FastWhisperProvider(

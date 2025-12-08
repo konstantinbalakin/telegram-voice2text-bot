@@ -6,7 +6,7 @@ import logging
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.models import (
@@ -172,6 +172,7 @@ class UsageRepository:
         language: Optional[str] = None,
         llm_model: Optional[str] = None,
         llm_processing_time_seconds: Optional[float] = None,
+        original_file_path: Optional[str] = None,
     ) -> Usage:
         """Update usage record with new data (Stage 2, 3, or 4).
 
@@ -181,7 +182,7 @@ class UsageRepository:
             f"UsageRepository.update(usage_id={usage_id}, duration={voice_duration_seconds}, "
             f"model={model_size}, processing_time={processing_time_seconds}, "
             f"text_length={transcription_length}, llm_model={llm_model}, "
-            f"llm_time={llm_processing_time_seconds})"
+            f"llm_time={llm_processing_time_seconds}, file_path={original_file_path})"
         )
         usage = await self.get_by_id(usage_id)
         if not usage:
@@ -201,6 +202,8 @@ class UsageRepository:
             usage.llm_model = llm_model
         if llm_processing_time_seconds is not None:
             usage.llm_processing_time_seconds = llm_processing_time_seconds
+        if original_file_path is not None:
+            usage.original_file_path = original_file_path
 
         usage.updated_at = datetime.utcnow()
         await self.session.flush()
@@ -223,6 +226,46 @@ class UsageRepository:
         result = await self.session.execute(select(Usage).where(Usage.user_id == user_id))
         usages = result.scalars().all()
         return sum(u.voice_duration_seconds or 0 for u in usages)
+
+    async def cleanup_old_audio_files(self, ttl_days: int) -> int:
+        """Delete audio files older than TTL (Phase 8).
+
+        Args:
+            ttl_days: Time to live in days
+
+        Returns:
+            Number of files deleted
+        """
+        from pathlib import Path
+        from datetime import timedelta
+
+        cutoff_date = datetime.utcnow() - timedelta(days=ttl_days)
+        logger.info(f"Cleaning up audio files older than {ttl_days} days (before {cutoff_date})")
+
+        # Get all usage records with files older than TTL
+        result = await self.session.execute(
+            select(Usage).where(
+                and_(Usage.created_at < cutoff_date, Usage.original_file_path.isnot(None))
+            )
+        )
+        old_usages = list(result.scalars().all())
+
+        count = 0
+        for usage in old_usages:
+            if usage.original_file_path:
+                file_path = Path(usage.original_file_path)
+                try:
+                    if file_path.exists():
+                        file_path.unlink()
+                        logger.debug(f"Deleted audio file: {file_path}")
+                        count += 1
+                    usage.original_file_path = None
+                except Exception as e:
+                    logger.error(f"Failed to delete file {file_path}: {e}")
+
+        await self.session.flush()
+        logger.info(f"Cleanup completed: {count} files deleted")
+        return count
 
 
 class TransactionRepository:
@@ -439,6 +482,26 @@ class TranscriptionVariantRepository:
         )
         return list(result.scalars().all())
 
+    async def delete_by_usage_id(self, usage_id: int) -> int:
+        """Delete all variants for a usage record (Phase 8).
+
+        Args:
+            usage_id: Usage record ID
+
+        Returns:
+            Number of variants deleted
+        """
+        logger.debug(f"Deleting all variants for usage_id={usage_id}")
+        variants = await self.get_by_usage_id(usage_id)
+        count = len(variants)
+
+        for variant in variants:
+            await self.session.delete(variant)
+
+        await self.session.flush()
+        logger.info(f"Deleted {count} variants for usage_id={usage_id}")
+        return count
+
 
 class TranscriptionSegmentRepository:
     """Repository for TranscriptionSegment model operations."""
@@ -488,3 +551,23 @@ class TranscriptionSegmentRepository:
             .order_by(TranscriptionSegment.segment_index)
         )
         return list(result.scalars().all())
+
+    async def delete_by_usage_id(self, usage_id: int) -> int:
+        """
+        Delete all segments for a usage record (Phase 8: retranscription cleanup).
+
+        Args:
+            usage_id: Usage record ID
+
+        Returns:
+            Number of segments deleted
+        """
+        logger.debug(f"TranscriptionSegmentRepository.delete_by_usage_id(usage_id={usage_id})")
+
+        result = await self.session.execute(
+            delete(TranscriptionSegment).where(TranscriptionSegment.usage_id == usage_id)
+        )
+
+        deleted_count = result.rowcount or 0
+        logger.info(f"Deleted {deleted_count} segments for usage_id={usage_id}")
+        return deleted_count

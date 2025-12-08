@@ -207,7 +207,7 @@ async def main() -> None:
                 variant_repo = TranscriptionVariantRepository(session)
                 segment_repo = TranscriptionSegmentRepository(session)
                 callback_handlers = CallbackHandlers(
-                    state_repo, variant_repo, segment_repo, text_processor
+                    state_repo, variant_repo, segment_repo, text_processor, bot_handlers
                 )
                 await callback_handlers.handle_callback_query(update, context)  # type: ignore[arg-type]
 

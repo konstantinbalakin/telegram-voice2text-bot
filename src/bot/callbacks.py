@@ -1,10 +1,12 @@
 """Callback query handlers for interactive transcription."""
 
+import io
 import logging
 import time
-from typing import Optional, cast
+from typing import Optional, cast, TYPE_CHECKING
 from telegram import Update, Message
 from telegram.ext import ContextTypes
+from src.storage.database import get_session
 
 from src.bot.keyboards import decode_callback_data, create_transcription_keyboard
 from src.storage.repositories import (
@@ -15,6 +17,10 @@ from src.storage.repositories import (
 from src.services.text_processor import TextProcessor
 from src.services.progress_tracker import ProgressTracker
 from src.config import settings
+from src.bot.retranscribe_handlers import handle_retranscribe_menu, handle_retranscribe
+
+if TYPE_CHECKING:
+    from src.bot.handlers import BotHandlers
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +44,7 @@ class CallbackHandlers:
         variant_repo: TranscriptionVariantRepository,
         segment_repo: TranscriptionSegmentRepository,
         text_processor: Optional[TextProcessor] = None,
+        bot_handlers: Optional["BotHandlers"] = None,
     ):
         """
         Initialize callback handlers.
@@ -47,11 +54,144 @@ class CallbackHandlers:
             variant_repo: Repository for transcription variants
             segment_repo: Repository for transcription segments
             text_processor: Text processor for LLM operations (optional)
+            bot_handlers: BotHandlers instance for retranscription (optional, Phase 8)
         """
         self.state_repo = state_repo
         self.variant_repo = variant_repo
         self.segment_repo = segment_repo
         self.text_processor = text_processor
+        self.bot_handlers = bot_handlers
+
+    async def update_transcription_display(
+        self,
+        query,
+        context: ContextTypes.DEFAULT_TYPE,
+        state,
+        new_text: str,
+        keyboard,
+    ) -> None:
+        """Update transcription display (text or file) based on state and length.
+
+        Args:
+            query: Callback query
+            context: Bot context
+            state: TranscriptionState
+            new_text: New text content
+            keyboard: New inline keyboard markup
+        """
+        if not state.is_file_message and len(new_text) <= settings.file_threshold_chars:
+            # Simple case: text message, stays text message
+            await query.edit_message_text(new_text, reply_markup=keyboard)
+            logger.debug(f"Updated text message: usage_id={state.usage_id}")
+
+        elif state.is_file_message and len(new_text) > settings.file_threshold_chars:
+            # File message, stays file message
+            chat_id = query.message.chat_id
+
+            # Get mode label
+            mode_labels = {
+                "original": "Исходный текст",
+                "structured": "Структурированный",
+                "summary": "Резюме",
+            }
+            mode_label = mode_labels.get(state.active_mode, state.active_mode)
+
+            # Update main message with keyboard
+            await query.edit_message_text(
+                f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}",
+                reply_markup=keyboard,
+            )
+
+            # Delete old file
+            if state.file_message_id:
+                try:
+                    await context.bot.delete_message(chat_id, state.file_message_id)
+                    logger.debug(f"Deleted old file: message_id={state.file_message_id}")
+                except Exception as e:
+                    logger.warning(f"Could not delete old file: {e}")
+
+            # Send new file
+            file_obj = io.BytesIO(new_text.encode("utf-8"))
+            file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.txt"
+
+            new_file_msg = await context.bot.send_document(
+                chat_id=chat_id,
+                document=file_obj,
+                filename=file_obj.name,
+                caption=f"📄 {mode_label} ({len(new_text)} символов)",
+            )
+
+            # Update state with new file_message_id
+            async with get_session() as session:
+                state_repo = TranscriptionStateRepository(session)
+                state.file_message_id = new_file_msg.message_id
+                await state_repo.update(state)
+
+            logger.debug(
+                f"Updated file message: usage_id={state.usage_id}, "
+                f"new_file_msg_id={new_file_msg.message_id}"
+            )
+
+        elif not state.is_file_message and len(new_text) > settings.file_threshold_chars:
+            # Text message → needs to become file message
+            chat_id = query.message.chat_id
+
+            mode_labels = {
+                "original": "Исходный текст",
+                "structured": "Структурированный",
+                "summary": "Резюме",
+            }
+            mode_label = mode_labels.get(state.active_mode, state.active_mode)
+
+            # Update existing message to info message
+            await query.edit_message_text(
+                f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}",
+                reply_markup=keyboard,
+            )
+
+            # Send file
+            file_obj = io.BytesIO(new_text.encode("utf-8"))
+            file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.txt"
+
+            file_msg = await context.bot.send_document(
+                chat_id=chat_id,
+                document=file_obj,
+                filename=file_obj.name,
+                caption=f"📄 {mode_label} ({len(new_text)} символов)",
+            )
+
+            # Update state: now it's a file message
+            async with get_session() as session:
+                state_repo = TranscriptionStateRepository(session)
+                state.is_file_message = True
+                state.file_message_id = file_msg.message_id
+                await state_repo.update(state)
+
+            logger.debug(
+                f"Converted text to file: usage_id={state.usage_id}, file_msg_id={file_msg.message_id}"
+            )
+
+        else:
+            # File message → becomes text message (rare, but possible)
+            # Delete file
+            if state.file_message_id:
+                try:
+                    await context.bot.delete_message(query.message.chat_id, state.file_message_id)
+                    logger.debug(f"Deleted file: message_id={state.file_message_id}")
+                except Exception as e:
+                    logger.warning(f"Could not delete file: {e}")
+
+            # Update main message with text
+            await query.edit_message_text(new_text, reply_markup=keyboard)
+
+            # Update state: no longer file message
+            async with get_session() as session:
+                state_repo = TranscriptionStateRepository(session)
+                state.is_file_message = False
+                state.file_message_id = None
+                await state_repo.update(state)
+
+            logger.debug(f"Converted file to text: usage_id={state.usage_id}")
 
     async def handle_callback_query(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -93,8 +233,14 @@ class CallbackHandlers:
                 await self.handle_emoji_toggle(update, context)
             elif action == "timestamps":
                 await self.handle_timestamps_toggle(update, context)
-            # Note: Additional handlers will be added in future phases:
-            # - retranscribe_menu, retranscribe: Phase 8
+            elif action == "retranscribe_menu":
+                await handle_retranscribe_menu(update, context)
+            elif action == "retranscribe":
+                if not self.bot_handlers:
+                    logger.error("BotHandlers not available for retranscribe")
+                    await query.answer("Ретранскрипция недоступна", show_alert=True)
+                    return
+                await handle_retranscribe(update, context, self.bot_handlers)
             else:
                 logger.warning(f"Unknown callback action: {action}")
                 await query.answer("Функция пока не реализована", show_alert=True)
@@ -401,9 +547,9 @@ class CallbackHandlers:
         # Update keyboard
         keyboard = create_transcription_keyboard(state, has_segments, settings)
 
-        # Update message with new text
+        # Update message with new text (handles both text and file messages)
         try:
-            await query.edit_message_text(variant.text_content, reply_markup=keyboard)
+            await self.update_transcription_display(query, context, state, variant.text_content, keyboard)
             logger.info(f"Mode changed successfully: usage_id={usage_id}, mode={new_mode}")
         except Exception as e:
             logger.error(f"Failed to update message: {e}")
@@ -579,9 +725,9 @@ class CallbackHandlers:
         # Update keyboard (will now show adjusted buttons)
         keyboard = create_transcription_keyboard(state, has_segments, settings)
 
-        # Update message with new text
+        # Update message with new text (handles both text and file messages)
         try:
-            await query.edit_message_text(variant.text_content, reply_markup=keyboard)
+            await self.update_transcription_display(query, context, state, variant.text_content, keyboard)
             logger.info(
                 f"Length changed successfully: usage_id={usage_id}, "
                 f"level={current_level}->{new_level}"
@@ -767,9 +913,9 @@ class CallbackHandlers:
         # Update keyboard (will now show emoji buttons)
         keyboard = create_transcription_keyboard(state, has_segments, settings)
 
-        # Update message with new text
+        # Update message with new text (handles both text and file messages)
         try:
-            await query.edit_message_text(variant.text_content, reply_markup=keyboard)
+            await self.update_transcription_display(query, context, state, variant.text_content, keyboard)
             logger.info(
                 f"Emoji level changed successfully: usage_id={usage_id}, "
                 f"level={current_emoji}->{new_emoji}"
@@ -884,9 +1030,9 @@ class CallbackHandlers:
         # Update keyboard (button label will change)
         keyboard = create_transcription_keyboard(state, has_segments, settings)
 
-        # Update message with new text
+        # Update message with new text (handles both text and file messages)
         try:
-            await query.edit_message_text(text, reply_markup=keyboard)
+            await self.update_transcription_display(query, context, state, text, keyboard)
             logger.info(
                 f"Timestamps toggled successfully: usage_id={usage_id}, "
                 f"enabled={new_timestamps}"

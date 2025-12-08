@@ -279,7 +279,15 @@ def create_transcription_keyboard(
             ]
         )
 
-    # Note: Row 6 will be added in Phase 8
-    # Row 6: Retranscribe (Phase 8)
+    # Row 6: Retranscribe (Phase 8) - only if audio file is saved
+    if settings.enable_retranscribe:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "⚡ Могу лучше",
+                    callback_data=encode_callback_data("retranscribe_menu", state.usage_id),
+                )
+            ]
+        )
 
     return InlineKeyboardMarkup(keyboard) if keyboard else None

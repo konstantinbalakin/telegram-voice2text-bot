@@ -203,6 +203,32 @@ class Settings(BaseSettings):
         default=300, description="Minimum audio duration (seconds) to save segments for timestamps"
     )
 
+    # Retranscription Configuration (Phase 8)
+    persistent_audio_dir: str = Field(
+        default="./data/audio_files",
+        description="Directory for storing audio files for retranscription",
+    )
+    persistent_audio_ttl_days: int = Field(
+        default=7, description="How long to keep audio files (days)"
+    )
+    retranscribe_free_model: str = Field(
+        default="medium", description="Model for free retranscription (higher quality)"
+    )
+    retranscribe_free_model_rtf: float = Field(
+        default=0.5, description="RTF 0.5 for medium model"
+    )
+    retranscribe_paid_provider: str = Field(
+        default="openai", description="Provider for paid retranscription"
+    )
+    retranscribe_paid_cost_per_minute: float = Field(
+        default=1.0, description="Estimated cost per minute for paid retranscription (rubles)"
+    )
+
+    # File Handling (Phase 7)
+    file_threshold_chars: int = Field(
+        default=3000, description="Text longer than this is sent as .txt file instead of message"
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
 
