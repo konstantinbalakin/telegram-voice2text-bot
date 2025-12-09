@@ -7,6 +7,7 @@ from typing import Optional, cast, TYPE_CHECKING
 from telegram import Update, Message, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import ContextTypes
 from src.storage.database import get_session
+from src.services.pdf_generator import PDFGenerator
 
 from src.bot.keyboards import decode_callback_data, create_transcription_keyboard
 from src.storage.models import TranscriptionState
@@ -82,7 +83,7 @@ class CallbackHandlers:
         """
         if not state.is_file_message and len(new_text) <= settings.file_threshold_chars:
             # Simple case: text message, stays text message
-            await query.edit_message_text(new_text, reply_markup=keyboard)
+            await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
             logger.debug(f"Updated text message: usage_id={state.usage_id}")
 
         elif state.is_file_message and len(new_text) > settings.file_threshold_chars:
@@ -102,6 +103,7 @@ class CallbackHandlers:
             await query.edit_message_text(
                 f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}",
                 reply_markup=keyboard,
+                parse_mode="HTML",
             )
 
             # Delete old file
@@ -112,15 +114,25 @@ class CallbackHandlers:
                 except Exception as e:
                     logger.warning(f"Could not delete old file: {e}")
 
-            # Send new file
-            file_obj = io.BytesIO(new_text.encode("utf-8"))
-            file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.txt"
+            # Send new file (PDF if possible, fallback to TXT)
+            try:
+                pdf_generator = PDFGenerator()
+                pdf_bytes = pdf_generator.generate_pdf(new_text)
+                file_obj = io.BytesIO(pdf_bytes)
+                file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.pdf"
+                file_extension = "PDF"
+            except Exception as e:
+                logger.warning(f"PDF generation failed, falling back to TXT: {e}")
+                file_obj = io.BytesIO(new_text.encode("utf-8"))
+                file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.txt"
+                file_extension = "TXT"
 
             new_file_msg = await context.bot.send_document(
                 chat_id=chat_id,
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 {mode_label} ({len(new_text)} символов)",
+                caption=f"📄 {mode_label} ({len(new_text)} символов, {file_extension})",
+                parse_mode="HTML",
             )
 
             # Update state with new file_message_id
@@ -150,17 +162,28 @@ class CallbackHandlers:
             await query.edit_message_text(
                 f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}",
                 reply_markup=keyboard,
+                parse_mode="HTML",
             )
 
-            # Send file
-            file_obj = io.BytesIO(new_text.encode("utf-8"))
-            file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.txt"
+            # Send file (PDF if possible, fallback to TXT)
+            try:
+                pdf_generator = PDFGenerator()
+                pdf_bytes = pdf_generator.generate_pdf(new_text)
+                file_obj = io.BytesIO(pdf_bytes)
+                file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.pdf"
+                file_extension = "PDF"
+            except Exception as e:
+                logger.warning(f"PDF generation failed, falling back to TXT: {e}")
+                file_obj = io.BytesIO(new_text.encode("utf-8"))
+                file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.txt"
+                file_extension = "TXT"
 
             file_msg = await context.bot.send_document(
                 chat_id=chat_id,
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 {mode_label} ({len(new_text)} символов)",
+                caption=f"📄 {mode_label} ({len(new_text)} символов, {file_extension})",
+                parse_mode="HTML",
             )
 
             # Update state: now it's a file message
@@ -186,7 +209,7 @@ class CallbackHandlers:
                     logger.warning(f"Could not delete file: {e}")
 
             # Update main message with text
-            await query.edit_message_text(new_text, reply_markup=keyboard)
+            await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
 
             # Update state: no longer file message
             async with get_session() as session:
@@ -245,6 +268,8 @@ class CallbackHandlers:
                     await query.answer("Ретранскрипция недоступна", show_alert=True)
                     return
                 await handle_retranscribe(update, context, self.bot_handlers)
+            elif action == "back":
+                await self.handle_back(update, context)
             else:
                 logger.warning(f"Unknown callback action: {action}")
                 await query.answer("Функция пока не реализована", show_alert=True)
@@ -414,6 +439,7 @@ class CallbackHandlers:
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),
+                            parse_mode="HTML",
                         )
                     except Exception:
                         pass
@@ -523,6 +549,7 @@ class CallbackHandlers:
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),
+                            parse_mode="HTML",
                         )
                     except Exception:
                         pass
@@ -717,6 +744,7 @@ class CallbackHandlers:
                     await query.edit_message_text(
                         current_variant.text_content,
                         reply_markup=create_transcription_keyboard(state, has_segments, settings),
+                        parse_mode="HTML",
                     )
                 except Exception:
                     pass
@@ -907,6 +935,7 @@ class CallbackHandlers:
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),
+                            parse_mode="HTML",
                         )
                 except Exception:
                     pass
@@ -1057,6 +1086,62 @@ class CallbackHandlers:
                 f"Timestamps toggled successfully: usage_id={usage_id}, "
                 f"enabled={new_timestamps}"
             )
+        except Exception as e:
+            logger.error(f"Failed to update message: {e}")
+            await query.answer("Не удалось обновить сообщение", show_alert=True)
+
+    async def handle_back(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Handle back button to return to main keyboard from submenus.
+
+        This handler restores the main transcription keyboard without changing
+        the active mode or any parameters. Used when returning from retranscribe menu.
+
+        Args:
+            update: Telegram update
+            context: Bot context
+        """
+        query = update.callback_query
+        if not query or not query.data:
+            return
+
+        data = decode_callback_data(query.data)
+        usage_id = data["usage_id"]
+
+        logger.info(f"Back button pressed: usage_id={usage_id}")
+
+        # Get current state
+        state = await self.state_repo.get_by_usage_id(usage_id)
+        if not state:
+            await query.answer("Состояние не найдено", show_alert=True)
+            return
+
+        # Get segments info
+        segments = await self.segment_repo.get_by_usage_id(usage_id)
+        has_segments = len(segments) > 0
+
+        # Get current variant to display
+        variant = await self.variant_repo.get_variant(
+            usage_id=usage_id,
+            mode=state.active_mode,
+            length_level=state.length_level,
+            emoji_level=state.emoji_level,
+            timestamps_enabled=state.timestamps_enabled,
+        )
+
+        if not variant:
+            await query.answer("Текст не найден", show_alert=True)
+            return
+
+        # Create main keyboard
+        keyboard = create_transcription_keyboard(state, has_segments, settings)
+
+        # Update message with current text and main keyboard
+        try:
+            await self.update_transcription_display(
+                query, context, state, variant.text_content, keyboard
+            )
+            logger.info(f"Returned to main keyboard: usage_id={usage_id}")
         except Exception as e:
             logger.error(f"Failed to update message: {e}")
             await query.answer("Не удалось обновить сообщение", show_alert=True)

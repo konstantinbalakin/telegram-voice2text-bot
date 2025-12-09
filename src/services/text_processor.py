@@ -4,6 +4,7 @@ import logging
 
 from src.services.llm_service import LLMService, LLMError
 from src.services.prompt_loader import load_prompt
+from src.utils.html_utils import sanitize_html
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +72,10 @@ class TextProcessor:
         try:
             # Use custom prompt for structuring
             structured_text = await self._refine_with_custom_prompt(original_text, prompt)
+
+            # Sanitize HTML to remove unsupported tags
+            structured_text = sanitize_html(structured_text)
+
             logger.info(
                 f"Structured text created: {len(original_text)} → {len(structured_text)} chars"
             )
@@ -159,6 +164,10 @@ class TextProcessor:
 
         try:
             adjusted_text = await self._refine_with_custom_prompt(current_text, prompt)
+
+            # Sanitize HTML to remove unsupported tags
+            adjusted_text = sanitize_html(adjusted_text)
+
             logger.info(
                 f"Length adjusted: {len(current_text)} → {len(adjusted_text)} chars "
                 f"(direction={direction})"
@@ -259,6 +268,10 @@ class TextProcessor:
         try:
             # Use custom prompt for summarization
             summary_text = await self._refine_with_custom_prompt(original_text, prompt)
+
+            # Sanitize HTML to remove unsupported tags
+            summary_text = sanitize_html(summary_text)
+
             logger.info(f"Summary created: {len(original_text)} → {len(summary_text)} chars")
 
             # If length level is not default, apply length adjustment
@@ -363,6 +376,10 @@ class TextProcessor:
 
         try:
             text_with_emojis = await self._refine_with_custom_prompt(text, prompt)
+
+            # Sanitize HTML to remove unsupported tags
+            text_with_emojis = sanitize_html(text_with_emojis)
+
             logger.info(
                 f"Emojis adjusted: {len(text)} → {len(text_with_emojis)} chars "
                 f"(level={emoji_level})"
