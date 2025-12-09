@@ -7,10 +7,15 @@ logger = logging.getLogger(__name__)
 
 # Telegram supported HTML tags (as of 2024)
 TELEGRAM_ALLOWED_TAGS = {
-    "b", "strong",  # Bold
-    "i", "em",  # Italic
-    "u", "ins",  # Underline
-    "s", "strike", "del",  # Strikethrough
+    "b",
+    "strong",  # Bold
+    "i",
+    "em",  # Italic
+    "u",
+    "ins",  # Underline
+    "s",
+    "strike",
+    "del",  # Strikethrough
     "code",  # Inline code
     "pre",  # Code block
     "a",  # Links (with href attribute)
@@ -21,13 +26,32 @@ REMOVE_TAGS: set[str] = set()
 
 # Tags to strip (remove tag but keep content)
 STRIP_TAGS = {
-    "p", "div", "span", "br",  # Block/inline elements
-    "ul", "ol", "li",  # Lists
-    "h1", "h2", "h3", "h4", "h5", "h6",  # Headers
-    "table", "tr", "td", "th", "tbody", "thead",  # Tables
-    "blockquote", "cite", "q",  # Quotes
-    "sup", "sub",  # Superscript/subscript
-    "mark", "small",  # Text modifiers
+    "p",
+    "div",
+    "span",
+    "br",  # Block/inline elements
+    "ul",
+    "ol",
+    "li",  # Lists
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",  # Headers
+    "table",
+    "tr",
+    "td",
+    "th",
+    "tbody",
+    "thead",  # Tables
+    "blockquote",
+    "cite",
+    "q",  # Quotes
+    "sup",
+    "sub",  # Superscript/subscript
+    "mark",
+    "small",  # Text modifiers
 }
 
 
@@ -61,28 +85,13 @@ def sanitize_html(html: str) -> str:
     for tag in STRIP_TAGS:
         # Remove opening and closing tags, keep content
         # Case insensitive matching
-        html = re.sub(
-            rf"<{tag}[^>]*?>",
-            "",
-            html,
-            flags=re.IGNORECASE
-        )
-        html = re.sub(
-            rf"</{tag}>",
-            "",
-            html,
-            flags=re.IGNORECASE
-        )
+        html = re.sub(rf"<{tag}[^>]*?>", "", html, flags=re.IGNORECASE)
+        html = re.sub(rf"</{tag}>", "", html, flags=re.IGNORECASE)
 
     # Step 2: Remove tags that should be deleted (including content)
     for tag in REMOVE_TAGS:
         # Remove tag with all its content
-        html = re.sub(
-            rf"<{tag}[^>]*?>.*?</{tag}>",
-            "",
-            html,
-            flags=re.IGNORECASE | re.DOTALL
-        )
+        html = re.sub(rf"<{tag}[^>]*?>.*?</{tag}>", "", html, flags=re.IGNORECASE | re.DOTALL)
 
     # Step 3: Clean up any remaining unsupported tags
     # This catches any tags we might have missed
@@ -96,11 +105,7 @@ def sanitize_html(html: str) -> str:
             return ""  # Remove unsupported tags
 
     # Match any HTML tag
-    html = re.sub(
-        r"<(/?)(\w+)([^>]*?)>",
-        replace_tag,
-        html
-    )
+    html = re.sub(r"<(/?)(\w+)([^>]*?)>", replace_tag, html)
 
     # Step 4: Clean up multiple consecutive spaces/newlines
     html = re.sub(r"\n\s*\n\s*\n+", "\n\n", html)  # Max 2 newlines

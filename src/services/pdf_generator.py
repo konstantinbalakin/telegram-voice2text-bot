@@ -107,9 +107,7 @@ class PDFGenerator:
             logger.error(f"Failed to generate PDF: {e}", exc_info=True)
             raise
 
-    def generate_pdf_from_text(
-        self, text: str, wrap_paragraphs: bool = True
-    ) -> bytes:
+    def generate_pdf_from_text(self, text: str, wrap_paragraphs: bool = True) -> bytes:
         """
         Generate PDF from plain text (not HTML).
 
