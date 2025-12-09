@@ -28,6 +28,7 @@ from src.transcription.audio_handler import AudioHandler
 from src.transcription.models import TranscriptionContext, TranscriptionResult
 from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.progress_tracker import ProgressTracker
+from src.services.pdf_generator import PDFGenerator
 from src.services.llm_service import LLMService
 from src.services.telegram_client import TelegramClientService
 from src.bot.keyboards import create_transcription_keyboard
@@ -565,7 +566,7 @@ class BotHandlers:
                     # Send report in chunks
                     chunks = [report_text[i : i + 4096] for i in range(0, len(report_text), 4096)]
                     for chunk in chunks:
-                        await update.message.reply_text(chunk, parse_mode="Markdown")
+                        await update.message.reply_text(chunk, parse_mode="HTML")
 
                 logger.info(f"Benchmark completed for user {user.id}")
 
@@ -896,7 +897,7 @@ class BotHandlers:
                     # Send report in chunks
                     chunks = [report_text[i : i + 4096] for i in range(0, len(report_text), 4096)]
                     for chunk in chunks:
-                        await update.message.reply_text(chunk, parse_mode="Markdown")
+                        await update.message.reply_text(chunk, parse_mode="HTML")
 
                 logger.info(f"Benchmark completed for user {user.id}")
 
@@ -1133,7 +1134,9 @@ class BotHandlers:
         """
         if len(text) <= settings.file_threshold_chars:
             # Short text: send as single message
-            msg = await request.user_message.reply_text(prefix + text, reply_markup=keyboard)
+            msg = await request.user_message.reply_text(
+                prefix + text, reply_markup=keyboard, parse_mode="HTML"
+            )
             logger.debug(
                 f"Sent text result: usage_id={usage_id}, length={len(text)}, "
                 f"threshold={settings.file_threshold_chars}"
@@ -1146,14 +1149,24 @@ class BotHandlers:
                 "📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard
             )
 
-            # Message 2: File
-            file_obj = io.BytesIO(text.encode("utf-8"))
-            file_obj.name = f"transcription_{usage_id}.txt"
+            # Message 2: File (PDF if possible, fallback to TXT)
+            try:
+                pdf_generator = PDFGenerator()
+                pdf_bytes = pdf_generator.generate_pdf(text)
+                file_obj = io.BytesIO(pdf_bytes)
+                file_obj.name = f"transcription_{usage_id}.pdf"
+                file_extension = "PDF"
+            except Exception as e:
+                logger.warning(f"PDF generation failed, falling back to TXT: {e}")
+                file_obj = io.BytesIO(text.encode("utf-8"))
+                file_obj.name = f"transcription_{usage_id}.txt"
+                file_extension = "TXT"
 
             file_msg = await request.user_message.reply_document(
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 Транскрипция ({len(text)} символов)",
+                caption=f"📄 Транскрипция ({len(text)} символов, {file_extension})",
+                parse_mode="HTML",
             )
 
             logger.debug(
@@ -1185,7 +1198,7 @@ class BotHandlers:
                 f"Sending short draft as text: request_id={request.id}, length={len(draft_text)}"
             )
             message = await request.user_message.reply_text(
-                f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст..."
+                f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст...", parse_mode="HTML"
             )
             request.draft_messages.append(message)
         else:
@@ -1200,14 +1213,24 @@ class BotHandlers:
             )
             request.draft_messages.append(info_msg)
 
-            # Message 2: File
-            file_obj = io.BytesIO(draft_text.encode("utf-8"))
-            file_obj.name = f"draft_{request.usage_id}.txt"
+            # Message 2: File (PDF if possible, fallback to TXT)
+            try:
+                pdf_generator = PDFGenerator()
+                pdf_bytes = pdf_generator.generate_pdf(draft_text)
+                file_obj = io.BytesIO(pdf_bytes)
+                file_obj.name = f"draft_{request.usage_id}.pdf"
+                file_extension = "PDF"
+            except Exception as e:
+                logger.warning(f"PDF generation failed for draft, falling back to TXT: {e}")
+                file_obj = io.BytesIO(draft_text.encode("utf-8"))
+                file_obj.name = f"draft_{request.usage_id}.txt"
+                file_extension = "TXT"
 
             file_msg = await request.user_message.reply_document(
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 Черновик ({len(draft_text)} символов)",
+                caption=f"📄 Черновик ({len(draft_text)} символов, {file_extension})",
+                parse_mode="HTML",
             )
             request.draft_messages.append(file_msg)
 
