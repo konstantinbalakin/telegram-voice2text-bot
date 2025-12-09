@@ -3,8 +3,8 @@
 import logging
 from typing import Optional
 
-from weasyprint import HTML
-from weasyprint.text.fonts import FontConfiguration
+from weasyprint import HTML  # type: ignore[import-untyped]
+from weasyprint.text.fonts import FontConfiguration  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ class PDFGenerator:
 
             # Generate PDF
             html_obj = HTML(string=styled_html)
-            pdf_bytes = html_obj.write_pdf(font_config=self.font_config)
+            pdf_bytes: bytes = html_obj.write_pdf(font_config=self.font_config)  # type: ignore[assignment]
 
             logger.info("PDF generated successfully")
             return pdf_bytes

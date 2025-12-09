@@ -17,7 +17,7 @@ TELEGRAM_ALLOWED_TAGS = {
 }
 
 # Tags to remove completely (including content)
-REMOVE_TAGS = set()
+REMOVE_TAGS: set[str] = set()
 
 # Tags to strip (remove tag but keep content)
 STRIP_TAGS = {
@@ -86,7 +86,7 @@ def sanitize_html(html: str) -> str:
 
     # Step 3: Clean up any remaining unsupported tags
     # This catches any tags we might have missed
-    def replace_tag(match):
+    def replace_tag(match: re.Match[str]) -> str:
         closing = match.group(1)  # "/" if closing tag, "" if opening tag
         tag_name = match.group(2).lower()  # Tag name
 
