@@ -1,7 +1,6 @@
 """PDF generation service using WeasyPrint."""
 
 import logging
-from typing import Optional
 
 from weasyprint import HTML  # type: ignore[import-untyped]
 from weasyprint.text.fonts import FontConfiguration  # type: ignore[import-untyped]

@@ -87,7 +87,6 @@ def sanitize_html(html: str) -> str:
     # Step 3: Clean up any remaining unsupported tags
     # This catches any tags we might have missed
     def replace_tag(match: re.Match[str]) -> str:
-        closing = match.group(1)  # "/" if closing tag, "" if opening tag
         tag_name = match.group(2).lower()  # Tag name
 
         if tag_name in TELEGRAM_ALLOWED_TAGS:
