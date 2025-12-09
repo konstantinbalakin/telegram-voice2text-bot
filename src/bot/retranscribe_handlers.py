@@ -149,6 +149,12 @@ async def handle_retranscribe(
             await query.answer("Аудио файл не найден", show_alert=True)
             return
 
+        # Log file type for clarity
+        is_preprocessed = audio_path.suffix == ".ogg"
+        logger.info(
+            f"Loading audio for retranscription: {audio_path} " f"(preprocessed: {is_preprocessed})"
+        )
+
     # Acknowledge and show processing message
     await query.answer("Начинаю ретранскрипцию...")
 

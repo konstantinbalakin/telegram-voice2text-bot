@@ -1,11 +1,13 @@
 """Callback query handlers for interactive transcription."""
 
+import asyncio
 import io
 import logging
 import time
-from typing import Optional, cast, TYPE_CHECKING
+from typing import Optional, cast, TYPE_CHECKING, Callable
 from telegram import Update, Message, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import ContextTypes
+from sqlalchemy.exc import OperationalError
 from src.storage.database import get_session
 from src.services.pdf_generator import PDFGenerator
 
@@ -25,6 +27,54 @@ if TYPE_CHECKING:
     from src.bot.handlers import BotHandlers
 
 logger = logging.getLogger(__name__)
+
+
+async def _update_state_with_retry(
+    usage_id: int,
+    update_func: Callable[[TranscriptionState], None],
+    max_retries: int = 3,
+    initial_delay: float = 0.1,
+) -> None:
+    """
+    Update transcription state with retry logic for database lock errors.
+
+    Args:
+        usage_id: Usage ID to update
+        update_func: Function that takes state object and updates it
+        max_retries: Maximum number of retry attempts
+        initial_delay: Initial delay between retries in seconds
+    """
+    retry_delay = initial_delay
+    last_error = None
+
+    for attempt in range(max_retries):
+        try:
+            async with get_session() as session:
+                state_repo = TranscriptionStateRepository(session)
+                state = await state_repo.get_by_usage_id(usage_id)
+                if state:
+                    update_func(state)
+                    await state_repo.update(state)
+            # Success - break retry loop
+            return
+        except OperationalError as e:
+            last_error = e
+            if "database is locked" in str(e) and attempt < max_retries - 1:
+                logger.warning(
+                    f"Database locked during state update, retrying in {retry_delay:.2f}s "
+                    f"(attempt {attempt + 1}/{max_retries})"
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                # Not a lock error or last attempt - raise
+                raise
+
+    # All retries failed
+    if last_error:
+        raise last_error
+
 
 # Phase 3: Length level transitions
 # Format: current_level -> {direction: next_level}
@@ -136,10 +186,10 @@ class CallbackHandlers:
             )
 
             # Update state with new file_message_id
-            async with get_session() as session:
-                state_repo = TranscriptionStateRepository(session)
-                state.file_message_id = new_file_msg.message_id
-                await state_repo.update(state)
+            await _update_state_with_retry(
+                state.usage_id,
+                lambda s: setattr(s, "file_message_id", new_file_msg.message_id),
+            )
 
             logger.debug(
                 f"Updated file message: usage_id={state.usage_id}, "
@@ -187,11 +237,11 @@ class CallbackHandlers:
             )
 
             # Update state: now it's a file message
-            async with get_session() as session:
-                state_repo = TranscriptionStateRepository(session)
-                state.is_file_message = True
-                state.file_message_id = file_msg.message_id
-                await state_repo.update(state)
+            def update_file_state(s: TranscriptionState) -> None:
+                s.is_file_message = True
+                s.file_message_id = file_msg.message_id
+
+            await _update_state_with_retry(state.usage_id, update_file_state)
 
             logger.debug(
                 f"Converted text to file: usage_id={state.usage_id}, file_msg_id={file_msg.message_id}"
@@ -212,11 +262,11 @@ class CallbackHandlers:
             await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
 
             # Update state: no longer file message
-            async with get_session() as session:
-                state_repo = TranscriptionStateRepository(session)
-                state.is_file_message = False
-                state.file_message_id = None
-                await state_repo.update(state)
+            def reset_file_state(s: TranscriptionState) -> None:
+                s.is_file_message = False
+                s.file_message_id = None
+
+            await _update_state_with_retry(state.usage_id, reset_file_state)
 
             logger.debug(f"Converted file to text: usage_id={state.usage_id}")
 
@@ -324,7 +374,7 @@ class CallbackHandlers:
         # Reset formatting parameters when switching modes
         # This ensures consistency: when switching modes, we start with default formatting
         # Users can then adjust emoji/length/timestamps for the new mode
-        target_emoji_level = 0
+        target_emoji_level = 1 if new_mode == "structured" else 0
         target_length_level = "default"
         target_timestamps_enabled = False
 
@@ -575,11 +625,47 @@ class CallbackHandlers:
             return
 
         # Update state with new mode and reset formatting parameters to defaults
-        state.active_mode = new_mode
-        state.emoji_level = target_emoji_level
-        state.length_level = target_length_level
-        state.timestamps_enabled = target_timestamps_enabled
-        await self.state_repo.update(state)
+        # Use new session to avoid detached instance errors
+        # Retry logic for database lock errors
+        max_retries = 3
+        retry_delay = 0.1
+        last_error = None
+
+        for attempt in range(max_retries):
+            try:
+                async with get_session() as session:
+                    state_repo_local = TranscriptionStateRepository(session)
+                    state_local = await state_repo_local.get_by_usage_id(usage_id)
+                    if state_local:
+                        state_local.active_mode = new_mode
+                        state_local.emoji_level = target_emoji_level
+                        state_local.length_level = target_length_level
+                        state_local.timestamps_enabled = target_timestamps_enabled
+                        await state_repo_local.update(state_local)
+                        # Update the original state object for keyboard and display
+                        state.active_mode = state_local.active_mode
+                        state.emoji_level = state_local.emoji_level
+                        state.length_level = state_local.length_level
+                        state.timestamps_enabled = state_local.timestamps_enabled
+                # Success - break retry loop
+                break
+            except OperationalError as e:
+                last_error = e
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    logger.warning(
+                        f"Database locked, retrying in {retry_delay:.2f}s "
+                        f"(attempt {attempt + 1}/{max_retries})"
+                    )
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                    continue
+                else:
+                    # Not a lock error or last attempt - raise
+                    raise
+        else:
+            # All retries failed
+            if last_error:
+                raise last_error
 
         # Get segments info
         segments = await self.segment_repo.get_by_usage_id(usage_id)

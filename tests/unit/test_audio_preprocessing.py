@@ -168,13 +168,13 @@ class TestConvertToMono:
                 with patch.object(audio_handler, "_get_audio_codec", return_value="mp3"):
                     with patch("subprocess.run") as mock_run:
                         # Create the output file so stat() works
-                        output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.opus"
+                        output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.ogg"
                         output_path.write_bytes(b"fake audio data")
 
                         result = audio_handler._convert_to_mono(sample_audio_file)
 
-                        # Verify output path uses opus format
-                        assert result.name.endswith("_mono.opus")
+                        # Verify output path uses ogg format
+                        assert result.name.endswith("_mono.ogg")
                         assert result.parent == sample_audio_file.parent
 
                         # Verify ffmpeg was called correctly
@@ -198,7 +198,7 @@ class TestConvertToMono:
                 assert result == sample_audio_file
 
     def test_convert_to_mono_mono_wav_converts(self, audio_handler, sample_audio_file):
-        """Test that mono WAV files are converted to Opus for efficiency."""
+        """Test that mono WAV files are converted to OGG for efficiency."""
         with patch("src.transcription.audio_handler.settings") as mock_settings:
             mock_settings.audio_target_sample_rate = 16000
 
@@ -206,13 +206,13 @@ class TestConvertToMono:
                 with patch.object(audio_handler, "_get_audio_codec", return_value="pcm_s16le"):
                     with patch("subprocess.run") as mock_run:
                         # Create the output file so stat() works
-                        output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.opus"
+                        output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.ogg"
                         output_path.write_bytes(b"fake audio data")
 
                         result = audio_handler._convert_to_mono(sample_audio_file)
 
-                        # Should convert even though already mono (WAV -> Opus optimization)
-                        assert result.name.endswith("_mono.opus")
+                        # Should convert even though already mono (WAV -> OGG optimization)
+                        assert result.name.endswith("_mono.ogg")
                         mock_run.assert_called_once()
 
     def test_convert_to_mono_ffmpeg_failure(self, audio_handler, sample_audio_file):
@@ -242,8 +242,8 @@ class TestAdjustSpeed:
 
                 result = audio_handler._adjust_speed(sample_audio_file)
 
-                # Verify output path uses opus format
-                assert result.name.endswith("_speed1.5x.opus")
+                # Verify output path uses ogg format
+                assert result.name.endswith("_speed1.5x.ogg")
                 assert result.parent == sample_audio_file.parent
 
                 # Verify ffmpeg was called correctly
@@ -280,13 +280,13 @@ class TestAdjustSpeed:
             with patch("src.transcription.audio_handler.settings") as mock_settings:
                 mock_settings.audio_speed_multiplier = 0.5
                 result = audio_handler._adjust_speed(sample_audio_file)
-                assert result.name.endswith("_speed0.5x.opus")
+                assert result.name.endswith("_speed0.5x.ogg")
 
             # Test maximum value
             with patch("src.transcription.audio_handler.settings") as mock_settings:
                 mock_settings.audio_speed_multiplier = 2.0
                 result = audio_handler._adjust_speed(sample_audio_file)
-                assert result.name.endswith("_speed2.0x.opus")
+                assert result.name.endswith("_speed2.0x.ogg")
 
     def test_adjust_speed_ffmpeg_failure(self, audio_handler, sample_audio_file):
         """Test ffmpeg failure during speed adjustment."""
