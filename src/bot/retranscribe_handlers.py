@@ -93,7 +93,7 @@ async def handle_retranscribe_menu(update: Update, context: ContextTypes.DEFAULT
         [
             InlineKeyboardButton(
                 "◀️ Назад",
-                callback_data=encode_callback_data("mode", usage_id, mode="original"),
+                callback_data=encode_callback_data("back", usage_id),
             )
         ],
     ]
@@ -291,6 +291,18 @@ async def handle_retranscribe(
                 logger.error(f"State not found for usage_id={usage_id}")
                 await query.answer("Состояние не найдено", show_alert=True)
                 return
+
+            # Create original variant with retranscribed text
+            await variant_repo.create(
+                usage_id=usage_id,
+                mode="original",
+                text_content=result.text,
+                length_level="default",
+                emoji_level=0,
+                timestamps_enabled=False,
+                generated_by="transcription",
+            )
+            logger.info(f"Created original variant for usage_id={usage_id}")
 
             # Get segments info
             segments = await segment_repo.get_by_usage_id(usage_id)

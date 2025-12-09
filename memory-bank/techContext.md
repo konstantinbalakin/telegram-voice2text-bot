@@ -93,6 +93,10 @@ python-json-logger = "^4.0.0"        # JSON log formatting
 httpx = "^0.28"                      # Async HTTP client (for LLM APIs)
 tenacity = "^9.0.0"                  # Retry logic for LLM API calls
 
+# PDF Generation (NEW - 2025-12-09)
+weasyprint = "^62.3"                 # HTML to PDF conversion
+pydyf = "^0.11.0"                    # PDF library (WeasyPrint dependency, pinned for compatibility)
+
 # System Monitoring
 psutil = "^6.1"                      # System monitoring
 
@@ -123,6 +127,18 @@ mypy = "^1.13"                       # Type checking
   - `AUDIO_CONVERT_TO_MONO=true` - Convert stereo to mono for faster processing
   - `AUDIO_SPEED_MULTIPLIER` - Adjust playback speed (0.5x-2.0x)
 - **Fallback**: Bot works without ffmpeg, but preprocessing features are disabled with warnings
+
+**WeasyPrint System Dependencies** (NEW - 2025-12-09, Required for PDF generation):
+- **Purpose**: HTML to PDF conversion for large transcriptions (>3000 chars)
+- **Installation**:
+  - Ubuntu/Debian (Dockerfile): `apt-get install -y libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info`
+  - macOS: `brew install cairo pango gdk-pixbuf libffi`
+- **Docker Image Impact**: ~100MB increase (acceptable for PDF quality)
+- **Features**:
+  - Professional PDF styling (Arial, 12pt, proper margins)
+  - Cyrillic text support (FontConfiguration)
+  - HTML rendering (bold, italic, lists, code blocks, links)
+- **Fallback**: If PDF generation fails, automatically falls back to .txt files
 
 ## Project Structure (Updated 2025-10-29)
 
@@ -168,8 +184,24 @@ mypy = "^1.13"                       # Type checking
    - **Pattern**: Abstract provider pattern + Factory pattern + Service layer
    - **Integration**: Used for hybrid transcription refinement
 
-4. **__init__.py**
-   - Module exports: `QueueManager`, `TranscriptionRequest`, `TranscriptionResponse`, `ProgressTracker`, `LLMService`
+4. **pdf_generator.py** (132 lines) - NEW (2025-12-09)
+   - `PDFGenerator`: HTML to PDF conversion service
+   - **Methods**:
+     - `generate_pdf(html_content)` - Converts HTML string to PDF bytes
+     - `create_styled_html(content)` - Wraps content in styled HTML template
+     - `generate_pdf_from_text(text)` - Plain text to PDF with paragraph wrapping
+   - **Features**:
+     - WeasyPrint-based HTML to PDF conversion
+     - Professional styling (Arial, 12pt, proper line height, margins)
+     - Cyrillic support via FontConfiguration
+     - Code blocks, lists, links rendering
+     - In-memory PDF generation (io.BytesIO)
+     - Graceful error handling with detailed logging
+   - **Pattern**: Service layer for document generation
+   - **Integration**: Used for large transcription files (>3000 chars)
+
+5. **__init__.py**
+   - Module exports: `QueueManager`, `TranscriptionRequest`, `TranscriptionResponse`, `ProgressTracker`, `LLMService`, `PDFGenerator`
 
 **Usage**:
 ```python

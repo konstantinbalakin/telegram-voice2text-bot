@@ -30,9 +30,10 @@
 - **Phase 10.7**: ✅ Complete (2025-12-08) - Interactive transcription Phase 7 (File handling for text >4096 chars)
 - **Phase 10.8**: ✅ Complete (2025-12-08) - Interactive transcription Phase 8 (Retranscription)
 - **Phase 10.9**: ✅ Complete (2025-12-09) - Retranscription UX improvements (Progress bar + Parent-child usage tracking)
+- **Phase 10.10**: ✅ Complete (2025-12-09) - HTML formatting & PDF generation
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-8 + retranscription improvements)
-- Current focus (2025-12-09): Phase 10.9 implementation complete, ready for manual testing
+- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-10)
+- Current focus (2025-12-09): Phase 10.10 implementation complete, ready for manual testing and deployment
 
 ## Delivered Milestones
 
@@ -2144,6 +2145,109 @@ Database: Original preserved, child created, state migrated
 **Files Modified**: 7 files (migration, models, repos, context, handlers)
 **Documentation**: `memory-bank/plans/2025-12-08-retranscription-improvements-plan.md`
 **Completion Date**: 2025-12-09
+
+---
+
+### Phase 10.10: HTML Formatting & PDF Generation ✅ COMPLETE (2025-12-09)
+
+**Achievement**: Professional text formatting in Telegram with HTML rendering and PDF file generation for large transcriptions
+
+**Problem Identified**:
+LLM returns text with Markdown formatting (`**текст**`), but Telegram displays it literally without rendering. Users see raw Markdown syntax instead of formatted text (bold, italic, lists). For large transcriptions (>3000 chars), `.txt` files are generated without formatting preservation.
+
+**Implementation Complete**: ✅ (Commit: 5772da3)
+
+**What Was Implemented**:
+
+**1. HTML Parse Mode Throughout**
+- Added `parse_mode="HTML"` to ALL message sending methods (11 locations)
+- Files: `src/bot/callbacks.py`, `src/bot/handlers.py`
+- Text messages, captions, file captions now render HTML
+- Benchmark reports switched from Markdown to HTML
+
+**2. PDF Generator Service** (`src/services/pdf_generator.py`, 132 lines, NEW)
+- `PDFGenerator` class using WeasyPrint
+- Methods:
+  - `generate_pdf(html_content)` - HTML string → PDF bytes
+  - `create_styled_html(content)` - Wrap in styled HTML template
+  - `generate_pdf_from_text(text)` - Plain text → PDF with paragraphs
+- Professional styling: Arial, 12pt, proper line height, margins
+- FontConfiguration for Cyrillic support
+- Graceful error handling with logging
+
+**3. LLM Prompt Updates** (4 files)
+- `prompts/structured.md` - HTML tags (<b>, <i>, <ul>, <li>, <code>)
+- `prompts/summary.md` - HTML list formatting
+- `prompts/length_shorter.md` - Preserve HTML tags
+- `prompts/length_longer.md` - Preserve HTML tags
+
+**4. PDF Integration** (`src/bot/callbacks.py`, `src/bot/handlers.py`)
+- Files >3000 chars → PDF instead of TXT
+- Fallback to TXT if PDF generation fails
+- Filenames: `transcription_{usage_id}_{mode}.pdf`, `draft_{usage_id}.pdf`
+- Captions show format: "📄 {mode} ({length} символов, PDF)"
+- Applies to: initial results, drafts, interactive variants, retranscription
+
+**5. Dependencies**
+- Added `weasyprint ^62.3`, `pydyf ^0.11.0` to pyproject.toml
+- Dockerfile: libcairo2, libpango-1.0-0, libpangocairo-1.0-0, libgdk-pixbuf2.0-0, libffi-dev, shared-mime-info
+- Docker image increase: ~100MB (acceptable for PDF quality)
+
+**6. Testing** (`tests/unit/test_pdf_generator.py`, 183 lines, NEW)
+- 13 comprehensive unit tests
+- Tests: HTML conversion, Cyrillic, formatting tags, code blocks, special chars, links, nested structures, large texts
+- All 13 tests passing ✅
+
+**Key Patterns Established**:
+1. **Consistent Parse Mode**: `parse_mode="HTML"` everywhere
+2. **Graceful PDF Fallback**: Try PDF, fallback to TXT on error
+3. **Template-Based HTML**: Styled wrapper for consistent PDFs
+4. **FontConfiguration**: WeasyPrint Unicode/Cyrillic support
+5. **In-Memory PDF**: io.BytesIO for Telegram API (no temp files)
+
+**User Experience**:
+```
+Short text (<3000 chars):
+<b>Важный момент</b> в начале
+<ul><li>Пункт 1</li><li>Пункт 2</li></ul>
+Текст с <i>курсивом</i> и <code>кодом</code>
+
+Long text (>3000 chars):
+📄 transcription_123_structured.pdf
+Caption: "📄 Структурированный (4567 символов, PDF)"
+```
+
+**Testing Status**:
+- ✅ All 13 PDF generator unit tests passing
+- ✅ Type checking, linting, formatting passing
+- ✅ WeasyPrint compatibility verified (pydyf 0.11.0)
+- ⏳ Manual testing: HTML formatting, PDF generation, Cyrillic, all modes
+
+**Impact**:
+- ✅ Professional text formatting without raw Markdown
+- ✅ Large transcriptions preserve formatting via PDF
+- ✅ Improved readability (bold, italic, lists, code)
+- ✅ All Telegram HTML tags work
+- ✅ Graceful fallback ensures reliability
+- ✅ ~100MB Docker increase acceptable
+
+**Files Created**:
+- `src/services/pdf_generator.py` (132 lines)
+- `tests/unit/test_pdf_generator.py` (183 lines)
+- `memory-bank/plans/2025-12-09-html-formatting-pdf-plan.md` (228 lines)
+
+**Files Modified**:
+- `src/bot/callbacks.py` (+90 lines)
+- `src/bot/handlers.py` (+60 lines)
+- 4 prompt files (+14 lines total)
+- `Dockerfile` (+6 lines)
+- `pyproject.toml`, `poetry.lock` (dependencies)
+
+**Branch**: `feature/html-formatting-pdf`
+**Commit**: 5772da3
+**Documentation**: `memory-bank/plans/2025-12-09-html-formatting-pdf-plan.md`
+**Completion Date**: 2025-12-09
+**Next**: Manual testing, merge to main, deploy to production
 
 ---
 

@@ -268,6 +268,8 @@ class CallbackHandlers:
                     await query.answer("Ретранскрипция недоступна", show_alert=True)
                     return
                 await handle_retranscribe(update, context, self.bot_handlers)
+            elif action == "back":
+                await self.handle_back(update, context)
             else:
                 logger.warning(f"Unknown callback action: {action}")
                 await query.answer("Функция пока не реализована", show_alert=True)
@@ -1084,6 +1086,62 @@ class CallbackHandlers:
                 f"Timestamps toggled successfully: usage_id={usage_id}, "
                 f"enabled={new_timestamps}"
             )
+        except Exception as e:
+            logger.error(f"Failed to update message: {e}")
+            await query.answer("Не удалось обновить сообщение", show_alert=True)
+
+    async def handle_back(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Handle back button to return to main keyboard from submenus.
+
+        This handler restores the main transcription keyboard without changing
+        the active mode or any parameters. Used when returning from retranscribe menu.
+
+        Args:
+            update: Telegram update
+            context: Bot context
+        """
+        query = update.callback_query
+        if not query or not query.data:
+            return
+
+        data = decode_callback_data(query.data)
+        usage_id = data["usage_id"]
+
+        logger.info(f"Back button pressed: usage_id={usage_id}")
+
+        # Get current state
+        state = await self.state_repo.get_by_usage_id(usage_id)
+        if not state:
+            await query.answer("Состояние не найдено", show_alert=True)
+            return
+
+        # Get segments info
+        segments = await self.segment_repo.get_by_usage_id(usage_id)
+        has_segments = len(segments) > 0
+
+        # Get current variant to display
+        variant = await self.variant_repo.get_variant(
+            usage_id=usage_id,
+            mode=state.active_mode,
+            length_level=state.length_level,
+            emoji_level=state.emoji_level,
+            timestamps_enabled=state.timestamps_enabled,
+        )
+
+        if not variant:
+            await query.answer("Текст не найден", show_alert=True)
+            return
+
+        # Create main keyboard
+        keyboard = create_transcription_keyboard(state, has_segments, settings)
+
+        # Update message with current text and main keyboard
+        try:
+            await self.update_transcription_display(
+                query, context, state, variant.text_content, keyboard
+            )
+            logger.info(f"Returned to main keyboard: usage_id={usage_id}")
         except Exception as e:
             logger.error(f"Failed to update message: {e}")
             await query.answer("Не удалось обновить сообщение", show_alert=True)

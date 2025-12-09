@@ -284,7 +284,7 @@ def create_transcription_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "⚡ Могу лучше",
+                    "⚡ Есть ошибки? Могу лучше!",
                     callback_data=encode_callback_data("retranscribe_menu", state.usage_id),
                 )
             ]
