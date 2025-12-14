@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from functools import wraps
-from typing import TypeVar, Callable, Any
+from typing import TypeVar, Callable, Any, Awaitable
 
 from sqlalchemy.exc import OperationalError
 
@@ -16,7 +16,7 @@ def db_retry(
     max_attempts: int = 3,
     initial_delay: float = 0.1,
     backoff_factor: float = 2.0,
-) -> Callable[[Callable[..., T]], Callable[..., T]]:
+) -> Callable[[Callable[..., Awaitable[T]]], Callable[..., Awaitable[T]]]:
     """
     Retry decorator for database operations that may encounter transient errors.
 
@@ -29,7 +29,7 @@ def db_retry(
         Decorated function with retry logic
     """
 
-    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[T]]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             delay = initial_delay
