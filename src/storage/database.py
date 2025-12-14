@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     async_sessionmaker,
 )
+from sqlalchemy import text
 
 from src.config import settings
 
@@ -26,12 +27,22 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         # Enable SQL logging in DEBUG mode
         is_debug = settings.log_level.upper() == "DEBUG"
+
+        # SQLite-specific settings for better concurrency handling
+        connect_args = {}
+        if "sqlite" in settings.database_url:
+            connect_args = {
+                "timeout": 30.0,  # Wait up to 30 seconds for lock (default: 5)
+                "check_same_thread": False,  # Allow multiple threads
+            }
+
         _engine = create_async_engine(
             settings.database_url,
             echo=is_debug,  # Show SQL queries in DEBUG mode
             echo_pool=is_debug,  # Show connection pool activity in DEBUG mode
             future=True,
             pool_pre_ping=True,  # Verify connections before using
+            connect_args=connect_args,
         )
     return _engine
 
@@ -96,6 +107,13 @@ async def init_db() -> None:
         else:
             db_file = Path(db_path).resolve()
         db_file.parent.mkdir(parents=True, exist_ok=True)
+
+    # Enable WAL mode for SQLite (better concurrency)
+    if "sqlite" in settings.database_url:
+        async with get_session() as session:
+            await session.execute(text("PRAGMA journal_mode=WAL"))
+            await session.execute(text("PRAGMA busy_timeout=30000"))  # 30 seconds
+            logger.info("✅ SQLite WAL mode enabled for better concurrency")
 
     # Check database migration status
     try:

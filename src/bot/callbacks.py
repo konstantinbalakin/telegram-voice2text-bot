@@ -6,7 +6,6 @@ import time
 from typing import Optional, cast, TYPE_CHECKING
 from telegram import Update, Message, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import ContextTypes
-from src.storage.database import get_session
 from src.services.pdf_generator import PDFGenerator
 
 from src.bot.keyboards import decode_callback_data, create_transcription_keyboard
@@ -25,6 +24,7 @@ if TYPE_CHECKING:
     from src.bot.handlers import BotHandlers
 
 logger = logging.getLogger(__name__)
+
 
 # Phase 3: Length level transitions
 # Format: current_level -> {direction: next_level}
@@ -71,6 +71,7 @@ class CallbackHandlers:
         state: TranscriptionState,
         new_text: str,
         keyboard: InlineKeyboardMarkup | None,
+        state_repo: TranscriptionStateRepository,
     ) -> None:
         """Update transcription display (text or file) based on state and length.
 
@@ -80,6 +81,7 @@ class CallbackHandlers:
             state: TranscriptionState
             new_text: New text content
             keyboard: New inline keyboard markup
+            state_repo: Repository for updating state (no nested sessions)
         """
         if not state.is_file_message and len(new_text) <= settings.file_threshold_chars:
             # Simple case: text message, stays text message
@@ -136,10 +138,8 @@ class CallbackHandlers:
             )
 
             # Update state with new file_message_id
-            async with get_session() as session:
-                state_repo = TranscriptionStateRepository(session)
-                state.file_message_id = new_file_msg.message_id
-                await state_repo.update(state)
+            state.file_message_id = new_file_msg.message_id
+            await state_repo.update(state)
 
             logger.debug(
                 f"Updated file message: usage_id={state.usage_id}, "
@@ -187,11 +187,9 @@ class CallbackHandlers:
             )
 
             # Update state: now it's a file message
-            async with get_session() as session:
-                state_repo = TranscriptionStateRepository(session)
-                state.is_file_message = True
-                state.file_message_id = file_msg.message_id
-                await state_repo.update(state)
+            state.is_file_message = True
+            state.file_message_id = file_msg.message_id
+            await state_repo.update(state)
 
             logger.debug(
                 f"Converted text to file: usage_id={state.usage_id}, file_msg_id={file_msg.message_id}"
@@ -212,11 +210,9 @@ class CallbackHandlers:
             await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
 
             # Update state: no longer file message
-            async with get_session() as session:
-                state_repo = TranscriptionStateRepository(session)
-                state.is_file_message = False
-                state.file_message_id = None
-                await state_repo.update(state)
+            state.is_file_message = False
+            state.file_message_id = None
+            await state_repo.update(state)
 
             logger.debug(f"Converted file to text: usage_id={state.usage_id}")
 
@@ -324,7 +320,7 @@ class CallbackHandlers:
         # Reset formatting parameters when switching modes
         # This ensures consistency: when switching modes, we start with default formatting
         # Users can then adjust emoji/length/timestamps for the new mode
-        target_emoji_level = 0
+        target_emoji_level = 1 if new_mode == "structured" else 0
         target_length_level = "default"
         target_timestamps_enabled = False
 
@@ -390,13 +386,14 @@ class CallbackHandlers:
                     # Stop progress tracker
                     await progress.stop()
 
-                    # Save variant (check if already exists first to avoid UNIQUE constraint error)
+                    # Save variant with target emoji level
+                    # Check if variant already exists first to avoid UNIQUE constraint error
                     existing_variant = await self.variant_repo.get_variant(
                         usage_id=usage_id,
                         mode="structured",
-                        length_level="default",
-                        emoji_level=0,
-                        timestamps_enabled=False,
+                        length_level=target_length_level,
+                        emoji_level=target_emoji_level,
+                        timestamps_enabled=target_timestamps_enabled,
                     )
 
                     if existing_variant:
@@ -408,13 +405,15 @@ class CallbackHandlers:
                         variant = existing_variant
                     else:
                         # Create new variant
+                        # For emoji_level=1, structured prompt already generates minimal emojis
+                        # For emoji_level=0, would need to remove emojis (handled by emoji toggle)
                         variant = await self.variant_repo.create(
                             usage_id=usage_id,
                             mode="structured",
                             text_content=structured_text,
-                            length_level="default",
-                            emoji_level=0,
-                            timestamps_enabled=False,
+                            length_level=target_length_level,
+                            emoji_level=target_emoji_level,
+                            timestamps_enabled=target_timestamps_enabled,
                             generated_by="llm",
                             llm_model=settings.llm_model,
                             processing_time_seconds=processing_time,
@@ -575,6 +574,7 @@ class CallbackHandlers:
             return
 
         # Update state with new mode and reset formatting parameters to defaults
+        # Use the existing state_repo (no nested session)
         state.active_mode = new_mode
         state.emoji_level = target_emoji_level
         state.length_level = target_length_level
@@ -591,7 +591,7 @@ class CallbackHandlers:
         # Update message with new text (handles both text and file messages)
         try:
             await self.update_transcription_display(
-                query, context, state, variant.text_content, keyboard
+                query, context, state, variant.text_content, keyboard, self.state_repo
             )
             logger.info(f"Mode changed successfully: usage_id={usage_id}, mode={new_mode}")
         except Exception as e:
@@ -772,7 +772,7 @@ class CallbackHandlers:
         # Update message with new text (handles both text and file messages)
         try:
             await self.update_transcription_display(
-                query, context, state, variant.text_content, keyboard
+                query, context, state, variant.text_content, keyboard, self.state_repo
             )
             logger.info(
                 f"Length changed successfully: usage_id={usage_id}, "
@@ -819,7 +819,10 @@ class CallbackHandlers:
         current_emoji = state.emoji_level
 
         # Calculate new emoji level (4 levels: 0, 1, 2, 3)
-        if direction == "moderate":
+        if direction == "few":
+            # Direct jump to level 1 (few emojis) from level 0
+            new_emoji = 1
+        elif direction == "moderate":
             # Direct jump to level 2 (moderate) from level 0
             new_emoji = 2
         elif direction == "increase":
@@ -835,19 +838,6 @@ class CallbackHandlers:
 
         logger.info(f"Emoji level change: {current_emoji} -> {new_emoji}")
 
-        # Get base variant (without emojis)
-        base_variant = await self.variant_repo.get_variant(
-            usage_id=usage_id,
-            mode=state.active_mode,
-            length_level=state.length_level,
-            emoji_level=0,
-            timestamps_enabled=state.timestamps_enabled,
-        )
-
-        if not base_variant:
-            await query.answer("Базовый текст не найден", show_alert=True)
-            return
-
         # Get or generate variant with new emoji level
         variant = await self.variant_repo.get_variant(
             usage_id=usage_id,
@@ -858,16 +848,47 @@ class CallbackHandlers:
         )
 
         if not variant:
-            # Need to generate variant with emojis
+            # Need to generate variant
             if not self.text_processor:
                 await query.answer("Обработка текста недоступна (LLM отключен)", show_alert=True)
                 return
 
+            # Pick source text to transform
+            # If adding emojis, prefer clean (level 0) text. If stripping, use current.
+            source_variant = None
+            if new_emoji > 0:
+                source_variant = await self.variant_repo.get_variant(
+                    usage_id=usage_id,
+                    mode=state.active_mode,
+                    length_level=state.length_level,
+                    emoji_level=0,
+                    timestamps_enabled=state.timestamps_enabled,
+                )
+
+            if not source_variant:
+                source_variant = await self.variant_repo.get_variant(
+                    usage_id=usage_id,
+                    mode=state.active_mode,
+                    length_level=state.length_level,
+                    emoji_level=current_emoji,
+                    timestamps_enabled=state.timestamps_enabled,
+                )
+
+            if not source_variant:
+                source_variant = await self.variant_repo.get_variant(
+                    usage_id=usage_id, mode="original"
+                )
+
+            if not source_variant:
+                await query.answer("Исходный текст не найден", show_alert=True)
+                return
+
             # Acknowledge callback immediately
-            await query.answer("Добавляю смайлы...")
+            await query.answer("Обрабатываю смайлы...")
 
             # Edit message to show processing
-            processing_message = "🔄 Добавляю смайлы в текст..."
+            action_text = "Добавляю" if new_emoji > 0 else "Удаляю"
+            processing_message = f"🔄 {action_text} смайлы в тексте..."
             try:
                 await query.edit_message_text(processing_message)
             except Exception as e:
@@ -886,8 +907,8 @@ class CallbackHandlers:
             try:
                 start_time = time.time()
 
-                text_with_emojis = await self.text_processor.add_emojis(
-                    base_variant.text_content, new_emoji
+                transformed_text = await self.text_processor.add_emojis(
+                    source_variant.text_content, new_emoji, current_level=current_emoji
                 )
 
                 processing_time = time.time() - start_time
@@ -899,7 +920,7 @@ class CallbackHandlers:
                 variant = await self.variant_repo.create(
                     usage_id=usage_id,
                     mode=state.active_mode,
-                    text_content=text_with_emojis,
+                    text_content=transformed_text,
                     length_level=state.length_level,
                     emoji_level=new_emoji,
                     timestamps_enabled=state.timestamps_enabled,
@@ -963,7 +984,7 @@ class CallbackHandlers:
         # Update message with new text (handles both text and file messages)
         try:
             await self.update_transcription_display(
-                query, context, state, variant.text_content, keyboard
+                query, context, state, variant.text_content, keyboard, self.state_repo
             )
             logger.info(
                 f"Emoji level changed successfully: usage_id={usage_id}, "
@@ -1081,7 +1102,9 @@ class CallbackHandlers:
 
         # Update message with new text (handles both text and file messages)
         try:
-            await self.update_transcription_display(query, context, state, text, keyboard)
+            await self.update_transcription_display(
+                query, context, state, text, keyboard, self.state_repo
+            )
             logger.info(
                 f"Timestamps toggled successfully: usage_id={usage_id}, "
                 f"enabled={new_timestamps}"
@@ -1139,7 +1162,7 @@ class CallbackHandlers:
         # Update message with current text and main keyboard
         try:
             await self.update_transcription_display(
-                query, context, state, variant.text_content, keyboard
+                query, context, state, variant.text_content, keyboard, self.state_repo
             )
             logger.info(f"Returned to main keyboard: usage_id={usage_id}")
         except Exception as e:

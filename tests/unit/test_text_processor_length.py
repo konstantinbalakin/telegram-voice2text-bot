@@ -182,10 +182,10 @@ class TestModeSupport:
         )
 
         assert result == adjusted_text
-        # Verify mode is in the prompt
+        # Verify LLM was called with correct text
         call_args = mock_llm_service.provider.refine_text.call_args
         prompt = call_args[0][1]
-        assert mode in prompt.lower()
+        assert original_text in prompt
 
 
 class TestPromptLoading:

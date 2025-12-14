@@ -245,8 +245,8 @@ jobs:
 
             # Transcription Provider Configuration
             WHISPER_PROVIDERS=["faster-whisper", "openai"]
-            WHISPER_ROUTING_STRATEGY=hybrid #single, fallback, benchmark, hybrid
-            PRIMARY_PROVIDER=faster-whisper
+            WHISPER_ROUTING_STRATEGY=single #single, fallback, benchmark, hybrid
+            PRIMARY_PROVIDER=openai
             BENCHMARK_MODE=false
 
             # FasterWhisper Production Configuration (medium/int8/beam1)

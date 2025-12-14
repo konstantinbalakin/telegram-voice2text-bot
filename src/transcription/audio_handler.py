@@ -413,9 +413,10 @@ class AudioHandler:
         original_size = input_path.stat().st_size
         original_size_mb = original_size / (1024 * 1024)
 
-        output_path = input_path.parent / f"{input_path.stem}_mono.opus"
+        output_path = input_path.parent / f"{input_path.stem}_mono.ogg"
 
         # Convert to mono with Whisper-optimal settings
+        # Use .ogg container for OpenAI compatibility (doesn't support .opus extension)
         subprocess.run(
             [
                 "ffmpeg",
@@ -432,6 +433,8 @@ class AudioHandler:
                 "32k",  # 32 kbps bitrate (optimal for speech)
                 "-vbr",
                 "on",  # Variable bitrate for better quality
+                "-f",
+                "ogg",  # OGG container format (OpenAI compatible)
                 str(output_path),
             ],
             check=True,
@@ -459,14 +462,14 @@ class AudioHandler:
             input_path: Input audio file
 
         Returns:
-            Path to speed-adjusted audio file (Opus format)
+            Path to speed-adjusted audio file (OGG format for OpenAI compatibility)
 
         Raises:
             subprocess.CalledProcessError: If ffmpeg fails
             ValueError: If speed multiplier out of range
         """
         multiplier = settings.audio_speed_multiplier
-        output_path = input_path.parent / f"{input_path.stem}_speed{multiplier}x.opus"
+        output_path = input_path.parent / f"{input_path.stem}_speed{multiplier}x.ogg"
 
         # Note: atempo filter only supports 0.5-2.0 range
         # For values outside, need to chain multiple filters
@@ -487,6 +490,8 @@ class AudioHandler:
                 "32k",  # 32 kbps bitrate (optimal for speech)
                 "-vbr",
                 "on",  # Variable bitrate for better quality
+                "-f",
+                "ogg",  # OGG container format (OpenAI compatible)
                 str(output_path),
             ],
             check=True,

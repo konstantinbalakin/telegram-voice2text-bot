@@ -107,14 +107,14 @@ def split_text(
 
 
 def save_audio_file_for_retranscription(
-    temp_file_path: Path, usage_id: int, file_id: str
+    temp_file_path: Path, usage_id: int, file_identifier: str
 ) -> Optional[Path]:
-    """Save audio file to persistent storage for retranscription (Phase 8).
+    """Save audio file to persistent storage for retranscription.
 
     Args:
-        temp_file_path: Temporary file path from audio handler
+        temp_file_path: Temporary file path (original or preprocessed)
         usage_id: Usage record ID
-        file_id: Telegram file ID
+        file_identifier: File identifier (telegram file_id or unique suffix)
 
     Returns:
         Path to saved file or None if saving failed or retranscription is disabled
@@ -129,8 +129,8 @@ def save_audio_file_for_retranscription(
         persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Create unique filename
-        file_extension = temp_file_path.suffix or ".ogg"
-        permanent_path = persistent_dir / f"{usage_id}_{file_id}{file_extension}"
+        file_extension = temp_file_path.suffix or ".ogg"  # Default to .ogg for preprocessed
+        permanent_path = persistent_dir / f"{usage_id}_{file_identifier}{file_extension}"
 
         # Copy file to permanent storage
         shutil.copy2(temp_file_path, permanent_path)
@@ -496,18 +496,12 @@ class BotHandlers:
 
             logger.info(f"File downloaded: {file_path}")
 
-            # Phase 8: Save audio file for retranscription
-            persistent_path = save_audio_file_for_retranscription(
-                Path(file_path), usage.id, voice.file_id
-            )
-
-            # STAGE 2: Update with duration after download (+ file path for retranscription)
+            # STAGE 2: Update with duration after download
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
                 await usage_repo.update(
                     usage_id=usage.id,
                     voice_duration_seconds=duration_seconds,
-                    original_file_path=str(persistent_path) if persistent_path else None,
                 )
                 logger.info(f"Usage record {usage.id} updated with duration {duration_seconds}s")
 
@@ -827,18 +821,12 @@ class BotHandlers:
 
             logger.info(f"File downloaded: {file_path}")
 
-            # Phase 8: Save audio file for retranscription
-            persistent_path = save_audio_file_for_retranscription(
-                Path(file_path), usage.id, audio.file_id
-            )
-
-            # STAGE 2: Update with duration after download (+ file path for retranscription)
+            # STAGE 2: Update with duration after download
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
                 await usage_repo.update(
                     usage_id=usage.id,
                     voice_duration_seconds=duration_seconds,
-                    original_file_path=str(persistent_path) if persistent_path else None,
                 )
                 logger.info(f"Usage record {usage.id} updated with duration {duration_seconds}s")
 
@@ -1118,7 +1106,7 @@ class BotHandlers:
         text: str,
         keyboard: Optional[InlineKeyboardMarkup],
         usage_id: int,
-        prefix: str = "✅ Готово!\n\n",
+        prefix: str = "",
     ) -> tuple[Message, Optional[Message]]:
         """Send transcription result as text message or file based on length.
 
@@ -1264,12 +1252,55 @@ class BotHandlers:
             # === PREPROCESSING: Apply audio transformations ===
             processed_path = request.file_path
             try:
+                # Update status before preprocessing
+                should_preprocess = (
+                    settings.audio_convert_to_mono or settings.audio_speed_multiplier != 1.0
+                )
+
+                if should_preprocess:
+                    await request.status_message.edit_text("🔧 Оптимизирую аудио...")
+                    logger.info("Starting audio preprocessing...")
+
                 processed_path = self.audio_handler.preprocess_audio(request.file_path)
+
                 if processed_path != request.file_path:
                     logger.info(f"Audio preprocessed: {processed_path.name}")
             except Exception as e:
                 logger.warning(f"Audio preprocessing failed: {e}, using original")
                 processed_path = request.file_path
+
+            # Save preprocessed file for retranscription (if enabled)
+            persistent_path = None
+            if settings.enable_retranscribe:
+                try:
+                    # Extract file_id from original filename (format: {file_id}_{uuid}.ext)
+                    original_file_id = request.file_path.stem.split("_")[0]
+
+                    # Save preprocessed or original file
+                    file_to_save = (
+                        processed_path if processed_path != request.file_path else request.file_path
+                    )
+                    persistent_path = save_audio_file_for_retranscription(
+                        file_to_save, request.usage_id, original_file_id
+                    )
+
+                    # Update database with file path
+                    if persistent_path:
+                        async with get_session() as session:
+                            usage_repo = UsageRepository(session)
+                            await usage_repo.update(
+                                usage_id=request.usage_id,
+                                original_file_path=str(persistent_path),
+                            )
+                        logger.info(
+                            f"Saved {'preprocessed' if processed_path != request.file_path else 'original'} "
+                            f"audio for retranscription: {persistent_path}"
+                        )
+                except Exception as e:
+                    logger.error(f"Failed to save audio for retranscription: {e}", exc_info=True)
+
+            # Update status before transcription
+            await request.status_message.edit_text("⚙️ Обрабатываю запись...")
 
             # === TRANSCRIPTION: Get draft or final transcription ===
             result = await self.transcription_router.transcribe(
@@ -1435,7 +1466,7 @@ class BotHandlers:
                     text=result.text,
                     keyboard=keyboard,
                     usage_id=request.usage_id,
-                    prefix="✅ Готово!\n\n",
+                    prefix="",
                 )
 
                 # Update state with correct message IDs
