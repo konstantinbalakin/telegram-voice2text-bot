@@ -875,7 +875,9 @@ class CallbackHandlers:
                 )
 
             if not source_variant:
-                source_variant = await self.variant_repo.get_variant(usage_id=usage_id, mode="original")
+                source_variant = await self.variant_repo.get_variant(
+                    usage_id=usage_id, mode="original"
+                )
 
             if not source_variant:
                 await query.answer("Исходный текст не найден", show_alert=True)
