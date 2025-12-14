@@ -386,13 +386,14 @@ class CallbackHandlers:
                     # Stop progress tracker
                     await progress.stop()
 
-                    # Save variant (check if already exists first to avoid UNIQUE constraint error)
+                    # Save variant with target emoji level
+                    # Check if variant already exists first to avoid UNIQUE constraint error
                     existing_variant = await self.variant_repo.get_variant(
                         usage_id=usage_id,
                         mode="structured",
-                        length_level="default",
-                        emoji_level=0,
-                        timestamps_enabled=False,
+                        length_level=target_length_level,
+                        emoji_level=target_emoji_level,
+                        timestamps_enabled=target_timestamps_enabled,
                     )
 
                     if existing_variant:
@@ -404,13 +405,15 @@ class CallbackHandlers:
                         variant = existing_variant
                     else:
                         # Create new variant
+                        # For emoji_level=1, structured prompt already generates minimal emojis
+                        # For emoji_level=0, would need to remove emojis (handled by emoji toggle)
                         variant = await self.variant_repo.create(
                             usage_id=usage_id,
                             mode="structured",
                             text_content=structured_text,
-                            length_level="default",
-                            emoji_level=0,
-                            timestamps_enabled=False,
+                            length_level=target_length_level,
+                            emoji_level=target_emoji_level,
+                            timestamps_enabled=target_timestamps_enabled,
                             generated_by="llm",
                             llm_model=settings.llm_model,
                             processing_time_seconds=processing_time,
@@ -816,7 +819,10 @@ class CallbackHandlers:
         current_emoji = state.emoji_level
 
         # Calculate new emoji level (4 levels: 0, 1, 2, 3)
-        if direction == "moderate":
+        if direction == "few":
+            # Direct jump to level 1 (few emojis) from level 0
+            new_emoji = 1
+        elif direction == "moderate":
             # Direct jump to level 2 (moderate) from level 0
             new_emoji = 2
         elif direction == "increase":
@@ -832,19 +838,6 @@ class CallbackHandlers:
 
         logger.info(f"Emoji level change: {current_emoji} -> {new_emoji}")
 
-        # Get base variant (without emojis)
-        base_variant = await self.variant_repo.get_variant(
-            usage_id=usage_id,
-            mode=state.active_mode,
-            length_level=state.length_level,
-            emoji_level=0,
-            timestamps_enabled=state.timestamps_enabled,
-        )
-
-        if not base_variant:
-            await query.answer("Базовый текст не найден", show_alert=True)
-            return
-
         # Get or generate variant with new emoji level
         variant = await self.variant_repo.get_variant(
             usage_id=usage_id,
@@ -855,16 +848,45 @@ class CallbackHandlers:
         )
 
         if not variant:
-            # Need to generate variant with emojis
+            # Need to generate variant
             if not self.text_processor:
                 await query.answer("Обработка текста недоступна (LLM отключен)", show_alert=True)
                 return
 
+            # Pick source text to transform
+            # If adding emojis, prefer clean (level 0) text. If stripping, use current.
+            source_variant = None
+            if new_emoji > 0:
+                source_variant = await self.variant_repo.get_variant(
+                    usage_id=usage_id,
+                    mode=state.active_mode,
+                    length_level=state.length_level,
+                    emoji_level=0,
+                    timestamps_enabled=state.timestamps_enabled,
+                )
+
+            if not source_variant:
+                source_variant = await self.variant_repo.get_variant(
+                    usage_id=usage_id,
+                    mode=state.active_mode,
+                    length_level=state.length_level,
+                    emoji_level=current_emoji,
+                    timestamps_enabled=state.timestamps_enabled,
+                )
+
+            if not source_variant:
+                source_variant = await self.variant_repo.get_variant(usage_id=usage_id, mode="original")
+
+            if not source_variant:
+                await query.answer("Исходный текст не найден", show_alert=True)
+                return
+
             # Acknowledge callback immediately
-            await query.answer("Добавляю смайлы...")
+            await query.answer("Обрабатываю смайлы...")
 
             # Edit message to show processing
-            processing_message = "🔄 Добавляю смайлы в текст..."
+            action_text = "Добавляю" if new_emoji > 0 else "Удаляю"
+            processing_message = f"🔄 {action_text} смайлы в тексте..."
             try:
                 await query.edit_message_text(processing_message)
             except Exception as e:
@@ -883,8 +905,8 @@ class CallbackHandlers:
             try:
                 start_time = time.time()
 
-                text_with_emojis = await self.text_processor.add_emojis(
-                    base_variant.text_content, new_emoji
+                transformed_text = await self.text_processor.add_emojis(
+                    source_variant.text_content, new_emoji, current_level=current_emoji
                 )
 
                 processing_time = time.time() - start_time
@@ -896,7 +918,7 @@ class CallbackHandlers:
                 variant = await self.variant_repo.create(
                     usage_id=usage_id,
                     mode=state.active_mode,
-                    text_content=text_with_emojis,
+                    text_content=transformed_text,
                     length_level=state.length_level,
                     emoji_level=new_emoji,
                     timestamps_enabled=state.timestamps_enabled,

@@ -335,9 +335,31 @@ class TextProcessor:
         if emoji_level not in [0, 1, 2, 3]:
             raise ValueError(f"Invalid emoji_level: {emoji_level}. Must be 0, 1, 2, or 3")
 
-        # Level 0 = no emojis, return original
+        # Level 0 = remove all emojis using LLM
         if emoji_level == 0:
-            return text
+            # Load remove emoji prompt
+            try:
+                prompt_template = load_prompt("emoji_remove")
+            except (FileNotFoundError, IOError) as e:
+                logger.warning(f"Failed to load emoji_remove prompt: {e}, using fallback")
+                # Fallback inline prompt
+                prompt_template = """Убери ВСЕ эмодзи из текста, сохраняя только чистый текст без символов.
+
+Исходный текст:
+{text}
+
+Верни ТОЛЬКО текст без эмодзи, без пояснений и комментариев."""
+
+            prompt = prompt_template.format(text=text)
+            logger.info(f"Removing emojis from text: {len(text)} chars...")
+
+            try:
+                result = await self._refine_with_custom_prompt(text, prompt)
+                logger.info(f"Emojis removed: {len(text)} → {len(result)} chars")
+                return result
+            except Exception as e:
+                logger.error(f"Failed to remove emojis: {e}")
+                raise LLMError(f"Failed to remove emojis: {e}") from e
 
         # Determine instruction based on level
         instructions = {

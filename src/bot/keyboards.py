@@ -131,9 +131,9 @@ def create_transcription_keyboard(
         else:
             # Single button (not in structured mode, or length variations disabled)
             label = (
-                "📝 Структурировать (вы здесь)"
+                "🪄 Сделать красиво (вы здесь)"
                 if state.active_mode == "structured"
-                else "📝 Структурировать"
+                else "🪄 Сделать красиво"
             )
             keyboard.append(
                 [
@@ -224,8 +224,8 @@ def create_transcription_keyboard(
                 # Center button: Emoji indicator (non-interactive)
                 # 4 levels: 0 (none), 1 (few), 2 (moderate), 3 (many)
                 emoji_indicators = {
-                    1: "😊",  # Few
-                    2: "😊😊",  # Moderate (default)
+                    1: "😊",  # Few (default)
+                    2: "😊😊",  # Moderate
                     3: "😊😊😊",  # Many
                 }
                 indicator = emoji_indicators.get(state.emoji_level, "😊")
@@ -248,7 +248,7 @@ def create_transcription_keyboard(
                 keyboard.append(
                     [
                         InlineKeyboardButton(
-                            "Убрать смайлы",
+                            "😊 Убрать смайлы",
                             callback_data=encode_callback_data(
                                 "emoji", state.usage_id, direction="decrease"
                             ),
@@ -256,13 +256,13 @@ def create_transcription_keyboard(
                     ]
                 )
         else:
-            # No emojis: single button to add emojis (defaults to level 2 - moderate)
+            # No emojis: single button to add emojis (defaults to level 1 - few)
             keyboard.append(
                 [
                     InlineKeyboardButton(
                         "😊 Смайлы",
                         callback_data=encode_callback_data(
-                            "emoji", state.usage_id, direction="moderate"
+                            "emoji", state.usage_id, direction="few"
                         ),
                     )
                 ]

@@ -325,7 +325,7 @@ async def handle_retranscribe(
             # Update message with new transcription (handles both text and file messages)
             try:
                 await callback_handlers.update_transcription_display(
-                    query, context, state, result.text, keyboard
+                    query, context, state, result.text, keyboard, state_repo
                 )
                 logger.info(f"Retranscription message updated for usage_id={usage_id}")
             except Exception as e:
