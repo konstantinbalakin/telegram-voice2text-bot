@@ -292,6 +292,14 @@ hybrid_quality_model: str = Field(default="medium")
 audio_convert_to_mono: bool = Field(default=False)
 audio_target_sample_rate: int = Field(default=16000)
 audio_speed_multiplier: float = Field(default=1.0)
+
+# Provider-Aware Audio Format Configuration (NEW - 2025-12-15)
+openai_4o_transcribe_preferred_format: str = Field(default="mp3")  # or "wav"
+OPENAI_FORMAT_REQUIREMENTS = {
+    "gpt-4o-transcribe": ["mp3", "wav"],         # Requires conversion
+    "gpt-4o-mini-transcribe": ["mp3", "wav"],    # Requires conversion
+    "whisper-1": None,                            # Supports OGA
+}
 ```
 
 **Environment Variables**:
@@ -320,6 +328,9 @@ HYBRID_QUALITY_MODEL=medium
 AUDIO_CONVERT_TO_MONO=false
 AUDIO_TARGET_SAMPLE_RATE=16000
 AUDIO_SPEED_MULTIPLIER=1.0
+
+# NEW - Provider-Aware Audio Format (2025-12-15)
+OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT=mp3  # Options: mp3, wav
 ```
 
 ### Logging Configuration (2025-11-03)

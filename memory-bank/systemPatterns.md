@@ -257,6 +257,7 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-11-30 | Session-based Client API auth | Bot token auto-authenticates, session persists across restarts, no phone/SMS needed | 95% |
 | 2025-11-30 | Dynamic file size limits | 2GB when Client API enabled, 20MB fallback when disabled | 90% |
 | 2025-11-30 | Optional cryptg dependency | Performance boost for Telethon, but not required for core functionality | 80% |
+| 2025-12-15 | Provider-aware audio format conversion | Preprocess audio based on target provider's format requirements (OpenAI gpt-4o needs MP3/WAV, faster-whisper optimal with OGA) | 95% |
 
 ## Design Patterns in Use
 
@@ -1147,6 +1148,96 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
   - Reusable for other scenarios (testing, specific user preferences)
   - Clear separation: context dictates behavior, handler executes
 - **Pattern**: Context flags > hardcoded behavior for flexible control
+
+### 37. **Provider-Aware Preprocessing Pattern** (added 2025-12-15)
+- **Where**: Audio format conversion in `src/transcription/audio_handler.py`
+- **Why**: Different transcription providers have different audio format requirements
+- **Problem**: OpenAI's new gpt-4o-transcribe/mini models don't support `.oga` format (Telegram's default), causing transcription failures
+- **Benefit**: Each provider receives audio in optimal format automatically, enables support for new models
+- **Implementation**:
+  ```python
+  # In audio_handler.py
+  def preprocess_audio(
+      self,
+      audio_path: Path,
+      target_provider: Optional[str] = None  # Provider-aware parameter
+  ) -> Path:
+      """Preprocess audio with provider-specific optimization."""
+
+      # Provider-aware format optimization
+      if target_provider:
+          path = self._optimize_for_provider(path, target_provider)
+
+      # Other preprocessing steps...
+      return path
+
+  def _optimize_for_provider(
+      self,
+      input_path: Path,
+      provider_name: str
+  ) -> Path:
+      """Select optimal format based on provider requirements."""
+
+      if provider_name == "openai":
+          # Check model requirements
+          model = settings.openai_model
+          if model in ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"]:
+              # New models require MP3/WAV
+              return self._convert_to_mp3(input_path)
+          else:
+              # whisper-1 supports OGA
+              return input_path
+
+      elif provider_name == "faster-whisper":
+          # OGA optimal for local processing
+          return input_path
+
+      else:
+          # Unknown provider, no optimization
+          return input_path
+  ```
+
+  ```python
+  # In bot handlers
+  # Detect active provider before preprocessing
+  target_provider = None
+  if self.transcription_router:
+      target_provider = self.transcription_router.get_active_provider_name()
+
+  # Pass to audio handler for optimization
+  processed_path = self.audio_handler.preprocess_audio(
+      request.file_path,
+      target_provider=target_provider
+  )
+  ```
+
+- **Key Features**:
+  - **Smart conversion**: Only converts when necessary (OGA → MP3 for gpt-4o models)
+  - **Optimal format per provider**: FasterWhisper keeps OGA, OpenAI gets MP3/WAV
+  - **Backward compatible**: Optional parameter, graceful fallback
+  - **Configurable**: Choose MP3 or WAV via `OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT`
+  - **Robust error handling**: Fallback to original format on any error
+
+- **Configuration**:
+  ```python
+  # Mapping models to supported formats
+  OPENAI_FORMAT_REQUIREMENTS = {
+      "gpt-4o-transcribe": ["mp3", "wav"],        # Requires conversion
+      "gpt-4o-mini-transcribe": ["mp3", "wav"],   # Requires conversion
+      "whisper-1": None,                           # Supports OGA
+  }
+
+  # User-configurable format preference
+  openai_4o_transcribe_preferred_format: str = "mp3"  # or "wav"
+  ```
+
+- **Impact**:
+  - ✅ Enables OpenAI's latest transcription models (gpt-4o-transcribe, gpt-4o-mini-transcribe)
+  - ✅ Maintains optimal performance for each provider
+  - ✅ Future-proof architecture for new providers/models
+  - ✅ Zero user-facing changes (completely transparent)
+
+- **Pattern**: Provider-aware preprocessing > one-size-fits-all approach for multi-provider systems with different format requirements
 
 ## Development Workflow
 

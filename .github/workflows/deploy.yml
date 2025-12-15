@@ -261,8 +261,9 @@ jobs:
 
             # OpenAI Whisper API Configuration
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            OPENAI_MODEL=whisper-1
+            OPENAI_MODEL=gpt-4o-transcribe
             OPENAI_TIMEOUT=90
+            OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT=mp3
 
             # Fallback Configuration
             FALLBACK_PROVIDER=openai

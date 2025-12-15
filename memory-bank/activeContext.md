@@ -1,10 +1,10 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status (2025-12-09)
+## Current Status (2025-12-15)
 
 **Phase**: Phase 10 - Interactive Transcription Processing 🚀
-**Stage**: Phase 10.10 COMPLETE ✅ (HTML Formatting & PDF Generation)
-**Branch**: feature/html-formatting-pdf (ready for testing)
+**Stage**: Phase 10.11 COMPLETE ✅ (Provider-Aware Audio Format Conversion)
+**Branch**: feature/provider-aware-audio-format (ready for PR)
 **Production Version**: v0.0.3+
 **Production Status**: ✅ OPERATIONAL
 
@@ -167,6 +167,74 @@ Caption: "📄 Структурированный (4567 символов, PDF)"
 **Next**: Manual testing with real bot, merge to main, deploy to production
 **Branch**: feature/html-formatting-pdf
 **Commit**: 5772da3
+
+---
+
+### ✅ Phase 10.11: Provider-Aware Audio Format Conversion COMPLETE (2025-12-15)
+
+**Achievement**: Enable support for OpenAI's new gpt-4o-transcribe and gpt-4o-mini-transcribe models through intelligent provider-aware audio format conversion
+
+**Problem Solved**:
+OpenAI's new transcription models don't support `.oga` format (Telegram's default), causing `"Unsupported file format oga"` errors. The bot needs to convert audio to MP3/WAV for gpt-4o models while keeping OGA for whisper-1 and faster-whisper (optimal).
+
+**Implementation Complete**: ✅
+
+**What Was Implemented**:
+
+1. **Configuration** (`src/config.py`):
+   - Added `openai_4o_transcribe_preferred_format` (renamed for clarity)
+   - Added `OPENAI_FORMAT_REQUIREMENTS` mapping models to supported formats
+
+2. **Provider Interface** (`src/transcription/providers/base.py`):
+   - Added `provider_name` abstract property
+   - Added `get_preferred_format()` method
+
+3. **Provider Implementations**:
+   - OpenAI: Returns MP3/WAV for gpt-4o models, None for whisper-1
+   - FasterWhisper: Returns None (accepts all formats)
+
+4. **Audio Handler** (`src/transcription/audio_handler.py`):
+   - Updated `preprocess_audio()` with `target_provider` parameter
+   - Added `_optimize_for_provider()` - smart format selection
+   - Added `_convert_to_mp3()` - 16kHz mono, 64kbps, speech-optimized
+   - Added `_convert_to_wav()` - 16kHz mono, PCM 16-bit, lossless
+
+5. **Integration** (`src/bot/handlers.py`):
+   - Detects active provider before preprocessing
+   - Passes provider name to audio handler
+   - Completely transparent to users
+
+**Smart Logic**:
+- OpenAI + gpt-4o-*: OGA → MP3/WAV
+- OpenAI + whisper-1: Keep OGA
+- FasterWhisper: Keep OGA (optimal)
+- Unknown provider: No optimization
+
+**Key Features**:
+- ✅ Enables OpenAI's latest models (gpt-4o-transcribe, gpt-4o-mini-transcribe)
+- ✅ Each provider gets optimal format
+- ✅ Only converts when necessary
+- ✅ Backward compatible
+- ✅ Configurable (MP3 or WAV)
+- ✅ Robust error handling
+
+**Files Modified**: 7 code files + 3 config files
+
+**Testing**:
+- ✅ All 172 tests passing
+- ✅ Type checking (mypy) clean
+- ✅ Configuration loads correctly
+
+**Impact**:
+- ✅ Unlocks OpenAI's most advanced transcription models
+- ✅ Future-proof for new providers/models
+- ✅ Zero user-facing changes
+- ✅ Maintains optimal performance per provider
+
+**Status**: ✅ COMPLETE
+**Completion Date**: 2025-12-15
+**Next**: Commit changes, create PR, merge, deploy
+**Branch**: feature/provider-aware-audio-format
 
 ---
 

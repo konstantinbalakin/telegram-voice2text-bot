@@ -48,6 +48,30 @@ class OpenAIProvider(TranscriptionProvider):
 
         logger.info(f"OpenAIProvider configured: model={self.model}, timeout={self.timeout}s")
 
+    @property
+    def provider_name(self) -> str:
+        """Unique provider identifier."""
+        return "openai"
+
+    def get_preferred_format(self) -> Optional[str]:
+        """
+        Get preferred audio format based on model.
+
+        New models (gpt-4o-transcribe, gpt-4o-mini-transcribe) require MP3/WAV.
+        Legacy model (whisper-1) supports OGA natively.
+
+        Returns:
+            Preferred format ('mp3' or 'wav') for new models, None for whisper-1
+        """
+        from src.config import OPENAI_FORMAT_REQUIREMENTS, settings
+
+        required_formats = OPENAI_FORMAT_REQUIREMENTS.get(self.model)
+
+        if required_formats:  # New models - require conversion from OGA
+            return settings.openai_4o_transcribe_preferred_format
+
+        return None  # whisper-1 or other - no format requirements
+
     def initialize(self) -> None:
         """Initialize the OpenAI API client."""
         if self._initialized:

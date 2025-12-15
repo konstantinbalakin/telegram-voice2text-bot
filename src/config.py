@@ -81,6 +81,10 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(default=None, description="OpenAI API key")
     openai_model: str = Field(default="whisper-1", description="OpenAI model name")
     openai_timeout: int = Field(default=60, description="OpenAI API timeout in seconds")
+    openai_4o_transcribe_preferred_format: str = Field(
+        default="mp3",
+        description="Preferred audio format for OpenAI gpt-4o-* models (mp3, wav)",
+    )
 
     # Benchmark Mode
     benchmark_mode: bool = Field(default=False, description="Enable benchmark mode")
@@ -235,6 +239,15 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+
+# OpenAI model format compatibility mapping
+# Maps model names to required formats (None means supports all formats including OGA)
+OPENAI_FORMAT_REQUIREMENTS: dict[str, list[str] | None] = {
+    "gpt-4o-transcribe": ["mp3", "wav"],  # New models require conversion from OGA
+    "gpt-4o-mini-transcribe": ["mp3", "wav"],  # New models require conversion from OGA
+    "whisper-1": None,  # Legacy model supports OGA natively
+}
 
 
 @lru_cache
