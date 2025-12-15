@@ -60,6 +60,11 @@ class FastWhisperProvider(TranscriptionProvider):
             f"beam_size={self.beam_size}, vad_filter={self.vad_filter}"
         )
 
+    @property
+    def provider_name(self) -> str:
+        """Unique provider identifier."""
+        return "faster-whisper"
+
     def initialize(self) -> None:
         """Initialize the Whisper model and thread pool executor."""
         if self._initialized:

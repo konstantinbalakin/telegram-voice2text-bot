@@ -320,21 +320,28 @@ class AudioHandler:
         )
         return int(result.stdout.strip())
 
-    def preprocess_audio(self, audio_path: Path) -> Path:
+    def preprocess_audio(
+        self,
+        audio_path: Path,
+        target_provider: Optional[str] = None,
+    ) -> Path:
         """
         Apply intelligent audio preprocessing pipeline.
 
         Applies transformations in order:
-        1. Mono conversion (if enabled and file is stereo)
-        2. Speed adjustment (if enabled)
+        1. Provider-specific format optimization (if target_provider specified)
+        2. Mono conversion (if enabled and file is stereo)
+        3. Speed adjustment (if enabled)
 
         Smart preprocessing:
+        - Optimizes format for target provider (e.g., MP3 for OpenAI gpt-4o models)
         - Skips mono conversion if file is already mono
-        - Uses efficient Opus codec for all outputs
+        - Uses efficient Opus codec for local processing
         - Optimizes sample rate for Whisper (16kHz)
 
         Args:
             audio_path: Original audio file
+            target_provider: Target provider name for format optimization (optional)
 
         Returns:
             Path to preprocessed audio (or original if no preprocessing needed)
@@ -344,19 +351,29 @@ class AudioHandler:
         """
         logger.debug(
             f"preprocess_audio: input={audio_path.name}, "
+            f"provider={target_provider}, "
             f"mono_enabled={settings.audio_convert_to_mono}, "
             f"speed={settings.audio_speed_multiplier}x"
         )
 
         path = audio_path
 
-        # Mono conversion (smart: skips if already mono)
-        if settings.audio_convert_to_mono:
+        # Format optimization based on provider
+        if target_provider:
+            try:
+                path = self._optimize_for_provider(path, target_provider)
+                if path != audio_path:
+                    logger.info(f"Optimized for {target_provider}: {path.name}")
+            except Exception as e:
+                logger.warning(f"Provider optimization failed: {e}, using original")
+                path = audio_path
+
+        # Mono conversion (if not already done by optimization)
+        if settings.audio_convert_to_mono and path == audio_path:
             try:
                 path = self._convert_to_mono(path)
                 if path != audio_path:
                     logger.info(f"Converted to mono: {path.name}")
-                logger.debug(f"Mono conversion output: {path}")
             except Exception as e:
                 logger.warning(f"Mono conversion failed: {e}, using original")
                 path = audio_path
@@ -365,11 +382,9 @@ class AudioHandler:
         if settings.audio_speed_multiplier != 1.0:
             try:
                 path = self._adjust_speed(path)
-                logger.info(f"Adjusted speed {settings.audio_speed_multiplier}x: {path.name}")
-                logger.debug(f"Speed adjustment output: {path}")
+                logger.info(f"Adjusted speed {settings.audio_speed_multiplier}x: " f"{path.name}")
             except Exception as e:
                 logger.warning(f"Speed adjustment failed: {e}, using original")
-                path = audio_path if path == audio_path else path
 
         if path == audio_path:
             logger.debug("No preprocessing applied, using original file")
@@ -498,5 +513,174 @@ class AudioHandler:
             capture_output=True,
             text=True,
         )
+
+        return output_path
+
+    def _optimize_for_provider(
+        self,
+        input_path: Path,
+        provider_name: str,
+    ) -> Path:
+        """
+        Optimize audio format for specific provider.
+
+        Args:
+            input_path: Input audio file
+            provider_name: Target provider (e.g., 'openai', 'faster-whisper')
+
+        Returns:
+            Path to optimized audio file (or original if no optimization needed)
+        """
+        from src.config import OPENAI_FORMAT_REQUIREMENTS
+
+        # OpenAI provider optimization
+        if provider_name == "openai":
+            # Determine if conversion needed based on model
+            model = settings.openai_model
+            required_formats = OPENAI_FORMAT_REQUIREMENTS.get(model)
+
+            if required_formats:
+                # New models (gpt-4o-*) - require MP3/WAV
+                current_ext = input_path.suffix.lower()
+
+                if current_ext in [".oga", ".ogg", ".opus"]:
+                    # Convert to preferred format
+                    target_format = settings.openai_4o_transcribe_preferred_format
+
+                    if target_format == "mp3":
+                        return self._convert_to_mp3(input_path)
+                    elif target_format == "wav":
+                        return self._convert_to_wav(input_path)
+                    else:
+                        logger.warning(f"Unknown format {target_format}, using mp3")
+                        return self._convert_to_mp3(input_path)
+                else:
+                    logger.debug(f"Format {current_ext} already supported by {model}")
+                    return input_path
+            else:
+                # Old model (whisper-1) - supports OGA
+                logger.debug(f"Model {model} supports OGA format")
+                return input_path
+
+        # FasterWhisper - prefer OGA (efficient)
+        elif provider_name == "faster-whisper":
+            # OGA is optimal for local processing, keep as is
+            logger.debug("FasterWhisper: using original format (optimal)")
+            return input_path
+
+        # Unknown provider - no optimization
+        else:
+            logger.debug(f"No optimization for provider: {provider_name}")
+            return input_path
+
+    def _convert_to_mp3(self, input_path: Path) -> Path:
+        """
+        Convert audio to MP3 format optimized for speech recognition.
+
+        Args:
+            input_path: Input audio file
+
+        Returns:
+            Path to MP3 audio file
+
+        Raises:
+            subprocess.CalledProcessError: If ffmpeg fails
+        """
+        original_size = input_path.stat().st_size
+        original_size_mb = original_size / (1024 * 1024)
+
+        output_path = input_path.parent / f"{input_path.stem}_converted.mp3"
+
+        logger.info(f"Converting to MP3: {input_path.name} " f"({original_size_mb:.2f}MB)")
+
+        # Convert to MP3 with speech-optimized settings
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",  # Overwrite
+                "-i",
+                str(input_path),
+                "-ac",
+                "1",  # Mono
+                "-ar",
+                "16000",  # 16kHz sample rate (optimal for Whisper)
+                "-b:a",
+                "64k",  # 64 kbps bitrate (good quality for speech)
+                "-acodec",
+                "libmp3lame",  # MP3 codec
+                "-q:a",
+                "2",  # Quality level (2 = high quality)
+                str(output_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        converted_size = output_path.stat().st_size
+        converted_size_mb = converted_size / (1024 * 1024)
+        size_ratio = (converted_size / original_size * 100) if original_size > 0 else 0
+
+        logger.info(
+            f"MP3 conversion complete: "
+            f"original={original_size_mb:.2f}MB, "
+            f"converted={converted_size_mb:.2f}MB "
+            f"({size_ratio:.1f}% of original)"
+        )
+
+        # Warn if approaching 25MB limit
+        if converted_size_mb > 20:
+            logger.warning(
+                f"Converted file size {converted_size_mb:.2f}MB " f"approaching OpenAI limit (25MB)"
+            )
+
+        return output_path
+
+    def _convert_to_wav(self, input_path: Path) -> Path:
+        """
+        Convert audio to WAV format (PCM 16-bit).
+
+        Args:
+            input_path: Input audio file
+
+        Returns:
+            Path to WAV audio file
+
+        Note:
+            WAV files are larger than MP3 but avoid double compression.
+            Use only if quality is critical and file size is small.
+        """
+        original_size_mb = input_path.stat().st_size / (1024 * 1024)
+        output_path = input_path.parent / f"{input_path.stem}_converted.wav"
+
+        logger.info(f"Converting to WAV: {input_path.name}")
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(input_path),
+                "-ac",
+                "1",  # Mono
+                "-ar",
+                "16000",  # 16kHz
+                "-acodec",
+                "pcm_s16le",  # PCM 16-bit
+                str(output_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        converted_size_mb = output_path.stat().st_size / (1024 * 1024)
+
+        logger.info(
+            f"WAV conversion complete: " f"{original_size_mb:.2f}MB → {converted_size_mb:.2f}MB"
+        )
+
+        if converted_size_mb > 20:
+            logger.warning(f"WAV file {converted_size_mb:.2f}MB may exceed OpenAI limit")
 
         return output_path

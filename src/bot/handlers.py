@@ -1261,7 +1261,15 @@ class BotHandlers:
                     await request.status_message.edit_text("🔧 Оптимизирую аудио...")
                     logger.info("Starting audio preprocessing...")
 
-                processed_path = self.audio_handler.preprocess_audio(request.file_path)
+                # Get target provider for format optimization
+                target_provider = None
+                if self.transcription_router:
+                    target_provider = self.transcription_router.get_active_provider_name()
+                    logger.debug(f"Target provider for preprocessing: {target_provider}")
+
+                processed_path = self.audio_handler.preprocess_audio(
+                    request.file_path, target_provider=target_provider
+                )
 
                 if processed_path != request.file_path:
                     logger.info(f"Audio preprocessed: {processed_path.name}")

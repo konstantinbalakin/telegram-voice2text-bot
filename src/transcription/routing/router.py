@@ -49,6 +49,33 @@ class TranscriptionRouter:
 
         logger.info(f"TranscriptionRouter initialized with strategy: {strategy.__class__.__name__}")
 
+    def get_active_provider_name(self) -> Optional[str]:
+        """
+        Get name of the active provider for preprocessing.
+
+        For strategies that can determine provider without context (SingleProviderStrategy,
+        FallbackStrategy), returns the primary provider name.
+        For context-dependent strategies (HybridStrategy), returns None.
+
+        Returns:
+            Provider name or None if determination requires runtime context
+        """
+        from src.transcription.routing.strategies import (
+            FallbackStrategy,
+            SingleProviderStrategy,
+        )
+
+        # For simple strategies, we can determine the provider synchronously
+        if isinstance(self.strategy, SingleProviderStrategy):
+            return self.strategy.provider_name
+        elif isinstance(self.strategy, FallbackStrategy):
+            return self.strategy.primary
+        else:
+            # For complex strategies (HybridStrategy, BenchmarkStrategy),
+            # provider selection depends on runtime context
+            # Return None to skip provider-specific optimization
+            return None
+
     async def transcribe(
         self,
         audio_path: Path,

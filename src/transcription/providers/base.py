@@ -2,12 +2,33 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Optional
 
 from src.transcription.models import TranscriptionContext, TranscriptionResult
 
 
 class TranscriptionProvider(ABC):
     """Abstract base class for all transcription providers."""
+
+    @property
+    @abstractmethod
+    def provider_name(self) -> str:
+        """
+        Unique provider identifier (e.g., 'openai', 'faster-whisper').
+
+        Returns:
+            String identifier for this provider
+        """
+        pass
+
+    def get_preferred_format(self) -> Optional[str]:
+        """
+        Get preferred audio format for this provider.
+
+        Returns:
+            Preferred format (e.g., 'mp3', 'wav') or None if provider accepts any format
+        """
+        return None
 
     @abstractmethod
     def initialize(self) -> None:
