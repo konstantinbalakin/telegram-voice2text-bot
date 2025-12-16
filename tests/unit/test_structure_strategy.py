@@ -229,3 +229,82 @@ class TestStructureStrategyEdgeCases:
             model="medium",
         )
         assert strategy.emoji_level == 1
+
+
+class TestStructureStrategyFallback:
+    """Tests for fallback functionality."""
+
+    def test_supports_fallback_when_configured(self):
+        """Test that strategy supports fallback when fallback provider is configured."""
+        strategy = StructureStrategy(
+            provider_name="openai",
+            model="whisper-1",
+            fallback_provider_name="faster-whisper",
+        )
+        assert strategy.supports_fallback() is True
+
+    def test_no_fallback_by_default(self):
+        """Test that strategy doesn't support fallback when no fallback provider is set."""
+        strategy = StructureStrategy(
+            provider_name="openai",
+            model="whisper-1",
+        )
+        assert strategy.supports_fallback() is False
+
+    def test_no_fallback_when_none(self):
+        """Test that strategy doesn't support fallback when explicitly set to None."""
+        strategy = StructureStrategy(
+            provider_name="openai",
+            model="whisper-1",
+            fallback_provider_name=None,
+        )
+        assert strategy.supports_fallback() is False
+
+    @pytest.mark.asyncio
+    async def test_get_fallback_returns_configured_provider(self):
+        """Test that get_fallback returns the configured fallback provider."""
+        strategy = StructureStrategy(
+            provider_name="openai",
+            model="whisper-1",
+            fallback_provider_name="faster-whisper",
+        )
+        fallback = await strategy.get_fallback("openai")
+        assert fallback == "faster-whisper"
+
+    @pytest.mark.asyncio
+    async def test_get_fallback_returns_none_for_different_provider(self):
+        """Test that get_fallback returns None when failed provider is not primary."""
+        strategy = StructureStrategy(
+            provider_name="openai",
+            model="whisper-1",
+            fallback_provider_name="faster-whisper",
+        )
+        fallback = await strategy.get_fallback("some-other-provider")
+        assert fallback is None
+
+    @pytest.mark.asyncio
+    async def test_get_fallback_returns_none_when_no_fallback_configured(self):
+        """Test that get_fallback returns None when no fallback is configured."""
+        strategy = StructureStrategy(
+            provider_name="openai",
+            model="whisper-1",
+        )
+        fallback = await strategy.get_fallback("openai")
+        assert fallback is None
+
+    def test_fallback_stored_correctly(self):
+        """Test that fallback provider name is stored in instance."""
+        strategy = StructureStrategy(
+            provider_name="openai",
+            model="whisper-1",
+            fallback_provider_name="faster-whisper",
+        )
+        assert strategy.fallback_provider == "faster-whisper"
+
+    def test_fallback_none_by_default(self):
+        """Test that fallback provider is None by default."""
+        strategy = StructureStrategy(
+            provider_name="openai",
+            model="whisper-1",
+        )
+        assert strategy.fallback_provider is None

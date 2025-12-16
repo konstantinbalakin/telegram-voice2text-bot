@@ -387,11 +387,18 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
                     f"Supported: faster-whisper, openai"
                 )
 
+        # Auto-detect fallback provider
+        fallback_provider = None
+        if provider_name == "openai" and "faster-whisper" in providers:
+            fallback_provider = "faster-whisper"
+            logger.info(f"✓ Fallback configured: {fallback_provider}")
+
         strategy = StructureStrategy(
             provider_name=provider_name,
             model=model_name,
             draft_threshold_seconds=settings.structure_draft_threshold,
             emoji_level=settings.structure_emoji_level,
+            fallback_provider_name=fallback_provider,
         )
         logger.info(
             f"✓ Structure strategy: provider={provider_name}, model={model_name}, "
