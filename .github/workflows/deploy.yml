@@ -232,27 +232,31 @@ jobs:
             # Ensure we're on the right tag
             git fetch --all --tags
             git checkout "$VERSION"
-
+            
             # Create .env file with secrets
             cat > .env <<EOF
+            #API tokens and keys
             TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-            BOT_MODE=polling
-            # Client API for support large files
-            TELETHON_ENABLED=false
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             TELEGRAM_API_ID=${{ secrets.TELEGRAM_API_ID }}
             TELEGRAM_API_HASH=${{ secrets.TELEGRAM_API_HASH }}
+            LLM_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+            BOT_MODE=polling
+            
+            # Client API for support large files
+            TELETHON_ENABLED=false
             TELETHON_SESSION_NAME=bot_client
 
             # Transcription Provider Configuration
-            WHISPER_PROVIDERS=["faster-whisper", "openai"]
-            WHISPER_ROUTING_STRATEGY=single #single, fallback, benchmark, hybrid
+            WHISPER_PROVIDERS=["openai", "faster-whisper"] #["faster-whisper", "whisper", "openai"]
+            WHISPER_ROUTING_STRATEGY=structure #single, fallback, benchmark, hybrid, structure
             PRIMARY_PROVIDER=openai
             BENCHMARK_MODE=false
 
             # FasterWhisper Production Configuration (medium/int8/beam1)
-            FASTER_WHISPER_MODEL_SIZE=base
+            FASTER_WHISPER_MODEL_SIZE=base #tiny, base, small, medium, large-v2, large-v3
             FASTER_WHISPER_DEVICE=cpu
-            FASTER_WHISPER_COMPUTE_TYPE=int8
+            FASTER_WHISPER_COMPUTE_TYPE=int8 #int8, float32
             FASTER_WHISPER_BEAM_SIZE=1
             FASTER_WHISPER_VAD_FILTER=true
 
@@ -260,30 +264,34 @@ jobs:
             WHISPER_DEVICE=cpu
 
             # OpenAI Whisper API Configuration
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            OPENAI_MODEL=gpt-4o-transcribe
+            OPENAI_MODEL=gpt-4o-transcribe #whisper-1, gpt-4o-transcribe, gpt-4o-mini-transcribe
             OPENAI_TIMEOUT=90
-            OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT=mp3
+            OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT=mp3 #mp3, wav (for gpt-4o-* models)
 
             # Fallback Configuration
             FALLBACK_PROVIDER=openai
             DURATION_THRESHOLD_SECONDS=30
 
-            # Hybrid Strategy Configuration (disabled in production)
+            # Hybrid Strategy Configuration
             HYBRID_SHORT_THRESHOLD=0
             HYBRID_DRAFT_PROVIDER=faster-whisper
-            HYBRID_DRAFT_MODEL=base
-            HYBRID_QUALITY_PROVIDER=faster-whisper
-            HYBRID_QUALITY_MODEL=base
+            HYBRID_DRAFT_MODEL=small #tiny, base, small
+            HYBRID_QUALITY_PROVIDER=openai # openai, faster-whisper
+            HYBRID_QUALITY_MODEL=gpt-4o-transcribe # whisper-1, gpt-4o-transcribe, medium
+
+            # Structure Strategy (WHISPER_ROUTING_STRATEGY=structure)
+            STRUCTURE_PROVIDER=openai
+            STRUCTURE_MODEL=gpt-4o-transcribe
+            STRUCTURE_DRAFT_THRESHOLD=20
+            STRUCTURE_EMOJI_LEVEL=1 #0=none, 1=few, 2=moderate, 3=many
 
             # LLM Text Refinement
-            LLM_REFINEMENT_ENABLED=true
-            LLM_PROVIDER=deepseek
-            LLM_API_KEY=${{ secrets.DEEPSEEK_API_KEY }}
+            LLM_REFINEMENT_ENABLED=true #для mode=structure обязательно
+            LLM_PROVIDER=deepseek #deepseek, openai, gigachat
             LLM_MODEL=deepseek-chat
             LLM_BASE_URL=https://api.deepseek.com
             LLM_TIMEOUT=60
-            LLM_DEBUG_MODE=false
+            LLM_DEBUG_MODE=false #true = sends comparison message (draft vs refined)
 
             # Audio Preprocessing
             AUDIO_CONVERT_TO_MONO=true
@@ -301,12 +309,12 @@ jobs:
             MAX_QUEUE_SIZE=1
             MAX_CONCURRENT_WORKERS=1
             MAX_VOICE_DURATION_SECONDS=10800
-            TRANSCRIPTION_TIMEOUT=10800
+            TRANSCRIPTION_TIMEOUT=3600
             PROGRESS_RTF=0.15
             PROGRESS_UPDATE_INTERVAL=5
 
             # Quota
-            DEFAULT_DAILY_QUOTA_SECONDS=60
+            DEFAULT_DAILY_QUOTA_SECONDS=60 #еще не внедрено
 
             # Buttons
             INTERACTIVE_MODE_ENABLED=true
@@ -316,13 +324,13 @@ jobs:
             ENABLE_EMOJI_OPTION=true
             ENABLE_TIMESTAMPS_OPTION=false
             FILE_THRESHOLD_CHARS=3000 # Сколько символов для определения большого файла
-            ENABLE_RETRANSCRIBE=true #повторная транскрибация в лучшем качестве
+            ENABLE_RETRANSCRIBE=false #повторная транскрибация в лучшем качестве
             PERSISTENT_AUDIO_DIR=./data/audio_files
             PERSISTENT_AUDIO_TTL_DAYS=1
             RETRANSCRIBE_FREE_MODEL=medium
             RETRANSCRIBE_FREE_MODEL_RTF=0.6
             RETRANSCRIBE_PAID_PROVIDER=openai
-            RETRANSCRIBE_PAID_COST_PER_MINUTE=1.0 # Стоимость 1й минуты для расчета стоимости на кнопке
+            RETRANSCRIBE_PAID_COST_PER_MINUTE=1.0 # Стоимость 1й минуты в рублях для расчета стоимости на кнопке
             LLM_PROCESSING_DURATION=30  # Длительность прогресс-бара при обработке LLM по кнопке
 
             # Application Version (for centralized logging)
