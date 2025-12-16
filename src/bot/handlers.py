@@ -31,6 +31,7 @@ from src.services.progress_tracker import ProgressTracker
 from src.services.pdf_generator import PDFGenerator
 from src.services.llm_service import LLMService
 from src.services.telegram_client import TelegramClientService
+from src.services.text_processor import TextProcessor
 from src.bot.keyboards import create_transcription_keyboard
 
 logger = logging.getLogger(__name__)
@@ -153,6 +154,7 @@ class BotHandlers:
         queue_manager: QueueManager,
         llm_service: Optional[LLMService] = None,
         telegram_client: Optional[TelegramClientService] = None,
+        text_processor: Optional[TextProcessor] = None,
     ):
         """Initialize bot handlers.
 
@@ -162,12 +164,14 @@ class BotHandlers:
             queue_manager: Queue manager for request handling
             llm_service: Optional LLM service for text refinement
             telegram_client: Optional Telegram Client API service for large files
+            text_processor: Optional text processor for structured text formatting
         """
         self.transcription_router = whisper_service
         self.audio_handler = audio_handler
         self.queue_manager = queue_manager
         self.llm_service = llm_service
         self.telegram_client = telegram_client
+        self.text_processor = text_processor
 
         # Register callback for queue updates
         self.queue_manager.set_on_queue_changed(self._update_queue_messages)
@@ -1005,6 +1009,8 @@ class BotHandlers:
         final_text: str,
         is_file_message: bool = False,
         file_message_id: Optional[int] = None,
+        active_mode: str = "original",
+        emoji_level: int = 0,
     ) -> Optional["InlineKeyboardMarkup"]:
         """Create TranscriptionState, save segments, save original variant, and generate keyboard.
 
@@ -1016,6 +1022,8 @@ class BotHandlers:
             final_text: The final text that was sent to the user (original variant)
             is_file_message: Whether transcription was sent as file (True) or text (False)
             file_message_id: Message ID of the file message (if sent as file)
+            active_mode: Initial active mode (default: "original")
+            emoji_level: Initial emoji level (default: 0)
 
         Returns:
             InlineKeyboardMarkup or None if interactive mode disabled
@@ -1047,23 +1055,39 @@ class BotHandlers:
                         is_file_message=is_file_message,
                         file_message_id=file_message_id,
                     )
+                    # Update active_mode and emoji_level after creation
+                    state.active_mode = active_mode
+                    state.emoji_level = emoji_level
+                    await session.flush()
                     logger.debug(
                         f"TranscriptionState created: id={state.id}, usage_id={usage_id}, "
-                        f"message_id={message_id}, is_file={is_file_message}, file_msg_id={file_message_id}"
+                        f"message_id={message_id}, is_file={is_file_message}, file_msg_id={file_message_id}, "
+                        f"active_mode={active_mode}, emoji_level={emoji_level}"
                     )
                 else:
                     logger.debug(
                         f"Using existing TranscriptionState: id={state.id}, usage_id={usage_id}"
                     )
 
-                # Save original variant (Phase 2)
-                await variant_repo.create(
+                # Save original variant if not exists (Phase 2)
+                # For StructureStrategy, the original variant is already created
+                existing_variant = await variant_repo.get_variant(
                     usage_id=usage_id,
                     mode="original",
-                    text_content=final_text,
-                    generated_by="transcription",
+                    length_level="default",
+                    emoji_level=0,
+                    timestamps_enabled=False,
                 )
-                logger.debug(f"Saved original variant for usage_id={usage_id}")
+                if not existing_variant:
+                    await variant_repo.create(
+                        usage_id=usage_id,
+                        mode="original",
+                        text_content=final_text,
+                        generated_by="transcription",
+                    )
+                    logger.debug(f"Created original variant for usage_id={usage_id}")
+                else:
+                    logger.debug(f"Original variant already exists for usage_id={usage_id}")
 
                 # Save segments if available, duration exceeds threshold, and feature is enabled
                 has_segments = False
@@ -1261,14 +1285,18 @@ class BotHandlers:
                     await request.status_message.edit_text("🔧 Оптимизирую аудио...")
                     logger.info("Starting audio preprocessing...")
 
-                # Get target provider for format optimization
+                # Get target provider and model for format optimization
                 target_provider = None
+                target_model = None
                 if self.transcription_router:
                     target_provider = self.transcription_router.get_active_provider_name()
-                    logger.debug(f"Target provider for preprocessing: {target_provider}")
+                    target_model = self.transcription_router.get_active_provider_model()
+                    logger.debug(
+                        f"Target provider for preprocessing: {target_provider}, model: {target_model}"
+                    )
 
                 processed_path = self.audio_handler.preprocess_audio(
-                    request.file_path, target_provider=target_provider
+                    request.file_path, target_provider=target_provider, target_model=target_model
                 )
 
                 if processed_path != request.file_path:
@@ -1334,7 +1362,191 @@ class BotHandlers:
 
             final_text = result.text
 
-            if needs_refinement and self.llm_service:
+            # === STRUCTURE STRATEGY: Check if structuring needed ===
+            needs_structuring = False
+            show_draft = False
+            emoji_level = 0
+
+            if hasattr(self.transcription_router.strategy, "requires_structuring"):
+                strategy = self.transcription_router.strategy
+                needs_structuring = strategy.requires_structuring(request.duration_seconds)
+
+                if needs_structuring:
+                    show_draft = strategy.should_show_draft(request.duration_seconds)
+                    emoji_level = strategy.get_emoji_level()
+                    logger.info(
+                        f"StructureStrategy: needs_structuring={needs_structuring}, "
+                        f"show_draft={show_draft}, emoji_level={emoji_level}"
+                    )
+
+            # === STRUCTURE STRATEGY FLOW ===
+            if needs_structuring and self.text_processor:
+                try:
+                    # Save ORIGINAL variant to DB
+                    async with get_session() as session:
+                        variant_repo = TranscriptionVariantRepository(session)
+                        await variant_repo.create(
+                            usage_id=request.usage_id,
+                            mode="original",
+                            text_content=result.text,
+                            length_level="default",
+                            emoji_level=0,
+                            timestamps_enabled=False,
+                            generated_by="whisper",
+                            llm_model=None,
+                            processing_time_seconds=result.processing_time,
+                        )
+                        logger.info(f"Saved original variant: usage_id={request.usage_id}")
+
+                    # STAGE 1: Show draft if needed (long audio)
+                    if show_draft:
+                        draft_text = result.text
+                        await self._send_draft_messages(request, draft_text)
+                        logger.info("Draft messages sent, starting structuring...")
+
+                    # STAGE 2: Structure with LLM
+                    structure_start = time.time()
+
+                    # Create structured text with emoji_level
+                    structured_text = await self.text_processor.create_structured(
+                        original_text=result.text,
+                        length_level="default",
+                        emoji_level=emoji_level,
+                    )
+
+                    structure_time = time.time() - structure_start
+                    logger.info(f"Structuring completed in {structure_time:.2f}s")
+
+                    final_text = structured_text
+
+                    # Save STRUCTURED variant to DB
+                    async with get_session() as session:
+                        variant_repo = TranscriptionVariantRepository(session)
+                        await variant_repo.create(
+                            usage_id=request.usage_id,
+                            mode="structured",
+                            text_content=structured_text,
+                            length_level="default",
+                            emoji_level=emoji_level,
+                            timestamps_enabled=False,
+                            generated_by="llm",
+                            llm_model=settings.llm_model,
+                            processing_time_seconds=structure_time,
+                        )
+                        logger.info(f"Saved structured variant: usage_id={request.usage_id}")
+
+                    # Update database with LLM processing time
+                    async with get_session() as session:
+                        usage_repo = UsageRepository(session)
+                        await usage_repo.update(
+                            usage_id=request.usage_id,
+                            llm_processing_time_seconds=structure_time,
+                        )
+                        logger.debug(
+                            f"LLM processing time saved to database: {structure_time:.2f}s"
+                        )
+
+                    # STAGE 3: Delete draft messages if any
+                    if show_draft:
+                        for msg in request.draft_messages:
+                            try:
+                                await msg.delete()
+                                logger.debug(f"Deleted draft message: request_id={request.id}")
+                            except Exception as e:
+                                logger.warning(f"Failed to delete draft message: {e}")
+                    else:
+                        # Short audio: delete status message
+                        try:
+                            await request.status_message.delete()
+                        except Exception as e:
+                            logger.warning(f"Failed to delete status message: {e}")
+
+                    # STAGE 4: Send structured result
+                    # Create keyboard
+                    keyboard = await self._create_interactive_state_and_keyboard(
+                        usage_id=request.usage_id,
+                        message_id=0,  # Will be updated after sending
+                        chat_id=request.user_message.chat_id,
+                        result=result,
+                        final_text=structured_text,
+                        active_mode="structured",  # Set initial mode to structured
+                        emoji_level=emoji_level,  # Set emoji level
+                    )
+
+                    # Send structured text (as text or file based on length)
+                    main_msg, file_msg = await self._send_transcription_result(
+                        request=request,
+                        text=structured_text,
+                        keyboard=keyboard,
+                        usage_id=request.usage_id,
+                        prefix="",
+                    )
+
+                    # Update state with correct message IDs
+                    if keyboard:
+                        async with get_session() as session:
+                            state_repo = TranscriptionStateRepository(session)
+                            state = await state_repo.get_by_usage_id(request.usage_id)
+                            if state:
+                                state.message_id = main_msg.message_id
+                                state.is_file_message = file_msg is not None
+                                state.file_message_id = file_msg.message_id if file_msg else None
+                                await state_repo.update(state)
+                                logger.debug(
+                                    f"Updated state: message_id={main_msg.message_id}, "
+                                    f"is_file={file_msg is not None}"
+                                )
+
+                except Exception as e:
+                    logger.error(f"Structuring failed: {e}", exc_info=True)
+
+                    # FALLBACK: Show original text
+                    logger.warning("Falling back to original text")
+                    final_text = result.text
+
+                    # Delete draft if any
+                    if show_draft:
+                        for msg in request.draft_messages:
+                            try:
+                                await msg.delete()
+                            except Exception:
+                                pass
+
+                    # Delete status message
+                    try:
+                        await request.status_message.delete()
+                    except Exception:
+                        pass
+
+                    # Send original with error notice
+                    keyboard = await self._create_interactive_state_and_keyboard(
+                        usage_id=request.usage_id,
+                        message_id=0,
+                        chat_id=request.user_message.chat_id,
+                        result=result,
+                        final_text=result.text,
+                    )
+
+                    main_msg, file_msg = await self._send_transcription_result(
+                        request=request,
+                        text=result.text + "\n\nℹ️ (структурирование недоступно)",
+                        keyboard=keyboard,
+                        usage_id=request.usage_id,
+                        prefix="",
+                    )
+
+                    # Update state
+                    if keyboard:
+                        async with get_session() as session:
+                            state_repo = TranscriptionStateRepository(session)
+                            state = await state_repo.get_by_usage_id(request.usage_id)
+                            if state:
+                                state.message_id = main_msg.message_id
+                                state.is_file_message = file_msg is not None
+                                state.file_message_id = file_msg.message_id if file_msg else None
+                                await state_repo.update(state)
+
+            elif needs_refinement and self.llm_service:
                 # === STAGE 1: Send draft (handles both short and long) ===
                 draft_text = result.text
                 await self._send_draft_messages(request, draft_text)

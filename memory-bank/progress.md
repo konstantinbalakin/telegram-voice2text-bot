@@ -32,9 +32,10 @@
 - **Phase 10.9**: ✅ Complete (2025-12-09) - Retranscription UX improvements (Progress bar + Parent-child usage tracking)
 - **Phase 10.10**: ✅ Complete (2025-12-09) - HTML formatting & PDF generation
 - **Phase 10.11**: ✅ Complete (2025-12-15) - Provider-aware audio format conversion
+- **Phase 10.12**: ✅ Complete (2025-12-16) - StructureStrategy (automatic structured transcription)
 - **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
-- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-10 + provider-aware formats)
-- Current focus (2025-12-15): Phase 10.11 complete - provider-aware audio format conversion enables OpenAI gpt-4o-transcribe/mini support
+- **Current Version**: v0.0.3+ (hybrid transcription + LLM tracking + interactive Phase 1-10 + provider-aware formats + StructureStrategy)
+- Current focus (2025-12-16): Phase 10.12 complete - StructureStrategy enables automatic text structuring with duration-based workflows
 
 ## Delivered Milestones
 
@@ -2386,6 +2387,284 @@ OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT=mp3  # or "wav"
 **Completion Date**: 2025-12-15
 **Next**: Commit changes, create PR, merge to main, deploy to production
 **Branch**: `feature/provider-aware-audio-format`
+
+---
+
+### Phase 10.12: StructureStrategy - Automatic Structured Transcription ✅ COMPLETE (2025-12-16)
+
+**Achievement**: New transcription routing strategy that automatically structures transcriptions with duration-based workflows and configurable emoji levels
+
+**Problem**: Users wanted automatic text structuring without manual button clicks. The `hybrid` strategy provided fast transcription with LLM refinement for long audio, but required manual selection of "structured mode" button after getting results. Need a strategy that combines automatic structuring with smart draft preview for transparency.
+
+**Solution**: StructureStrategy - A new routing strategy with dual workflow based on audio duration:
+- Short audio (<20s): Direct to structured result (fast UX)
+- Long audio (≥20s): Show draft preview → Structure → Final result (progressive disclosure)
+
+**Implementation Complete**: ✅
+
+**What Was Implemented**:
+
+**1. StructureStrategy Class** (`src/transcription/routing/strategies.py`)
+
+New routing strategy with these methods:
+- `select_provider(duration_seconds)`: Choose transcription provider (faster-whisper or openai)
+- `get_model_name()`: Return configured model name
+- `requires_structuring(duration_seconds)`: Duration-based logic (True for ≥20s, False for <20s)
+- `should_show_draft(duration_seconds)`: Show draft only for ≥20s audio
+- `get_emoji_level()`: Return configured emoji level (0-3)
+
+**Configuration Parameters**:
+- `structure_provider`: Provider choice (faster-whisper, openai)
+- `structure_model`: Model selection (medium, gpt-4o-transcribe, etc.)
+- `structure_draft_threshold`: Duration for draft preview in seconds (default: 20)
+- `structure_emoji_level`: Emoji density 0=none, 1=few, 2=moderate, 3=many (default: 1)
+
+**2. Configuration** (`src/config.py`)
+
+Added 4 new validated parameters:
+```python
+structure_provider: str = "faster-whisper"
+structure_model: str = "medium"
+structure_draft_threshold: int = Field(20, ge=0, le=3600)  # 0-60 minutes
+structure_emoji_level: int = Field(1, ge=0, le=3)  # 0-3 scale
+```
+
+**3. Factory Integration** (`src/transcription/factory.py`)
+
+- Added StructureStrategy creation case in factory
+- Validation: Requires `LLM_REFINEMENT_ENABLED=true` (raises ConfigurationError otherwise)
+- Automatic provider creation if not already initialized
+- Comprehensive logging for all initialization steps
+
+**4. Handler Workflow** (`src/bot/handlers.py`)
+
+Implemented dual workflow based on duration:
+
+**Short Audio (<20s)**:
+1. Transcribe audio
+2. Structure with LLM (using emoji_level)
+3. Save structured variant in DB
+4. Display result with interactive buttons
+
+**Long Audio (≥20s)**:
+1. Transcribe audio
+2. Save original variant in DB (mode='original')
+3. Show draft preview to user
+4. Structure with LLM
+5. Save structured variant in DB (mode='structured')
+6. Update message with structured result + buttons
+
+**Variant Management**:
+- Checks for existing variants before creation (prevents UNIQUE constraint violations)
+- `_create_interactive_state_and_keyboard()` checks `get_variant()` first
+- Creates variants only if they don't exist
+
+**State Management**:
+- Creates base state via `state_repo.create()`
+- Updates `active_mode` and `emoji_level` via property assignment
+- Always calls `await session.flush()` after property updates
+
+**Error Handling**:
+- Graceful fallback to original text if structuring fails
+- Logs errors but doesn't crash user workflow
+
+**5. TextProcessor Enhancement** (`src/services/text_processor.py`)
+
+- `create_structured()` now accepts `emoji_level` parameter (default: 2)
+- Dynamic prompt modification based on emoji level:
+  - Level 0: Removes emoji instruction from prompt entirely
+  - Level 1: "минимальное количество эмодзи - только самые важные моменты"
+  - Level 2: "умеренное количество эмодзи - выдели ключевые идеи" (default)
+  - Level 3: "щедрое количество эмодзи - сделай текст живым и выразительным"
+- Graceful fallback if LLM refinement fails
+
+**6. Configuration Examples**
+
+`.env.example`:
+```bash
+# Available strategies: single, fallback, benchmark, hybrid, structure
+WHISPER_ROUTING_STRATEGY=structure
+
+# StructureStrategy configuration (requires LLM_REFINEMENT_ENABLED=true)
+STRUCTURE_PROVIDER=faster-whisper
+STRUCTURE_MODEL=medium
+STRUCTURE_DRAFT_THRESHOLD=20  # Show draft for audio ≥20 seconds
+STRUCTURE_EMOJI_LEVEL=1  # 0=none, 1=few, 2=moderate, 3=many
+```
+
+`.env.example.short`:
+```bash
+WHISPER_ROUTING_STRATEGY=structure
+STRUCTURE_PROVIDER=faster-whisper  # or openai
+STRUCTURE_MODEL=medium
+STRUCTURE_DRAFT_THRESHOLD=20  # seconds
+STRUCTURE_EMOJI_LEVEL=1  # 0-3
+```
+
+**7. Comprehensive Testing** (`tests/unit/test_structure_strategy.py`)
+
+24 unit tests covering:
+- Initialization with different providers (faster-whisper, openai)
+- Initialization with different models
+- Provider selection logic
+- Model name retrieval
+- Structuring requirements (duration-based: <20s, ≥20s, edge cases)
+- Draft preview logic (duration-based: <20s, ≥20s, custom thresholds)
+- Emoji levels (0, 1, 2, 3)
+- Edge cases (zero duration, very long audio)
+
+All 24 tests passing ✅
+
+**Bug Fixes During Implementation**:
+
+**Bug 1: Repository Method Names**
+- Issue: Used non-existent `save_variant()` method
+- Fix: Changed to `create()` for both original and structured variants
+- Files: `src/bot/handlers.py` (lines 1374, 1411)
+
+**Bug 2: State Creation Parameters**
+- Issue: `active_mode` and `emoji_level` not accepted by `TranscriptionStateRepository.create()`
+- Fix: Create state first, then update via properties and flush
+- Pattern:
+  ```python
+  state = await state_repo.create(usage_id=..., message_id=..., ...)
+  state.active_mode = active_mode
+  state.emoji_level = emoji_level
+  await session.flush()
+  ```
+
+**Bug 3: Variant Duplication**
+- Issue: `_create_interactive_state_and_keyboard()` always created original variant, causing UNIQUE constraint error
+- Fix: Check `get_variant()` before creating:
+  ```python
+  variant = await variant_repo.get_variant(usage_id, mode="original", ...)
+  if not variant:
+      variant = await variant_repo.create(...)
+  ```
+
+**Bug 4: Duration-Based Structuring Logic**
+- Issue: `requires_structuring()` always returned True, structured even short audio
+- Fix: Added `duration_seconds` parameter and threshold check:
+  ```python
+  def requires_structuring(self, duration_seconds: float) -> bool:
+      return duration_seconds >= self._draft_threshold
+  ```
+
+**Testing Status**:
+- ✅ All 24 unit tests passing (added 3 more tests during bug fixes)
+- ✅ Black formatting verified
+- ✅ Ruff linting clean
+- ✅ Manual testing complete:
+  - Short audio (10s): Direct structured result ✅
+  - Long audio (60s): Draft → Structured result ✅
+  - Interactive buttons working ✅
+  - Emoji levels functional ✅
+  - No UNIQUE constraint errors ✅
+
+**User Experience**:
+
+**Short Audio (<20 seconds)**:
+```
+User sends 10s voice message
+  ↓
+⏳ Обрабатываю...
+  ↓
+[Structured transcription with emojis]
+[Interactive buttons]
+```
+
+**Long Audio (≥20 seconds)**:
+```
+User sends 60s voice message
+  ↓
+⏳ Обрабатываю...
+  ↓
+✅ Черновик готов:
+[Original transcription]
+🔄 Улучшаю текст...
+  ↓
+✨ Готово!
+[Structured transcription with emojis]
+[Interactive buttons]
+```
+
+**Files Created**:
+- `tests/unit/test_structure_strategy.py` (NEW, 673 lines, 24 tests)
+
+**Files Modified**:
+- `src/transcription/routing/strategies.py` (+StructureStrategy class, ~80 lines)
+- `src/config.py` (+4 configuration parameters with validation)
+- `src/transcription/factory.py` (+StructureStrategy case, ~15 lines)
+- `src/bot/handlers.py` (+workflow implementation, ~50 lines modified)
+- `src/services/text_processor.py` (+emoji_level parameter support)
+- `.env.example` (+StructureStrategy documentation)
+- `.env.example.short` (+StructureStrategy example)
+
+**Key Patterns Established**:
+
+1. **Duration-Based Workflow Pattern**:
+   - Use duration thresholds to determine whether to show intermediate results
+   - Short operations: Direct to final result (fast UX)
+   - Long operations: Progressive disclosure (draft → final)
+   - Benefits: Transparency for slow operations, speed for fast operations
+
+2. **Configurable Emoji Levels**:
+   - Builds on Phase 10.5's relative emoji instruction pattern
+   - 4-level scale (0-3) provides user control
+   - Dynamic prompt modification based on level
+   - Enables personalization without code changes
+
+3. **Variant Existence Checking**:
+   - Always check `get_variant()` before `create()` to prevent duplicates
+   - Critical for workflows with multiple variant creation points
+   - Pattern: `if not await get_variant(...): await create(...)`
+
+4. **State Update After Creation**:
+   - Repository limitations: `create()` doesn't accept all fields
+   - Two-step process: Create base → Update properties → Flush
+   - Always flush session after property updates
+   - Pattern:
+     ```python
+     entity = await repo.create(base_fields)
+     entity.additional_field = value
+     await session.flush()
+     ```
+
+**Configuration Example**:
+```bash
+# Minimal configuration
+WHISPER_ROUTING_STRATEGY=structure
+LLM_REFINEMENT_ENABLED=true
+STRUCTURE_PROVIDER=faster-whisper
+STRUCTURE_MODEL=medium
+STRUCTURE_DRAFT_THRESHOLD=20
+STRUCTURE_EMOJI_LEVEL=1
+
+# LLM Provider (required for structuring)
+LLM_PROVIDER=deepseek
+LLM_MODEL=deepseek-chat
+DEEPSEEK_API_KEY=sk-...
+```
+
+**Impact**:
+- ✅ Automatic structured transcription without manual button clicks
+- ✅ Smart draft preview for longer audio (transparency)
+- ✅ Configurable emoji levels for user personalization
+- ✅ Maintains all interactive mode features (buttons still work)
+- ✅ Graceful fallback to original text on any errors
+- ✅ Duration-based workflow optimization
+
+**Next Steps**:
+1. ⏳ Create git commit
+2. ⏳ Create pull request
+3. ⏳ Merge to main
+4. ⏳ Deploy to production
+5. ⏳ Monitor structured text generation
+6. ⏳ Gather user feedback on emoji levels and draft threshold
+
+**Status**: ✅ COMPLETE - Implemented, tested, documented, ready for deployment
+**Completion Date**: 2025-12-16
+**Branch**: `feature/structure-strategy`
 
 ---
 

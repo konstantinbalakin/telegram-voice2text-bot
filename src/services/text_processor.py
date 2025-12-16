@@ -21,7 +21,9 @@ class TextProcessor:
         """
         self.llm_service = llm_service
 
-    async def create_structured(self, original_text: str, length_level: str = "default") -> str:
+    async def create_structured(
+        self, original_text: str, length_level: str = "default", emoji_level: int = 0
+    ) -> str:
         """
         Structure raw transcription text.
 
@@ -31,6 +33,7 @@ class TextProcessor:
         Args:
             original_text: Raw transcription text
             length_level: Length level (Phase 3 - not yet implemented)
+            emoji_level: Emoji level (0=none, 1=few, 2=moderate, 3=many)
 
         Returns:
             Structured text with proper formatting
@@ -63,11 +66,34 @@ class TextProcessor:
 6. НЕ добавлять ничего от себя, только исправления
 7. НЕ сокращать текст (это не резюме, а структурирование)
 8. Сохранить стиль речи (неформальный/формальный)
+9. {emoji_instruction}
 
 Верни ТОЛЬКО исправленный текст, без пояснений и комментариев."""
 
-        prompt = prompt_template.format(text=original_text)
-        logger.info(f"Creating structured text ({len(original_text)} chars)...")
+        # Modify prompt based on emoji_level
+        if emoji_level == 0:
+            emoji_instruction = "НЕ используй эмодзи"
+        elif emoji_level == 1:
+            emoji_instruction = (
+                "Добавь немного эмодзи в тему, но чтобы не перегружало. "
+                "И не используй несколько эмодзи подряд"
+            )
+        elif emoji_level == 2:
+            emoji_instruction = "Добавь эмодзи в тему умеренно (1-2 на абзац)"
+        elif emoji_level == 3:
+            emoji_instruction = "Добавь эмодзи активно для выразительности"
+        else:
+            # Default to level 1 for unknown values
+            emoji_instruction = (
+                "Добавь немного эмодзи в тему, но чтобы не перегружало. "
+                "И не используй несколько эмодзи подряд"
+            )
+            logger.warning(f"Unknown emoji_level: {emoji_level}, using default (1)")
+
+        prompt = prompt_template.format(text=original_text, emoji_instruction=emoji_instruction)
+        logger.info(
+            f"Creating structured text ({len(original_text)} chars, emoji_level={emoji_level})..."
+        )
 
         try:
             # Use custom prompt for structuring

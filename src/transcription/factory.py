@@ -15,6 +15,7 @@ from src.transcription.routing.strategies import (
     HybridStrategy,
     RoutingStrategy,
     SingleProviderStrategy,
+    StructureStrategy,
 )
 
 logger = logging.getLogger(__name__)
@@ -338,10 +339,70 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
             f"long(>={short_threshold}s)={draft_provider_name}/{settings.hybrid_draft_model}"
         )
 
+    elif strategy_name == "structure":
+        # Validate LLM is enabled
+        if not settings.llm_refinement_enabled:
+            raise ValueError(
+                "StructureStrategy requires LLM to be enabled. "
+                "Set LLM_REFINEMENT_ENABLED=true in .env"
+            )
+
+        provider_name = settings.structure_provider
+        model_name = settings.structure_model
+
+        logger.info(
+            f"Creating StructureStrategy: provider={provider_name}, "
+            f"model={model_name}, "
+            f"draft_threshold={settings.structure_draft_threshold}s, "
+            f"emoji_level={settings.structure_emoji_level}"
+        )
+
+        # For structure strategy, create provider based on configured provider
+        # (similar to single strategy, but we don't use the WHISPER_PROVIDERS list)
+        if provider_name not in providers:
+            # Provider not yet created, create it now
+            if provider_name == "faster-whisper":
+                providers["faster-whisper"] = FastWhisperProvider(
+                    model_size=model_name,
+                    device=settings.faster_whisper_device,
+                    compute_type=settings.faster_whisper_compute_type,
+                    beam_size=settings.faster_whisper_beam_size,
+                    vad_filter=settings.faster_whisper_vad_filter,
+                )
+                providers["faster-whisper"].initialize()
+                logger.info(f"✓ Configured provider: faster-whisper (model={model_name})")
+            elif provider_name == "openai":
+                if not settings.openai_api_key:
+                    raise ValueError("OpenAI provider configured but OPENAI_API_KEY not set")
+                providers["openai"] = OpenAIProvider(
+                    api_key=settings.openai_api_key,
+                    model=model_name,
+                    timeout=settings.openai_timeout,
+                )
+                providers["openai"].initialize()
+                logger.info(f"✓ Configured provider: openai (model={model_name})")
+            else:
+                raise ValueError(
+                    f"Unknown provider '{provider_name}' for structure strategy. "
+                    f"Supported: faster-whisper, openai"
+                )
+
+        strategy = StructureStrategy(
+            provider_name=provider_name,
+            model=model_name,
+            draft_threshold_seconds=settings.structure_draft_threshold,
+            emoji_level=settings.structure_emoji_level,
+        )
+        logger.info(
+            f"✓ Structure strategy: provider={provider_name}, model={model_name}, "
+            f"draft_threshold={settings.structure_draft_threshold}s, "
+            f"emoji_level={settings.structure_emoji_level}"
+        )
+
     else:
         raise ValueError(
             f"Unknown routing strategy: {strategy_name}. "
-            f"Supported: single, fallback, benchmark, hybrid"
+            f"Supported: single, fallback, benchmark, hybrid, structure"
         )
 
     return strategy

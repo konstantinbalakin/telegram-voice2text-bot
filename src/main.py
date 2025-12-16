@@ -149,6 +149,16 @@ async def main() -> None:
     else:
         logger.info("Telethon Client API disabled (max file size: 20 MB)")
 
+    # Create text processor for interactive modes and StructureStrategy
+    text_processor = None
+    if llm_service:
+        text_processor = TextProcessor(llm_service)
+        logger.info("TextProcessor created for interactive modes")
+    else:
+        logger.warning(
+            "LLM service not available - structured mode will be disabled even if flag is set"
+        )
+
     # Create bot handlers
     bot_handlers = BotHandlers(
         whisper_service=transcription_router,
@@ -156,6 +166,7 @@ async def main() -> None:
         queue_manager=queue_manager,
         llm_service=llm_service,
         telegram_client=telegram_client,
+        text_processor=text_processor,
     )
 
     # Build telegram bot application
@@ -184,16 +195,6 @@ async def main() -> None:
 
     # Register callback query handler for interactive transcription
     if settings.interactive_mode_enabled:
-        # Create text processor for interactive modes (Phase 2+)
-        text_processor = None
-        if llm_service:
-            text_processor = TextProcessor(llm_service)
-            logger.info("TextProcessor created for interactive modes")
-        else:
-            logger.warning(
-                "LLM service not available - structured mode will be disabled even if flag is set"
-            )
-
         # Create callback handlers with repositories (they need session, created on-demand)
         async def callback_query_wrapper(
             update: object, context: ContextTypes.DEFAULT_TYPE
