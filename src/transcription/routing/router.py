@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from src.transcription.models import (
     BenchmarkConfig,
@@ -105,7 +105,7 @@ class TranscriptionRouter:
                 provider = self.providers[provider_name]
                 # Check if provider has model attribute (e.g., OpenAIProvider)
                 if hasattr(provider, "model"):
-                    return provider.model
+                    return cast(str, provider.model)
         return None
 
     async def transcribe(

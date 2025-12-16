@@ -54,6 +54,27 @@ class RoutingStrategy(ABC):
         """Check if this is benchmark strategy (special handling)."""
         return False
 
+    def should_show_draft(self, duration_seconds: float) -> bool:
+        """
+        Check if should show draft before structuring.
+
+        Args:
+            duration_seconds: Audio duration in seconds
+
+        Returns:
+            False for most strategies (only StructureStrategy overrides this)
+        """
+        return False
+
+    def get_emoji_level(self) -> int:
+        """
+        Get emoji level for structuring.
+
+        Returns:
+            Default emoji level (1) for most strategies
+        """
+        return 1
+
 
 class SingleProviderStrategy(RoutingStrategy):
     """Always use one configured provider."""
