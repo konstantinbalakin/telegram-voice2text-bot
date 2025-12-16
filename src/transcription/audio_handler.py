@@ -324,6 +324,7 @@ class AudioHandler:
         self,
         audio_path: Path,
         target_provider: Optional[str] = None,
+        target_model: Optional[str] = None,
     ) -> Path:
         """
         Apply intelligent audio preprocessing pipeline.
@@ -342,6 +343,7 @@ class AudioHandler:
         Args:
             audio_path: Original audio file
             target_provider: Target provider name for format optimization (optional)
+            target_model: Target model name for format optimization (optional)
 
         Returns:
             Path to preprocessed audio (or original if no preprocessing needed)
@@ -352,6 +354,7 @@ class AudioHandler:
         logger.debug(
             f"preprocess_audio: input={audio_path.name}, "
             f"provider={target_provider}, "
+            f"model={target_model}, "
             f"mono_enabled={settings.audio_convert_to_mono}, "
             f"speed={settings.audio_speed_multiplier}x"
         )
@@ -361,7 +364,7 @@ class AudioHandler:
         # Format optimization based on provider
         if target_provider:
             try:
-                path = self._optimize_for_provider(path, target_provider)
+                path = self._optimize_for_provider(path, target_provider, target_model)
                 if path != audio_path:
                     logger.info(f"Optimized for {target_provider}: {path.name}")
             except Exception as e:
@@ -520,6 +523,7 @@ class AudioHandler:
         self,
         input_path: Path,
         provider_name: str,
+        model_name: Optional[str] = None,
     ) -> Path:
         """
         Optimize audio format for specific provider.
@@ -527,6 +531,7 @@ class AudioHandler:
         Args:
             input_path: Input audio file
             provider_name: Target provider (e.g., 'openai', 'faster-whisper')
+            model_name: Target model name (optional, falls back to settings)
 
         Returns:
             Path to optimized audio file (or original if no optimization needed)
@@ -536,7 +541,7 @@ class AudioHandler:
         # OpenAI provider optimization
         if provider_name == "openai":
             # Determine if conversion needed based on model
-            model = settings.openai_model
+            model = model_name or settings.openai_model
             required_formats = OPENAI_FORMAT_REQUIREMENTS.get(model)
 
             if required_formats:

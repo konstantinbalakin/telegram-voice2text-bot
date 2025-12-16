@@ -166,6 +166,27 @@ class Settings(BaseSettings):
         default="medium", description="Model for quality transcription"
     )
 
+    # Structure Strategy Configuration (WHISPER_ROUTING_STRATEGY=structure)
+    structure_provider: str = Field(
+        default="faster-whisper",
+        description="Provider for structure strategy (faster-whisper, openai)",
+    )
+    structure_model: str = Field(
+        default="medium", description="Model for structure strategy transcription"
+    )
+    structure_draft_threshold: int = Field(
+        default=20,
+        ge=0,
+        le=3600,
+        description="Duration threshold (seconds) for showing draft before structuring",
+    )
+    structure_emoji_level: int = Field(
+        default=1,
+        ge=0,
+        le=3,
+        description="Emoji level for structured text (0=none, 1=few, 2=moderate, 3=many)",
+    )
+
     # Audio Preprocessing Configuration
     audio_convert_to_mono: bool = Field(
         default=False, description="Convert audio to mono before transcription"

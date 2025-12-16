@@ -1,10 +1,10 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status (2025-12-15)
+## Current Status (2025-12-16)
 
 **Phase**: Phase 10 - Interactive Transcription Processing 🚀
-**Stage**: Phase 10.11 COMPLETE ✅ (Provider-Aware Audio Format Conversion)
-**Branch**: feature/provider-aware-audio-format (ready for PR)
+**Stage**: Phase 10.12 COMPLETE ✅ (StructureStrategy - Auto-Structured Transcription)
+**Branch**: feature/structure-strategy (ready for PR)
 **Production Version**: v0.0.3+
 **Production Status**: ✅ OPERATIONAL
 
@@ -37,6 +37,195 @@
 ---
 
 ## Recent Developments (Last 2 Weeks)
+
+### ✅ Phase 10.12: StructureStrategy - Auto-Structured Transcription COMPLETE (2025-12-16)
+
+**Achievement**: New routing strategy for automatic text structuring with duration-based workflows and configurable emoji levels
+
+**Problem Solved**:
+Users wanted automatic text structuring without manual button clicks. The hybrid strategy worked well, but required manual selection of structured mode after transcription. Need a new strategy that automatically structures text while preserving draft preview for longer audio.
+
+**Implementation Complete**: ✅
+
+**What Was Implemented**:
+
+1. **StructureStrategy Class** (`src/transcription/routing/strategies.py`):
+   - New routing strategy: Automatic structured transcription
+   - Dual workflow based on duration:
+     - Short audio (<20s): Transcription → Direct structured result
+     - Long audio (≥20s): Transcription → Draft preview → Structured result
+   - Methods implemented:
+     - `select_provider()` - Choose transcription provider (faster-whisper or openai)
+     - `get_model_name()` - Select appropriate model
+     - `requires_structuring(duration_seconds)` - Duration-based logic
+     - `should_show_draft(duration_seconds)` - Show draft only for ≥20s
+     - `get_emoji_level()` - Configurable emoji levels (0-3)
+   - Configuration parameters:
+     - `structure_provider` - Provider choice (faster-whisper, openai)
+     - `structure_model` - Model selection (medium, gpt-4o-transcribe, etc.)
+     - `structure_draft_threshold` - Duration threshold for draft preview (default: 20s)
+     - `structure_emoji_level` - Emoji density (0=none, 1=few, 2=moderate, 3=many)
+
+2. **Configuration Updates** (`src/config.py`):
+   - Added 4 new parameters with validation:
+     - `structure_provider: str = "faster-whisper"`
+     - `structure_model: str = "medium"`
+     - `structure_draft_threshold: int = 20` (0-3600 validation)
+     - `structure_emoji_level: int = 1` (0-3 validation)
+   - Environment variable examples documented
+
+3. **Factory Integration** (`src/transcription/factory.py`):
+   - Added StructureStrategy creation in factory
+   - Validation: Requires `LLM_REFINEMENT_ENABLED=true`
+   - Automatic provider creation if not already initialized
+   - Comprehensive logging for initialization steps
+
+4. **Handler Processing** (`src/bot/handlers.py`):
+   - Full workflow implementation:
+     - Short audio: Transcription → Structure → Save structured variant
+     - Long audio: Transcription → Save original variant → Show draft → Structure → Save structured variant → Update message
+   - Intelligent variant management:
+     - Checks for existing variants before creation (prevents duplicates)
+     - Creates structured variant with active_mode="structured"
+   - State management:
+     - Updates state after creation (not during, due to repository limitations)
+     - Sets active_mode and emoji_level correctly
+   - Fallback on errors: Returns original text if structuring fails
+
+5. **TextProcessor Enhancement** (`src/services/text_processor.py`):
+   - `create_structured()` now accepts `emoji_level` parameter
+   - Dynamic prompt modification based on emoji level:
+     - Level 0: Removes emoji instruction entirely
+     - Level 1: "минимальное количество эмодзи"
+     - Level 2: "умеренное количество эмодзи" (default)
+     - Level 3: "щедрое количество эмодзи"
+   - Graceful fallback if LLM refinement fails
+
+6. **Configuration Examples** (`.env.example`, `.env.example.short`):
+   - Added StructureStrategy to list of available strategies
+   - Documented all 4 new environment variables
+   - Provided usage examples with descriptions
+   - Updated strategy list: single, fallback, benchmark, hybrid, structure
+
+7. **Comprehensive Testing** (`tests/unit/test_structure_strategy.py`):
+   - 24 unit tests covering all functionality:
+     - Initialization with different configurations
+     - Provider selection logic
+     - Model name retrieval
+     - Structuring requirements (duration-based)
+     - Draft preview logic (duration-based)
+     - Emoji level handling (4 levels)
+     - Edge cases (zero duration, very long audio)
+   - All 24 tests passing ✅
+
+**Bug Fixes During Implementation**:
+
+1. **Repository Method Names**:
+   - Fixed: `save_variant()` → `create()` for TranscriptionVariantRepository
+   - Updated both original and structured variant saving
+
+2. **State Creation Parameters**:
+   - Fixed: `active_mode` and `emoji_level` not accepted by `create()`
+   - Solution: Create state first, then update fields via state properties
+   - Pattern: `state.active_mode = value; await session.flush()`
+
+3. **Variant Duplication Prevention**:
+   - Problem: `_create_interactive_state_and_keyboard()` always created original variant
+   - Solution: Check existence first via `get_variant()` before creating
+   - Impact: Prevents UNIQUE constraint violations
+
+4. **Duration-Based Structuring Logic**:
+   - Problem: `requires_structuring()` always returned True
+   - Solution: Added `duration_seconds` parameter and threshold check
+   - Behavior: Short audio (<20s) bypasses structuring, long audio (≥20s) structures
+
+**Testing & Quality**:
+- ✅ All 24 unit tests passing (was 21, added 3 more during fixes)
+- ✅ Black formatting verified
+- ✅ Ruff linting clean
+- ✅ Manual testing completed with both short and long audio
+- ✅ Structured text generation working
+- ✅ Interactive buttons appearing correctly
+- ✅ Emoji levels functioning as expected
+
+**User Experience**:
+
+Short audio (<20 seconds):
+```
+User sends 10s voice message
+  ↓
+Transcription → Structured text → Result displayed
+(No draft, direct to final)
+```
+
+Long audio (≥20 seconds):
+```
+User sends 60s voice message
+  ↓
+Transcription → Draft preview
+  ↓
+"✨ Улучшаю текст..."
+  ↓
+Structured text → Result displayed with buttons
+```
+
+**Files Created**:
+- `tests/unit/test_structure_strategy.py` (NEW, 24 tests)
+
+**Files Modified**:
+- `src/transcription/routing/strategies.py` (+StructureStrategy class)
+- `src/config.py` (+4 configuration parameters)
+- `src/transcription/factory.py` (+StructureStrategy creation)
+- `src/bot/handlers.py` (+workflow implementation)
+- `src/services/text_processor.py` (+emoji_level support)
+- `.env.example` (+StructureStrategy documentation)
+- `.env.example.short` (+brief configuration example)
+
+**Key Patterns Established**:
+
+1. **Duration-Based Workflow**: Use duration threshold to determine whether to show intermediate results
+   - Short audio: Direct to final result (fast UX)
+   - Long audio: Show draft then refine (progressive disclosure)
+
+2. **Configurable Emoji Levels**: LLM-based feature with user control (0-3 scale)
+   - Builds on Phase 10.5 relative emoji instruction pattern
+   - Enables personalization without code changes
+
+3. **Variant Existence Checking**: Always check before creating to prevent duplicates
+   - Critical for workflows that may create variants at multiple stages
+   - Pattern: `get_variant() → if not exists → create()`
+
+4. **State Update After Creation**: Repository limitations require two-step process
+   - First: Create base state
+   - Second: Update additional fields via model properties
+   - Always flush after property updates
+
+**Configuration**:
+```bash
+# Enable StructureStrategy
+WHISPER_ROUTING_STRATEGY=structure
+LLM_REFINEMENT_ENABLED=true  # Required!
+
+# Strategy configuration
+STRUCTURE_PROVIDER=faster-whisper
+STRUCTURE_MODEL=medium
+STRUCTURE_DRAFT_THRESHOLD=20  # seconds
+STRUCTURE_EMOJI_LEVEL=1  # 0=none, 1=few, 2=moderate, 3=many
+```
+
+**Impact**:
+- ✅ Automatic structured transcription without manual buttons
+- ✅ Smart draft preview for longer audio
+- ✅ Configurable emoji levels for personalization
+- ✅ Maintains all interactive mode features (buttons work)
+- ✅ Fallback to original text on any errors
+
+**Status**: ✅ COMPLETE - Tested, documented, ready for deployment
+**Completion Date**: 2025-12-16
+**Next**: Commit changes, create PR, merge, deploy to production
+**Branch**: feature/structure-strategy
+
+---
 
 ### ✅ Phase 10.10: HTML Formatting & PDF Generation COMPLETE (2025-12-09)
 
@@ -921,23 +1110,20 @@ Text updates:
 
 ## Next Steps
 
-### Immediate (Phase 10.10 Testing & Deployment)
-1. ⏳ Manual testing with real bot:
-   - Test short voice message with HTML formatting in Telegram
-   - Test long voice message (>3000 chars) with PDF generation
-   - Verify Cyrillic text rendering in PDFs
-   - Test all interactive modes with HTML formatting (structured, summary, emoji, length)
-   - Test retranscription with PDF generation
-   - Verify graceful fallback to TXT if PDF fails
-2. ⏳ Push feature branch to GitHub and create PR
-3. ⏳ Merge to main after testing
-4. ⏳ Deploy to production
-5. ⏳ Monitor Docker image size increase (~100MB acceptable)
-6. ⏳ Verify production PDF generation works with system dependencies
+### Immediate (Phase 10.12 Deployment)
+1. ✅ Implementation complete
+2. ✅ Testing complete (24 unit tests + manual testing)
+3. ⏳ Update Memory Bank documentation (in progress)
+4. ⏳ Create commit with conventional commit message
+5. ⏳ Create pull request
+6. ⏳ Merge to main
+7. ⏳ Deploy to production
+8. ⏳ Monitor structured text generation in production
+9. ⏳ Gather user feedback on emoji levels and draft threshold
 
 ### Future Phases (Post Phase 10)
-- **Phase 10.11** (optional): Custom CSS styling for PDFs (user feedback: "Может потом улучшим")
-- **Phase 10.12** (optional): Retranscription history UI (show user their retranscription chain)
+- **Phase 10.13** (optional): Custom CSS styling for PDFs (user feedback: "Может потом улучшим")
+- **Phase 10.14** (optional): Retranscription history UI (show user their retranscription chain)
 - **Phase 11**: Analytics dashboard for usage metrics
 - **Phase 12**: User quotas and billing system
 - **Phase 13**: Multi-language support

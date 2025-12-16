@@ -54,6 +54,27 @@ class RoutingStrategy(ABC):
         """Check if this is benchmark strategy (special handling)."""
         return False
 
+    def should_show_draft(self, duration_seconds: float) -> bool:
+        """
+        Check if should show draft before structuring.
+
+        Args:
+            duration_seconds: Audio duration in seconds
+
+        Returns:
+            False for most strategies (only StructureStrategy overrides this)
+        """
+        return False
+
+    def get_emoji_level(self) -> int:
+        """
+        Get emoji level for structuring.
+
+        Returns:
+            Default emoji level (1) for most strategies
+        """
+        return 1
+
 
 class SingleProviderStrategy(RoutingStrategy):
     """Always use one configured provider."""
@@ -275,3 +296,110 @@ class HybridStrategy(RoutingStrategy):
             True if refinement needed (long audio)
         """
         return duration >= self.short_threshold
+
+
+class StructureStrategy(RoutingStrategy):
+    """
+    Strategy with automatic text structuring via LLM.
+
+    Process:
+    1. Transcribes audio with single model (similar to single mode)
+    2. For short audio (<draft_threshold): Shows original result (no structuring)
+    3. For long audio (≥draft_threshold):
+       - Saves original variant (mode='original') to DB
+       - Shows draft
+       - Structures with LLM
+       - Saves structured variant (mode='structured') to DB
+       - Shows structured result
+    4. On structuring error: Falls back to original
+
+    Attributes:
+        provider_name: Transcription provider (faster-whisper, openai)
+        model: Model for transcription
+        draft_threshold: Duration threshold in seconds for structuring (default: 20s)
+        emoji_level: Emoji level for structuring (0=none, 1=few, 2=moderate, 3=many)
+    """
+
+    def __init__(
+        self,
+        provider_name: str,
+        model: str,
+        draft_threshold_seconds: int = 20,
+        emoji_level: int = 1,
+    ):
+        """
+        Initialize structure strategy.
+
+        Args:
+            provider_name: Provider to use (faster-whisper, openai)
+            model: Model name (medium, large-v3, whisper-1)
+            draft_threshold_seconds: Duration threshold for showing draft (default: 20)
+            emoji_level: Emoji level for structuring (0-3, default: 1)
+        """
+        self.provider_name = provider_name
+        self.model = model
+        self.draft_threshold = draft_threshold_seconds
+        self.emoji_level = emoji_level
+
+        logger.info(
+            f"StructureStrategy initialized: provider={provider_name}, "
+            f"model={model}, draft_threshold={draft_threshold_seconds}s, "
+            f"emoji_level={emoji_level}"
+        )
+
+    async def select_provider(
+        self,
+        context: TranscriptionContext,
+        providers: dict[str, TranscriptionProvider],
+    ) -> str:
+        """
+        Always return configured provider.
+
+        Args:
+            context: Transcription context
+            providers: Available providers
+
+        Returns:
+            Provider name to use
+
+        Raises:
+            ValueError: If provider not available
+        """
+        if self.provider_name not in providers:
+            raise ValueError(
+                f"Provider '{self.provider_name}' not available. "
+                f"Available: {list(providers.keys())}"
+            )
+        return self.provider_name
+
+    def get_model_name(self) -> str:
+        """Get model name for transcription."""
+        return self.model
+
+    def requires_structuring(self, duration_seconds: float) -> bool:
+        """
+        Check if strategy requires automatic structuring.
+
+        Args:
+            duration_seconds: Audio duration in seconds
+
+        Returns:
+            True if duration >= draft_threshold (only long audio needs structuring)
+        """
+        return duration_seconds >= self.draft_threshold
+
+    def should_show_draft(self, duration_seconds: float) -> bool:
+        """
+        Check if should show draft before structuring.
+
+        Args:
+            duration_seconds: Audio duration in seconds
+
+        Returns:
+            True if duration >= draft_threshold
+        """
+        return duration_seconds >= self.draft_threshold
+
+    def get_emoji_level(self) -> int:
+        """Get emoji level for structuring."""
+        return self.emoji_level

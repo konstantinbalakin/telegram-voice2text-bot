@@ -131,9 +131,9 @@ def create_transcription_keyboard(
         else:
             # Single button (not in structured mode, or length variations disabled)
             label = (
-                "🪄 Сделать красиво (вы здесь)"
+                "📝 Структурировать (вы здесь)"
                 if state.active_mode == "structured"
-                else "🪄 Сделать красиво"
+                else "📝 Структурировать"
             )
             keyboard.append(
                 [

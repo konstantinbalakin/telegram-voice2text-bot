@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from src.transcription.models import (
     BenchmarkConfig,
@@ -54,7 +54,7 @@ class TranscriptionRouter:
         Get name of the active provider for preprocessing.
 
         For strategies that can determine provider without context (SingleProviderStrategy,
-        FallbackStrategy), returns the primary provider name.
+        FallbackStrategy, StructureStrategy), returns the primary provider name.
         For context-dependent strategies (HybridStrategy), returns None.
 
         Returns:
@@ -63,6 +63,7 @@ class TranscriptionRouter:
         from src.transcription.routing.strategies import (
             FallbackStrategy,
             SingleProviderStrategy,
+            StructureStrategy,
         )
 
         # For simple strategies, we can determine the provider synchronously
@@ -70,11 +71,42 @@ class TranscriptionRouter:
             return self.strategy.provider_name
         elif isinstance(self.strategy, FallbackStrategy):
             return self.strategy.primary
+        elif isinstance(self.strategy, StructureStrategy):
+            return self.strategy.provider_name
         else:
             # For complex strategies (HybridStrategy, BenchmarkStrategy),
             # provider selection depends on runtime context
             # Return None to skip provider-specific optimization
             return None
+
+    def get_active_provider_model(self) -> Optional[str]:
+        """
+        Get model name of the active provider for preprocessing.
+
+        For strategies that can determine model without context (SingleProviderStrategy,
+        StructureStrategy), returns the model name.
+        For other strategies, returns None.
+
+        Returns:
+            Model name or None if determination requires runtime context
+        """
+        from src.transcription.routing.strategies import (
+            SingleProviderStrategy,
+            StructureStrategy,
+        )
+
+        # For strategies with fixed model, we can determine it synchronously
+        if isinstance(self.strategy, StructureStrategy):
+            return self.strategy.model
+        elif isinstance(self.strategy, SingleProviderStrategy):
+            # Try to get model from provider if available
+            provider_name = self.strategy.provider_name
+            if provider_name in self.providers:
+                provider = self.providers[provider_name]
+                # Check if provider has model attribute (e.g., OpenAIProvider)
+                if hasattr(provider, "model"):
+                    return cast(str, provider.model)
+        return None
 
     async def transcribe(
         self,
