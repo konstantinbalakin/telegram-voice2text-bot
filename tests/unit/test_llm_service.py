@@ -75,8 +75,8 @@ class TestDeepSeekProvider:
             assert len(call_args[1]["json"]["messages"]) == 2
 
     @pytest.mark.asyncio
-    async def test_refine_text_truncates_long_text(self, deepseek_provider):
-        """Test that overly long text is truncated."""
+    async def test_refine_text_handles_long_text(self, deepseek_provider):
+        """Test that long text is sent to API without truncation."""
         long_text = "a" * 15000
 
         mock_response = Mock()
@@ -91,10 +91,10 @@ class TestDeepSeekProvider:
 
             await deepseek_provider.refine_text(long_text, "test prompt")
 
-            # Verify text was truncated in request
+            # Verify full text was sent in request
             call_args = mock_post.call_args
             sent_text = call_args[1]["json"]["messages"][1]["content"]
-            assert len(sent_text) == 10000
+            assert len(sent_text) == 15000
 
     @pytest.mark.asyncio
     async def test_refine_text_timeout(self, deepseek_provider):

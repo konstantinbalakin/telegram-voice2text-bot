@@ -326,6 +326,7 @@ class StructureStrategy(RoutingStrategy):
         model: str,
         draft_threshold_seconds: int = 20,
         emoji_level: int = 1,
+        fallback_provider_name: Optional[str] = None,
     ):
         """
         Initialize structure strategy.
@@ -335,16 +336,18 @@ class StructureStrategy(RoutingStrategy):
             model: Model name (medium, large-v3, whisper-1)
             draft_threshold_seconds: Duration threshold for showing draft (default: 20)
             emoji_level: Emoji level for structuring (0-3, default: 1)
+            fallback_provider_name: Fallback provider if primary fails (optional)
         """
         self.provider_name = provider_name
         self.model = model
         self.draft_threshold = draft_threshold_seconds
         self.emoji_level = emoji_level
+        self.fallback_provider = fallback_provider_name
 
         logger.info(
             f"StructureStrategy initialized: provider={provider_name}, "
             f"model={model}, draft_threshold={draft_threshold_seconds}s, "
-            f"emoji_level={emoji_level}"
+            f"emoji_level={emoji_level}, fallback={fallback_provider_name}"
         )
 
     async def select_provider(
@@ -403,3 +406,21 @@ class StructureStrategy(RoutingStrategy):
     def get_emoji_level(self) -> int:
         """Get emoji level for structuring."""
         return self.emoji_level
+
+    def supports_fallback(self) -> bool:
+        """Check if strategy supports fallback to alternative provider."""
+        return bool(self.fallback_provider)
+
+    async def get_fallback(self, failed_provider: str) -> Optional[str]:
+        """
+        Get fallback provider name after failure.
+
+        Args:
+            failed_provider: Name of provider that failed
+
+        Returns:
+            Fallback provider name or None
+        """
+        if failed_provider == self.provider_name:
+            return self.fallback_provider
+        return None

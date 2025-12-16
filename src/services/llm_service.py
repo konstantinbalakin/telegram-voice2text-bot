@@ -125,11 +125,6 @@ class DeepSeekProvider(LLMProvider):
             f"prompt_length={len(prompt)}, api_key={api_key_masked}"
         )
 
-        # Truncate if too long (max 10,000 chars)
-        if len(text) > 10000:
-            logger.warning(f"Text too long ({len(text)} chars), truncating to 10,000")
-            text = text[:10000]
-
         try:
             logger.debug(f"Sending request to {self.base_url}/v1/chat/completions")
             response = await self.client.post(
