@@ -18,6 +18,13 @@ cd telegram-voice2text-bot
 # Activate environment
 poetry shell
 
+#Обновить зависимости
+poetry install
+poetry install --extras "faster-whisper openai-api telethon-speedup"
+
+# Обновить миграции БД
+alembic upgrade head
+
 # Run bot
 poetry run python -m src.main
 ```
