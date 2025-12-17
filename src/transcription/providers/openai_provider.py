@@ -458,13 +458,17 @@ class OpenAIProvider(TranscriptionProvider):
 
         # Sort by index and concatenate
         results_sorted = sorted(results, key=lambda x: x[0])
-        texts = [text for _, text in results_sorted if not text.startswith("[ERROR")]
 
-        # Check for errors
+        # Check for errors - if any chunk failed, raise exception for fallback
         errors = [text for _, text in results_sorted if text.startswith("[ERROR")]
         if errors:
-            logger.warning(f"{len(errors)} chunks failed during transcription")
+            error_details = ", ".join([f"chunk {idx + 1}" for idx, text in results_sorted if text.startswith("[ERROR")])
+            raise RuntimeError(
+                f"{len(errors)} of {len(chunk_paths)} chunks failed during transcription ({error_details})"
+            )
 
+        # All chunks succeeded - concatenate texts
+        texts = [text for _, text in results_sorted]
         final_text = " ".join(texts)
         logger.info(f"Parallel transcription complete: {len(final_text)} chars total")
 
@@ -526,6 +530,15 @@ class OpenAIProvider(TranscriptionProvider):
                     logger.error(f"Chunk {i + 1} retry failed: {retry_error}")
                     transcriptions.append(f"[ERROR: Chunk {i + 1} failed]")
 
+        # Check for errors - if any chunk failed, raise exception for fallback
+        errors = [t for t in transcriptions if t.startswith("[ERROR")]
+        if errors:
+            failed_chunks = ", ".join([str(i + 1) for i, t in enumerate(transcriptions) if t.startswith("[ERROR")])
+            raise RuntimeError(
+                f"{len(errors)} of {len(chunk_paths)} chunks failed during transcription (chunks: {failed_chunks})"
+            )
+
+        # All chunks succeeded - concatenate texts
         final_text = " ".join(transcriptions)
         logger.info(f"Sequential transcription complete: {len(final_text)} chars total")
 
