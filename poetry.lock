@@ -2162,6 +2162,18 @@ toml = ["tomli (>=2.0.1)"]
 yaml = ["pyyaml (>=6.0.1)"]
 
 [[package]]
+name = "pydub"
+version = "0.25.1"
+description = "Manipulate audio with an simple and easy high level interface"
+optional = false
+python-versions = "*"
+groups = ["main"]
+files = [
+    {file = "pydub-0.25.1-py2.py3-none-any.whl", hash = "sha256:65617e33033874b59d87db603aa1ed450633288aefead953b30bded59cb599a6"},
+    {file = "pydub-0.25.1.tar.gz", hash = "sha256:980a33ce9949cab2a569606b65674d748ecbca4f0796887fd6f46173a7b0d30f"},
+]
+
+[[package]]
 name = "pydyf"
 version = "0.11.0"
 description = "A low-level PDF generator."
@@ -2892,4 +2904,4 @@ telethon-speedup = ["cryptg"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "4659ab9c0bb6df5340c6851dcd3dffbf0fbd7719b69b7091aea819686b3f6f0e"
+content-hash = "a607822076c1ba71f67296607c9d90ec0f457918ceff61be919a84e1f0cf3cf3"

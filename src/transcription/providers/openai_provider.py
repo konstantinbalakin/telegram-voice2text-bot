@@ -125,6 +125,10 @@ class OpenAIProvider(TranscriptionProvider):
         if file_size_mb > 25:
             raise ValueError(f"Audio file too large: {file_size_mb:.1f}MB (max 25MB)")
 
+        # Check duration limit for gpt-4o models
+        if context.duration_seconds > settings.openai_gpt4o_max_duration:
+            return await self._handle_long_audio(audio_path, context)
+
         api_key_masked = self.api_key[:8] + "..." if self.api_key else "None"
         logger.debug(
             f"transcribe: audio_path={audio_path}, model={self.model}, "
@@ -233,6 +237,463 @@ class OpenAIProvider(TranscriptionProvider):
 
         # All retries exhausted
         raise RuntimeError(f"OpenAI transcription failed: {last_exception}") from last_exception
+
+    async def _handle_long_audio(
+        self, audio_path: Path, context: TranscriptionContext
+    ) -> TranscriptionResult:
+        """
+        Handle long audio files that exceed the duration limit.
+
+        Args:
+            audio_path: Path to audio file
+            context: Transcription context
+
+        Returns:
+            TranscriptionResult
+
+        Raises:
+            ValueError: If both chunking and model switching are disabled
+        """
+        duration = context.duration_seconds
+        max_duration = settings.openai_gpt4o_max_duration
+
+        logger.info(
+            f"Audio duration {duration}s exceeds limit {max_duration}s. "
+            f"Chunking={settings.openai_chunking}, "
+            f"ChangeModel={settings.openai_change_model}"
+        )
+
+        if settings.openai_chunking:
+            # Determine target model for chunks
+            target_model = "whisper-1" if settings.openai_change_model else self.model
+
+            logger.info(f"Splitting audio into chunks and transcribing with {target_model}")
+
+            start_time = time.time()
+
+            # Split into chunks
+            chunk_paths = await self._split_audio_into_chunks(audio_path, context)
+
+            try:
+                # Transcribe chunks
+                if settings.openai_parallel_chunks:
+                    text = await self._transcribe_chunks_parallel(
+                        chunk_paths, context, target_model
+                    )
+                else:
+                    text = await self._transcribe_chunks_sequential(
+                        chunk_paths, context, target_model
+                    )
+
+                processing_time = time.time() - start_time
+
+                return TranscriptionResult(
+                    text=text,
+                    language=context.language or "unknown",
+                    processing_time=processing_time,
+                    audio_duration=context.duration_seconds,
+                    provider_used="openai",
+                    model_name=f"{target_model} (chunked)",
+                )
+
+            finally:
+                # Cleanup chunk files
+                self._cleanup_chunks(chunk_paths)
+
+        elif settings.openai_change_model:
+            # Switch model to whisper-1 for entire file
+            logger.info(f"Switching model from {self.model} to whisper-1")
+
+            original_model = self.model
+            self.model = "whisper-1"
+
+            try:
+                result = await self._transcribe_single(audio_path, context)
+                result.model_name = f"whisper-1 (switched from {original_model})"
+                return result
+            finally:
+                self.model = original_model
+
+        else:
+            raise ValueError(
+                f"Audio duration {duration}s exceeds maximum {max_duration}s for {self.model}. "
+                f"Enable OPENAI_CHUNKING or OPENAI_CHANGE_MODEL to handle long files."
+            )
+
+    async def _split_audio_into_chunks(
+        self, audio_path: Path, context: TranscriptionContext
+    ) -> list[Path]:
+        """
+        Split audio file into chunks using pydub.
+
+        Args:
+            audio_path: Path to original audio file
+            context: Transcription context
+
+        Returns:
+            List of paths to chunk files
+
+        Raises:
+            RuntimeError: If splitting fails
+        """
+        from pydub import AudioSegment  # type: ignore[import-untyped]
+        import uuid
+
+        chunk_size_ms = settings.openai_chunk_size_seconds * 1000
+        overlap_ms = settings.openai_chunk_overlap_seconds * 1000
+
+        logger.info(
+            f"Splitting {audio_path.name} into chunks: "
+            f"size={settings.openai_chunk_size_seconds}s, "
+            f"overlap={settings.openai_chunk_overlap_seconds}s"
+        )
+
+        try:
+            # Load audio
+            audio = AudioSegment.from_file(str(audio_path))
+
+            total_duration_ms = len(audio)
+            chunk_paths = []
+
+            # Create chunks with overlap
+            start_ms = 0
+            chunk_index = 0
+
+            while start_ms < total_duration_ms:
+                end_ms = min(start_ms + chunk_size_ms, total_duration_ms)
+
+                # Export chunk
+                chunk_audio = audio[start_ms:end_ms]
+
+                # Generate unique filename
+                chunk_filename = f"{audio_path.stem}_chunk_{chunk_index}_{uuid.uuid4().hex[:8]}.mp3"
+                chunk_path = audio_path.parent / chunk_filename
+
+                chunk_audio.export(str(chunk_path), format="mp3")
+                chunk_paths.append(chunk_path)
+
+                logger.debug(
+                    f"Created chunk {chunk_index}: {chunk_path.name}, "
+                    f"duration={len(chunk_audio)/1000:.1f}s"
+                )
+
+                chunk_index += 1
+
+                # Move to next chunk position (with overlap)
+                # If we've reached the end, break to avoid infinite loop
+                if end_ms >= total_duration_ms:
+                    break
+
+                # Next chunk starts before the end of current chunk (overlap)
+                start_ms += chunk_size_ms - overlap_ms
+
+            logger.info(f"Split audio into {len(chunk_paths)} chunks")
+            return chunk_paths
+
+        except Exception as e:
+            logger.error(f"Failed to split audio into chunks: {e}")
+            raise RuntimeError(f"Audio splitting failed: {e}") from e
+
+    async def _transcribe_chunks_parallel(
+        self, chunk_paths: list[Path], context: TranscriptionContext, model: str
+    ) -> str:
+        """
+        Transcribe chunks in parallel (no context between chunks).
+
+        Faster but loses context between chunks.
+
+        Args:
+            chunk_paths: List of chunk file paths
+            context: Transcription context
+            model: Model to use
+
+        Returns:
+            Concatenated text from all chunks
+        """
+        logger.info(
+            f"Starting parallel transcription of {len(chunk_paths)} chunks "
+            f"with {model}, max_parallel={settings.openai_max_parallel_chunks}"
+        )
+
+        # Semaphore for rate limiting
+        semaphore = asyncio.Semaphore(settings.openai_max_parallel_chunks)
+
+        async def transcribe_one_chunk(chunk_path: Path, chunk_index: int) -> tuple[int, str]:
+            """Transcribe one chunk."""
+            async with semaphore:
+                try:
+                    logger.info(f"Transcribing chunk {chunk_index + 1}/{len(chunk_paths)}")
+
+                    # Create temporary context for chunk
+                    chunk_context = TranscriptionContext(
+                        user_id=context.user_id,
+                        language=context.language,
+                        priority=context.priority,
+                    )
+
+                    # Transcribe chunk
+                    result = await self._transcribe_single_file(chunk_path, chunk_context, model)
+
+                    logger.info(f"Chunk {chunk_index + 1} complete: {len(result.text)} chars")
+
+                    return (chunk_index, result.text)
+
+                except Exception as e:
+                    logger.error(f"Chunk {chunk_index + 1} failed: {e}")
+                    # Retry logic
+                    try:
+                        logger.warning(f"Retrying chunk {chunk_index + 1}")
+                        result = await self._transcribe_single_file(
+                            chunk_path, chunk_context, model
+                        )
+                        return (chunk_index, result.text)
+                    except Exception as retry_error:
+                        logger.error(f"Chunk {chunk_index + 1} retry failed: {retry_error}")
+                        return (chunk_index, f"[ERROR: Chunk {chunk_index + 1} failed]")
+
+        # Launch all chunks in parallel
+        tasks = [transcribe_one_chunk(chunk_path, i) for i, chunk_path in enumerate(chunk_paths)]
+
+        results = await asyncio.gather(*tasks)
+
+        # Sort by index and concatenate
+        results_sorted = sorted(results, key=lambda x: x[0])
+        texts = [text for _, text in results_sorted if not text.startswith("[ERROR")]
+
+        # Check for errors
+        errors = [text for _, text in results_sorted if text.startswith("[ERROR")]
+        if errors:
+            logger.warning(f"{len(errors)} chunks failed during transcription")
+
+        final_text = " ".join(texts)
+        logger.info(f"Parallel transcription complete: {len(final_text)} chars total")
+
+        return final_text
+
+    async def _transcribe_chunks_sequential(
+        self, chunk_paths: list[Path], context: TranscriptionContext, model: str
+    ) -> str:
+        """
+        Transcribe chunks sequentially (with context between chunks).
+
+        Slower but preserves context via prompt parameter.
+
+        Args:
+            chunk_paths: List of chunk file paths
+            context: Transcription context
+            model: Model to use
+
+        Returns:
+            Concatenated text from all chunks
+        """
+        logger.info(f"Starting sequential transcription of {len(chunk_paths)} chunks with {model}")
+
+        transcriptions = []
+        previous_text = ""
+
+        for i, chunk_path in enumerate(chunk_paths):
+            try:
+                logger.info(f"Transcribing chunk {i + 1}/{len(chunk_paths)}")
+
+                # Create context with prompt from previous chunk
+                chunk_context = TranscriptionContext(
+                    user_id=context.user_id,
+                    language=context.language,
+                    priority=context.priority,
+                )
+
+                # Transcribe with context (last 224 tokens)
+                prompt = previous_text[-224:] if previous_text else None
+
+                result = await self._transcribe_single_file(
+                    chunk_path, chunk_context, model, prompt=prompt
+                )
+
+                transcriptions.append(result.text)
+                previous_text = result.text
+
+                logger.info(f"Chunk {i + 1} complete: {len(result.text)} chars")
+
+            except Exception as e:
+                logger.error(f"Chunk {i + 1} failed: {e}")
+
+                # Retry without context
+                try:
+                    logger.warning(f"Retrying chunk {i + 1} without context")
+                    result = await self._transcribe_single_file(chunk_path, chunk_context, model)
+                    transcriptions.append(result.text)
+                except Exception as retry_error:
+                    logger.error(f"Chunk {i + 1} retry failed: {retry_error}")
+                    transcriptions.append(f"[ERROR: Chunk {i + 1} failed]")
+
+        final_text = " ".join(transcriptions)
+        logger.info(f"Sequential transcription complete: {len(final_text)} chars total")
+
+        return final_text
+
+    async def _transcribe_single_file(
+        self,
+        audio_path: Path,
+        context: TranscriptionContext,
+        model: str,
+        prompt: Optional[str] = None,
+    ) -> TranscriptionResult:
+        """
+        Transcribe a single file (helper for chunking).
+
+        Args:
+            audio_path: Path to audio file
+            context: Transcription context
+            model: Model to use
+            prompt: Optional prompt for context
+
+        Returns:
+            TranscriptionResult
+        """
+        if not self._client:
+            raise RuntimeError("OpenAI client not initialized")
+
+        start_time = time.time()
+
+        try:
+            mime_type = mimetypes.guess_type(audio_path)[0] or "audio/mpeg"
+
+            with open(audio_path, "rb") as audio_file:
+                files = {"file": (audio_path.name, audio_file, mime_type)}
+                data = {"model": model}
+
+                if context.language:
+                    data["language"] = context.language
+
+                if prompt:
+                    data["prompt"] = prompt
+
+                response = await self._client.post(
+                    "/audio/transcriptions",
+                    files=files,
+                    data=data,
+                )
+
+            response.raise_for_status()
+            result = response.json()
+
+            processing_time = time.time() - start_time
+            text = result.get("text", "")
+            language = result.get("language", context.language or "unknown")
+
+            return TranscriptionResult(
+                text=text,
+                language=language,
+                processing_time=processing_time,
+                audio_duration=0,  # Unknown for chunks
+                provider_used="openai",
+                model_name=model,
+            )
+
+        except Exception as e:
+            logger.error(f"Transcription failed for {audio_path.name}: {e}")
+            raise
+
+    async def _transcribe_single(
+        self, audio_path: Path, context: TranscriptionContext
+    ) -> TranscriptionResult:
+        """
+        Transcribe entire file without chunking (used for model switching).
+
+        Args:
+            audio_path: Path to audio file
+            context: Transcription context
+
+        Returns:
+            TranscriptionResult
+        """
+        if not self._client:
+            raise RuntimeError("OpenAI client not initialized")
+
+        start_time = time.time()
+
+        # Retry logic with exponential backoff
+        last_exception: Optional[Exception] = None
+        for attempt in range(1, self.max_retries + 1):
+            try:
+                # Detect MIME type based on file extension
+                mime_type = mimetypes.guess_type(audio_path)[0] or "audio/mpeg"
+
+                # Prepare request
+                with open(audio_path, "rb") as audio_file:
+                    files = {"file": (audio_path.name, audio_file, mime_type)}
+                    data = {"model": self.model}
+
+                    if context.language:
+                        data["language"] = context.language
+
+                    # Make API request
+                    response = await self._client.post(
+                        "/audio/transcriptions",
+                        files=files,
+                        data=data,
+                    )
+
+                response.raise_for_status()
+                result = response.json()
+
+                processing_time = time.time() - start_time
+                text = result.get("text", "")
+                language = result.get("language", context.language or "unknown")
+
+                return TranscriptionResult(
+                    text=text,
+                    language=language,
+                    processing_time=processing_time,
+                    audio_duration=context.duration_seconds,
+                    provider_used="openai",
+                    model_name=self.model,
+                )
+
+            except httpx.HTTPStatusError as e:
+                last_exception = e
+                status_code = e.response.status_code
+
+                # Don't retry on client errors (4xx)
+                if 400 <= status_code < 500:
+                    raise RuntimeError(f"OpenAI API error: {e}") from e
+
+                # Retry on server errors (5xx) and rate limits (429)
+                if attempt < self.max_retries:
+                    wait_time = 2**attempt
+                    logger.warning(
+                        f"OpenAI API error ({status_code}), "
+                        f"retrying in {wait_time}s (attempt {attempt}/{self.max_retries})"
+                    )
+                    await asyncio.sleep(wait_time)
+
+            except Exception as e:
+                last_exception = e
+                if attempt < self.max_retries:
+                    wait_time = 2**attempt
+                    logger.warning(
+                        f"Transcription error, "
+                        f"retrying in {wait_time}s (attempt {attempt}/{self.max_retries}): {e}"
+                    )
+                    await asyncio.sleep(wait_time)
+
+        # All retries exhausted
+        raise RuntimeError(f"OpenAI transcription failed: {last_exception}") from last_exception
+
+    def _cleanup_chunks(self, chunk_paths: list[Path]) -> None:
+        """
+        Delete temporary chunk files.
+
+        Args:
+            chunk_paths: List of chunk file paths
+        """
+        for chunk_path in chunk_paths:
+            try:
+                if chunk_path.exists():
+                    chunk_path.unlink()
+                    logger.debug(f"Cleaned up chunk: {chunk_path.name}")
+            except Exception as e:
+                logger.warning(f"Failed to cleanup chunk {chunk_path.name}: {e}")
 
     async def shutdown(self) -> None:
         """Shutdown the provider and cleanup resources."""

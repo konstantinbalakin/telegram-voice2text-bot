@@ -258,6 +258,9 @@ This is a **transitional architecture** that balances MVP speed with future scal
 | 2025-11-30 | Dynamic file size limits | 2GB when Client API enabled, 20MB fallback when disabled | 90% |
 | 2025-11-30 | Optional cryptg dependency | Performance boost for Telethon, but not required for core functionality | 80% |
 | 2025-12-15 | Provider-aware audio format conversion | Preprocess audio based on target provider's format requirements (OpenAI gpt-4o needs MP3/WAV, faster-whisper optimal with OGA) | 95% |
+| 2025-12-17 | OpenAI long audio chunking | Implement audio splitting with overlap for gpt-4o models exceeding duration limits | 95% |
+| 2025-12-17 | Three-strategy approach for long audio | Model switch (default), parallel chunking (fast), sequential chunking (context preservation) | 90% |
+| 2025-12-17 | Semaphore-based rate limiting for chunks | Limit concurrent API calls (max 3) to avoid rate limits when processing chunks | 95% |
 
 ## Design Patterns in Use
 
@@ -1154,6 +1157,65 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
 - **Why**: Different transcription providers have different audio format requirements
 - **Problem**: OpenAI's new gpt-4o-transcribe/mini models don't support `.oga` format (Telegram's default), causing transcription failures
 - **Benefit**: Each provider receives audio in optimal format automatically, enables support for new models
+
+### 38. **Audio Chunking with Overlap Pattern** (added 2025-12-17)
+- **Where**: OpenAI long audio handling in `src/transcription/providers/openai_provider.py`
+- **Why**: OpenAI's gpt-4o models have duration limits (~1400-1500 seconds), longer audio fails to transcribe
+- **Problem**: Voice messages exceeding 23 minutes fail with OpenAI's gpt-4o models
+- **Benefit**: Enables transcription of unlimited duration audio while maintaining quality through context preservation
+- **Implementation**:
+  ```python
+  # Check duration and route to appropriate handler
+  if context.duration_seconds > settings.openai_gpt4o_max_duration:
+      return await self._handle_long_audio(audio_path, context)
+
+  # Split audio into chunks with overlap
+  def _split_audio_into_chunks(self, audio_path: Path) -> List[Path]:
+      audio = AudioSegment.from_file(audio_path)
+      chunk_size_ms = settings.openai_chunk_size_seconds * 1000
+      overlap_ms = settings.openai_chunk_overlap_seconds * 1000
+
+      chunks = []
+      for i in range(0, len(audio), chunk_size_ms - overlap_ms):
+          chunk = audio[i:i + chunk_size_ms]
+          # Save chunk to temporary file
+          chunks.append(chunk_path)
+
+      return chunks
+
+  # Process chunks in parallel with semaphore for rate limiting
+  async def _transcribe_chunks_parallel(self, chunks: List[Path]) -> str:
+      semaphore = asyncio.Semaphore(settings.openai_max_parallel_chunks)
+
+      async def transcribe_one(chunk_path):
+          async with semaphore:
+              return await self._transcribe_single_file(chunk_path)
+
+      results = await asyncio.gather(*[transcribe_one(chunk) for chunk in chunks])
+      return " ".join(results)
+  ```
+- **Key Features**:
+  - **Three strategies**: Automatic model switch (fast), parallel chunking (2-3x faster), sequential chunking (context preservation)
+  - **Overlap**: 2-second overlap between chunks prevents word cutting
+  - **Parallel processing**: Semaphore limits concurrent API calls (max 3) to avoid rate limiting
+  - **Sequential processing**: Uses prompt parameter with last 224 tokens for context preservation
+  - **Cleanup**: Temporary chunk files deleted in finally block
+- **Configuration**:
+  ```python
+  OPENAI_GPT4O_MAX_DURATION=1400              # Duration threshold
+  OPENAI_CHANGE_MODEL=true                    # Auto-switch to whisper-1 (default)
+  OPENAI_CHUNKING=false                       # Enable audio splitting
+  OPENAI_CHUNK_SIZE_SECONDS=1200              # Chunk size (300-1400s)
+  OPENAI_CHUNK_OVERLAP_SECONDS=2              # Overlap (0-10s)
+  OPENAI_PARALLEL_CHUNKS=true                 # Parallel vs sequential
+  OPENAI_MAX_PARALLEL_CHUNKS=3                # Concurrency limit (1-10)
+  ```
+- **Strategy Selection**:
+  1. **Model switch** (default): If duration > 1400s, use whisper-1 (no limit)
+  2. **Parallel chunking**: Fast (2-3x), no context between chunks, good for independent segments
+  3. **Sequential chunking**: Slower, preserves context via prompt, good for continuous speech
+- **Dependencies**: Uses pydub ^0.25.1 (Production/Stable, MIT) for audio manipulation
+- **Pattern**: Duration-based routing + chunking strategy + parallel/sequential processing + cleanup
 - **Implementation**:
   ```python
   # In audio_handler.py
