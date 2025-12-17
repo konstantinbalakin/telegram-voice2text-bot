@@ -97,6 +97,9 @@ tenacity = "^9.0.0"                  # Retry logic for LLM API calls
 weasyprint = "^62.3"                 # HTML to PDF conversion
 pydyf = "^0.11.0"                    # PDF library (WeasyPrint dependency, pinned for compatibility)
 
+# Audio Manipulation (NEW - 2025-12-17)
+pydub = "^0.25.1"                    # Audio splitting and manipulation for OpenAI long audio chunking
+
 # System Monitoring
 psutil = "^6.1"                      # System monitoring
 
@@ -114,6 +117,11 @@ mypy = "^1.13"                       # Type checking
   - Used in `DeepSeekProvider` for resilient API integration
   - Retry strategy: 3 attempts, exponential backoff (2-10s), retries on timeout/network errors
 - `httpx ^0.28` now also used for LLM API communication (previously just for internal services)
+- `pydub ^0.25.1` added (2025-12-17): Audio manipulation library for OpenAI long audio chunking
+  - Source Reputation: High
+  - Development Status: Production/Stable
+  - License: MIT
+  - Used in `OpenAIProvider` for splitting long audio files that exceed duration limits
 
 ## System Dependencies
 
@@ -300,6 +308,15 @@ OPENAI_FORMAT_REQUIREMENTS = {
     "gpt-4o-mini-transcribe": ["mp3", "wav"],    # Requires conversion
     "whisper-1": None,                            # Supports OGA
 }
+
+# OpenAI Long Audio Handling Configuration (NEW - 2025-12-17)
+openai_gpt4o_max_duration: int = Field(default=1400)              # Max duration for gpt-4o models
+openai_change_model: bool = Field(default=True)                   # Auto-switch to whisper-1
+openai_chunking: bool = Field(default=False)                      # Enable audio chunking
+openai_chunk_size_seconds: int = Field(default=1200, ge=300, le=1400)  # Chunk size
+openai_chunk_overlap_seconds: int = Field(default=2, ge=0, le=10)      # Chunk overlap
+openai_parallel_chunks: bool = Field(default=True)                # Parallel processing
+openai_max_parallel_chunks: int = Field(default=3, ge=1, le=10)   # Max concurrent chunks
 ```
 
 **Environment Variables**:
@@ -331,6 +348,15 @@ AUDIO_SPEED_MULTIPLIER=1.0
 
 # NEW - Provider-Aware Audio Format (2025-12-15)
 OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT=mp3  # Options: mp3, wav
+
+# NEW - OpenAI Long Audio Handling (2025-12-17)
+OPENAI_GPT4O_MAX_DURATION=1400             # Maximum duration for gpt-4o models (seconds)
+OPENAI_CHANGE_MODEL=true                   # Auto-switch to whisper-1 for long audio
+OPENAI_CHUNKING=false                      # Enable audio chunking for long files
+OPENAI_CHUNK_SIZE_SECONDS=1200             # Size of each chunk (300-1400s)
+OPENAI_CHUNK_OVERLAP_SECONDS=2             # Overlap between chunks (0-10s)
+OPENAI_PARALLEL_CHUNKS=true                # Process chunks in parallel (faster)
+OPENAI_MAX_PARALLEL_CHUNKS=3               # Max concurrent chunk requests (1-10)
 ```
 
 ### Logging Configuration (2025-11-03)

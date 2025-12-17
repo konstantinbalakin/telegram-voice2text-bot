@@ -86,6 +86,41 @@ class Settings(BaseSettings):
         description="Preferred audio format for OpenAI gpt-4o-* models (mp3, wav)",
     )
 
+    # OpenAI Long Audio Handling
+    openai_gpt4o_max_duration: int = Field(
+        default=1400,
+        description="Maximum audio duration in seconds for gpt-4o models before chunking/switching",
+    )
+    openai_change_model: bool = Field(
+        default=True,
+        description="Automatically switch to whisper-1 for audio exceeding max duration",
+    )
+    openai_chunking: bool = Field(
+        default=False, description="Enable audio chunking for long files (splits into segments)"
+    )
+    openai_chunk_size_seconds: int = Field(
+        default=1200,
+        ge=10,
+        le=1400,
+        description="Size of each audio chunk in seconds (default: 20 minutes)",
+    )
+    openai_chunk_overlap_seconds: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+        description="Overlap between chunks for better context preservation",
+    )
+    openai_parallel_chunks: bool = Field(
+        default=True,
+        description="Process chunks in parallel for faster transcription (disables context passing)",
+    )
+    openai_max_parallel_chunks: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of chunks to process simultaneously (rate limiting)",
+    )
+
     # Benchmark Mode
     benchmark_mode: bool = Field(default=False, description="Enable benchmark mode")
     benchmark_configs: list[dict] = Field(

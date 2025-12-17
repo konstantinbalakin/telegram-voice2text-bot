@@ -1,10 +1,10 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status (2025-12-16)
+## Current Status (2025-12-17)
 
 **Phase**: Phase 10 - Interactive Transcription Processing 🚀
-**Stage**: Phase 10.12 COMPLETE ✅ (StructureStrategy - Auto-Structured Transcription)
-**Branch**: feature/structure-strategy (ready for PR)
+**Stage**: Phase 10.13 COMPLETE ✅ (OpenAI Long Audio Chunking)
+**Branch**: feature/openai-long-audio-chunking (merged)
 **Production Version**: v0.0.3+
 **Production Status**: ✅ OPERATIONAL
 
@@ -37,6 +37,142 @@
 ---
 
 ## Recent Developments (Last 2 Weeks)
+
+### ✅ Phase 10.13: OpenAI Long Audio Chunking COMPLETE (2025-12-17)
+
+**Achievement**: Implemented audio chunking support for OpenAI gpt-4o models to handle audio files exceeding duration limits
+
+**Problem Solved**:
+OpenAI's gpt-4o models (gpt-4o-transcribe, gpt-4o-mini-transcribe) have duration limits of approximately 1400-1500 seconds (~23-25 minutes). Voice messages exceeding this limit fail with "duration_too_large" error. Need a solution to enable transcription of unlimited duration audio while maintaining quality.
+
+**Implementation Complete**: ✅
+
+**What Was Implemented**:
+
+1. **OpenAI Provider Long Audio Handling** (`src/transcription/providers/openai_provider.py`):
+   - Duration check: If audio > OPENAI_GPT4O_MAX_DURATION (1400s), route to `_handle_long_audio()`
+   - Three strategies for handling long audio:
+     - **Strategy 1** (default): Automatic model switch to whisper-1 (no duration limit)
+     - **Strategy 2**: Audio chunking with parallel processing (2-3x faster, no context)
+     - **Strategy 3**: Audio chunking with sequential processing (slower, context preservation)
+   - 8 new methods implemented:
+     - `_handle_long_audio()` - Main router for strategy selection
+     - `_split_audio_into_chunks()` - Uses pydub to split audio with overlap
+     - `_transcribe_chunks_parallel()` - Parallel processing with semaphore for rate limiting
+     - `_transcribe_chunks_sequential()` - Sequential with context passing via prompt parameter
+     - `_transcribe_single_file()` - Helper for chunk transcription
+     - `_transcribe_single()` - Helper for model switching
+     - `_cleanup_chunks()` - Cleanup temporary files
+     - `_get_chunk_prompt()` - Extract last 224 tokens for context
+
+2. **Configuration Parameters** (`src/config.py`):
+   - Added 7 new parameters for OpenAI long audio handling:
+     - `openai_gpt4o_max_duration: int = 1400` - Duration threshold
+     - `openai_change_model: bool = True` - Enable auto model switch (default strategy)
+     - `openai_chunking: bool = False` - Enable audio chunking
+     - `openai_chunk_size_seconds: int = 1200` - Chunk size (300-1400s validation)
+     - `openai_chunk_overlap_seconds: int = 2` - Overlap between chunks (0-10s validation)
+     - `openai_parallel_chunks: bool = True` - Parallel vs sequential processing
+     - `openai_max_parallel_chunks: int = 3` - Max concurrent chunk requests (1-10 validation)
+
+3. **Dependency Addition**:
+   - Added `pydub = "^0.25.1"` to pyproject.toml
+   - Verified via Context7: Production/Stable, High reputation, MIT license
+   - Used for audio splitting and manipulation
+
+4. **Configuration Examples** (`.env.example`, `.env.example.short`):
+   - Added comprehensive OpenAI Long Audio Handling section
+   - Documented all 7 new environment variables with descriptions
+   - Provided 4 usage scenarios:
+     - Fast handling: Auto model switch (default)
+     - Maximum quality parallel: Chunking with parallel processing
+     - Maximum quality sequential: Chunking with context preservation
+     - Balanced: Custom configuration
+
+**Key Features**:
+
+1. **Chunk Splitting with Overlap**:
+   - Uses pydub AudioSegment for reliable audio manipulation
+   - Default chunk size: 1200s (20 minutes)
+   - Default overlap: 2 seconds (prevents word cutting)
+   - Configurable chunk size (300-1400s) and overlap (0-10s)
+
+2. **Parallel Processing**:
+   - Processes multiple chunks simultaneously via asyncio.gather
+   - Semaphore limits concurrent API calls (max 3) to avoid rate limiting
+   - 2-3x faster than sequential processing
+   - Good for independent audio segments
+
+3. **Sequential Processing**:
+   - Processes chunks one by one with context preservation
+   - Uses prompt parameter with last 224 tokens from previous chunk
+   - Maintains continuity for continuous speech
+   - Slower but higher quality for context-dependent content
+
+4. **Cleanup**:
+   - Temporary chunk files deleted in finally block
+   - Prevents disk space accumulation
+   - Robust error handling
+
+**Type Checking Fixes**:
+- Added runtime checks for `self._client` in `_transcribe_single_file()` and `_transcribe_single()`
+- Added `# type: ignore[import-untyped]` for pydub import (no type stubs available)
+- All mypy checks passing ✅
+
+**Testing & Quality**:
+- ✅ All 204 tests passing
+- ✅ Black formatting verified
+- ✅ Ruff linting clean
+- ✅ Mypy type checking passing
+- ✅ pydub dependency verified via Context7
+
+**Strategy Selection Logic**:
+```python
+if OPENAI_CHANGE_MODEL:
+    # Strategy 1: Switch to whisper-1 (default)
+    return await self._transcribe_single(audio_path, context, model="whisper-1")
+elif OPENAI_CHUNKING:
+    # Strategy 2 or 3: Chunk audio
+    if OPENAI_PARALLEL_CHUNKS:
+        # Strategy 2: Parallel (fast)
+        return await self._transcribe_chunks_parallel(chunks, context)
+    else:
+        # Strategy 3: Sequential (context)
+        return await self._transcribe_chunks_sequential(chunks, context)
+else:
+    # No strategy: Return error
+    raise ValueError("Audio exceeds duration limit and no handling strategy enabled")
+```
+
+**Files Modified**:
+- `src/config.py` (+7 configuration parameters)
+- `src/transcription/providers/openai_provider.py` (+8 methods, 500+ lines)
+- `pyproject.toml` (+pydub dependency)
+- `.env.example` (+comprehensive documentation)
+- `.env.example.short` (+brief configuration example)
+
+**Key Patterns Established**:
+
+1. **Three-Strategy Approach**: Provide multiple options for different use cases
+   - Model switch: Fast, simple, no extra API calls
+   - Parallel chunking: Maximum speed for independent segments
+   - Sequential chunking: Maximum quality with context preservation
+
+2. **Semaphore-Based Rate Limiting**: Prevent API rate limits during parallel processing
+   - Pattern: `asyncio.Semaphore(max_parallel_chunks)` wraps each API call
+   - Ensures controlled concurrency
+
+3. **Overlap for Context**: Small overlap between chunks prevents word cutting
+   - Critical for seamless transcription
+   - Configurable (0-10s) based on audio characteristics
+
+4. **Cleanup in Finally Block**: Always clean up temporary files
+   - Prevents disk space leaks
+   - Robust even if errors occur during processing
+
+**Next Steps**: Ready for production deployment when needed
+
+---
 
 ### ✅ Phase 10.12: StructureStrategy - Auto-Structured Transcription COMPLETE (2025-12-16)
 

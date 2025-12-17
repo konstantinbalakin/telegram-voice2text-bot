@@ -268,6 +268,15 @@ jobs:
             OPENAI_TIMEOUT=90
             OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT=mp3 #mp3, wav (for gpt-4o-* models)
 
+            # OpenAI Long Audio Handling
+            OPENAI_GPT4O_MAX_DURATION=1400
+            OPENAI_CHANGE_MODEL=false
+            OPENAI_CHUNKING=true
+            OPENAI_CHUNK_SIZE_SECONDS=1200
+            OPENAI_CHUNK_OVERLAP_SECONDS=2
+            OPENAI_PARALLEL_CHUNKS=true
+            OPENAI_MAX_PARALLEL_CHUNKS=3
+
             # Fallback Configuration
             FALLBACK_PROVIDER=openai
             DURATION_THRESHOLD_SECONDS=30
@@ -290,7 +299,7 @@ jobs:
             LLM_PROVIDER=deepseek #deepseek, openai, gigachat
             LLM_MODEL=deepseek-chat
             LLM_BASE_URL=https://api.deepseek.com
-            LLM_TIMEOUT=60
+            LLM_TIMEOUT=240
             LLM_DEBUG_MODE=false #true = sends comparison message (draft vs refined)
 
             # Audio Preprocessing
