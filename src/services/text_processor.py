@@ -339,6 +339,63 @@ class TextProcessor:
             logger.warning("Falling back to original text")
             return original_text
 
+    async def create_magic(self, original_text: str) -> str:
+        """
+        Create publication-ready text from transcription (Magic mode).
+
+        Transforms raw transcription into warm, readable post for Telegram
+        while preserving author's voice, tone, and authenticity.
+
+        Args:
+            original_text: Raw transcription text
+
+        Returns:
+            Publication-ready text with formatting and emojis
+
+        Raises:
+            LLMError: If processing fails
+        """
+        # Load prompt from file
+        try:
+            prompt_template = load_prompt("magic")
+        except (FileNotFoundError, IOError) as e:
+            logger.error(f"Failed to load magic prompt: {e}")
+            # Fallback to inline prompt (shortened version)
+            prompt_template = """Преобразуй диктофонную транскрипцию в готовый текст для публикации в Telegram.
+
+Исходный текст:
+{text}
+
+Требования:
+1. Сохрани смысл, интонацию и стиль автора
+2. Сделай связный, читабельный текст
+3. Добавь эмодзи умеренно (по смыслу)
+4. Используй HTML-форматирование если уместно: <b>, <i>, <code>
+5. НЕ используй неподдерживаемые теги: <p>, <ul>, <li>, <h1>, <br>
+6. Для списков используй текст: • или 1.
+7. Разговорный, живой тон (без канцелярщины)
+
+Верни ТОЛЬКО готовый текст, без пояснений."""
+
+        prompt = prompt_template.format(text=original_text)
+        logger.info(f"Creating magic text ({len(original_text)} chars)...")
+
+        try:
+            # Use custom prompt for magic transformation
+            magic_text = await self._refine_with_custom_prompt(original_text, prompt)
+
+            # Sanitize HTML to remove unsupported tags
+            magic_text = sanitize_html(magic_text)
+
+            logger.info(f"Magic text created: {len(original_text)} → {len(magic_text)} chars")
+            return magic_text
+
+        except LLMError as e:
+            logger.error(f"Failed to create magic text: {e}")
+            # Fallback: return original text
+            logger.warning("Falling back to original text")
+            return original_text
+
     async def add_emojis(self, text: str, emoji_level: int, current_level: int = 0) -> str:
         """
         Add emojis to text based on level.
@@ -389,7 +446,7 @@ class TextProcessor:
 
         # Determine instruction based on level
         instructions = {
-            1: "Добавь минимальное количество эмодзи в текст. Чтобы прям не отвлекало.",
+            1: "Добавь немного эмодзи в текст, чтобы было уместно и не отвлекало.",
             2: "Добавь немного эмодзи в текст, чтобы смотрелось не слишком избыточно и пёстро",
             3: "Добавь щедрое количество эмодзи в текст",
         }

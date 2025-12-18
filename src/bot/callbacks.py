@@ -98,6 +98,7 @@ class CallbackHandlers:
                 "original": "Исходный текст",
                 "structured": "Структурированный",
                 "summary": "Резюме",
+                "magic": "Красиво",
             }
             mode_label = mode_labels.get(state.active_mode, state.active_mode)
 
@@ -155,6 +156,7 @@ class CallbackHandlers:
                 "original": "Исходный текст",
                 "structured": "Структурированный",
                 "summary": "Резюме",
+                "magic": "Красиво",
             }
             mode_label = mode_labels.get(state.active_mode, state.active_mode)
 
@@ -313,14 +315,18 @@ class CallbackHandlers:
             await query.answer("Режим резюме отключен", show_alert=True)
             return
 
-        if new_mode not in ["original", "structured", "summary"]:
+        if new_mode == "magic" and not settings.enable_magic_mode:
+            await query.answer("Magic режим отключен", show_alert=True)
+            return
+
+        if new_mode not in ["original", "structured", "summary", "magic"]:
             await query.answer("Функция будет доступна в следующих версиях", show_alert=True)
             return
 
         # Reset formatting parameters when switching modes
         # This ensures consistency: when switching modes, we start with default formatting
         # Users can then adjust emoji/length/timestamps for the new mode
-        target_emoji_level = 1 if new_mode == "structured" else 0
+        target_emoji_level = 1 if new_mode in ["structured", "magic"] else 0
         target_length_level = "default"
         target_timestamps_enabled = False
 
@@ -556,6 +562,113 @@ class CallbackHandlers:
                     # Try to answer query (may fail if query is too old)
                     try:
                         await query.answer("Не удалось создать резюме", show_alert=True)
+                    except Exception as answer_error:
+                        logger.warning(f"Failed to answer callback query: {answer_error}")
+                    return
+
+            elif new_mode == "magic":
+                # Generate magic (publication-ready) text
+                if not self.text_processor:
+                    await query.answer(
+                        "Обработка текста недоступна (LLM отключен)", show_alert=True
+                    )
+                    return
+
+                # Get original text
+                original_variant = await self.variant_repo.get_variant(
+                    usage_id=usage_id, mode="original"
+                )
+                if not original_variant:
+                    await query.answer("Исходный текст не найден", show_alert=True)
+                    return
+
+                # Acknowledge callback immediately
+                await query.answer("Начинаю обработку...")
+
+                # Edit message to show processing started
+                processing_message = "🪄 Делаю красиво, пожалуйста подождите..."
+                try:
+                    await query.edit_message_text(processing_message)
+                except Exception as e:
+                    logger.warning(f"Failed to update message to processing state: {e}")
+
+                # Start progress tracker
+                progress = ProgressTracker(
+                    message=cast(Message, query.message),
+                    duration_seconds=settings.llm_processing_duration,
+                    rtf=1.0,
+                    update_interval=settings.progress_update_interval,
+                )
+                await progress.start()
+
+                # Generate magic text
+                try:
+                    start_time = time.time()
+
+                    magic_text = await self.text_processor.create_magic(
+                        original_variant.text_content
+                    )
+
+                    processing_time = time.time() - start_time
+
+                    # Stop progress tracker
+                    await progress.stop()
+
+                    # Save variant (check if already exists first to avoid UNIQUE constraint error)
+                    existing_variant = await self.variant_repo.get_variant(
+                        usage_id=usage_id,
+                        mode="magic",
+                        length_level=target_length_level,
+                        emoji_level=target_emoji_level,
+                        timestamps_enabled=target_timestamps_enabled,
+                    )
+
+                    if existing_variant:
+                        # Variant already exists (race condition or retry), use it
+                        logger.info(
+                            f"Magic variant already exists: usage_id={usage_id}, "
+                            "using cached version"
+                        )
+                        variant = existing_variant
+                    else:
+                        # Create new variant
+                        variant = await self.variant_repo.create(
+                            usage_id=usage_id,
+                            mode="magic",
+                            text_content=magic_text,
+                            length_level=target_length_level,
+                            emoji_level=target_emoji_level,
+                            timestamps_enabled=target_timestamps_enabled,
+                            generated_by="llm",
+                            llm_model=settings.llm_model,
+                            processing_time_seconds=processing_time,
+                        )
+                        logger.info(
+                            f"Generated magic text: usage_id={usage_id}, "
+                            f"time={processing_time:.2f}s"
+                        )
+
+                except Exception as e:
+                    logger.error(f"Failed to generate magic text: {e}", exc_info=True)
+                    await progress.stop()
+
+                    # Restore original text and show error
+                    try:
+                        segments = await self.segment_repo.get_by_usage_id(usage_id)
+                        has_segments = len(segments) > 0
+                        await query.edit_message_text(
+                            original_variant.text_content,
+                            reply_markup=create_transcription_keyboard(
+                                state, has_segments, settings
+                            ),
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        pass
+
+                    # Try to answer query (may fail if query is too old)
+                    try:
+                        await query.answer("Не удалось обработать текст", show_alert=True)
                     except Exception as answer_error:
                         logger.warning(f"Failed to answer callback query: {answer_error}")
                     return
