@@ -30,7 +30,7 @@
 - **Phase 8.3**: LLM performance tracking in database ✅ (2025-11-24)
 - **Phase 9**: Large file support via Telethon (20MB → 2GB) ✅ (2025-11-30)
 
-### Interactive Transcription System (Phase 10.1-10.13)
+### Interactive Transcription System (Phase 10.1-10.14)
 - **Phase 10.1**: Infrastructure (database, keyboards, callbacks, segments) ✅ (2025-12-03)
 - **Phase 10.2**: Structured mode with LLM text structuring ✅ (2025-12-03)
 - **Phase 10.3**: Length variations (shorter/longer with 3 levels) ✅ (2025-12-03)
@@ -44,6 +44,7 @@
 - **Phase 10.11**: Provider-aware audio format conversion (OpenAI gpt-4o support) ✅ (2025-12-15)
 - **Phase 10.12**: StructureStrategy (automatic structured transcription) ✅ (2025-12-16)
 - **Phase 10.13**: OpenAI long audio chunking (unlimited duration) ✅ (2025-12-17)
+- **Phase 10.14**: Magic Mode (publication-ready text transformation) ✅ (2025-12-19)
 
 ## Current Feature Set
 
@@ -65,13 +66,14 @@
 - ✅ HTML formatting with Telegram parse mode
 
 ### Interactive Features (Phase 10)
-- ✅ Mode switching (original/structured/summary)
+- ✅ Mode switching (original/structured/summary/magic)
 - ✅ Length variations (3 levels shorter/longer)
 - ✅ Emoji levels (4 levels: 0-3)
 - ✅ Timestamps for long audio (>5 min)
 - ✅ Retranscription (free/paid options)
 - ✅ Variant caching in database
 - ✅ File export for long texts (>3000 chars)
+- ✅ Magic Mode (publication-ready text with author's voice)
 
 ### Infrastructure
 - ✅ SQLite database with migrations (Alembic)
@@ -144,6 +146,11 @@ MAX_CONCURRENT_WORKERS=1
 
 # Interactive Mode
 INTERACTIVE_MODE_ENABLED=true
+ENABLE_STRUCTURED_MODE=true
+ENABLE_MAGIC_MODE=true
+ENABLE_SUMMARY_MODE=true
+ENABLE_EMOJI_OPTION=true
+ENABLE_LENGTH_VARIATIONS=true
 ENABLE_TIMESTAMPS_OPTION=true
 ENABLE_RETRANSCRIBE=true
 FILE_THRESHOLD_CHARS=3000  # Text >3000 chars sent as file
