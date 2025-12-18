@@ -462,7 +462,9 @@ class OpenAIProvider(TranscriptionProvider):
         # Check for errors - if any chunk failed, raise exception for fallback
         errors = [text for _, text in results_sorted if text.startswith("[ERROR")]
         if errors:
-            error_details = ", ".join([f"chunk {idx + 1}" for idx, text in results_sorted if text.startswith("[ERROR")])
+            error_details = ", ".join(
+                [f"chunk {idx + 1}" for idx, text in results_sorted if text.startswith("[ERROR")]
+            )
             raise RuntimeError(
                 f"{len(errors)} of {len(chunk_paths)} chunks failed during transcription ({error_details})"
             )
@@ -533,7 +535,9 @@ class OpenAIProvider(TranscriptionProvider):
         # Check for errors - if any chunk failed, raise exception for fallback
         errors = [t for t in transcriptions if t.startswith("[ERROR")]
         if errors:
-            failed_chunks = ", ".join([str(i + 1) for i, t in enumerate(transcriptions) if t.startswith("[ERROR")])
+            failed_chunks = ", ".join(
+                [str(i + 1) for i, t in enumerate(transcriptions) if t.startswith("[ERROR")]
+            )
             raise RuntimeError(
                 f"{len(errors)} of {len(chunk_paths)} chunks failed during transcription (chunks: {failed_chunks})"
             )
