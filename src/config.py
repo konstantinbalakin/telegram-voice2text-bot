@@ -100,7 +100,7 @@ class Settings(BaseSettings):
     )
     openai_chunk_size_seconds: int = Field(
         default=1200,
-        ge=10,
+        ge=5,
         le=1400,
         description="Size of each audio chunk in seconds (default: 20 minutes)",
     )

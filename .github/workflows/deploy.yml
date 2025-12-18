@@ -269,13 +269,13 @@ jobs:
             OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT=mp3 #mp3, wav (for gpt-4o-* models)
 
             # OpenAI Long Audio Handling
-            OPENAI_GPT4O_MAX_DURATION=1400
-            OPENAI_CHANGE_MODEL=false
-            OPENAI_CHUNKING=true
-            OPENAI_CHUNK_SIZE_SECONDS=1200
-            OPENAI_CHUNK_OVERLAP_SECONDS=2
-            OPENAI_PARALLEL_CHUNKS=true
-            OPENAI_MAX_PARALLEL_CHUNKS=3
+            OPENAI_GPT4O_MAX_DURATION=1300 #default: 1400s
+            OPENAI_CHANGE_MODEL=false #default: True. Можно указывать false, если OPENAI_CHUNKING=true
+            OPENAI_CHUNKING=true #default: False
+            OPENAI_CHUNK_SIZE_SECONDS=1200 #default: 1200s
+            OPENAI_CHUNK_OVERLAP_SECONDS=2 #default: 2s
+            OPENAI_PARALLEL_CHUNKS=true #default: True
+            OPENAI_MAX_PARALLEL_CHUNKS=3 #default: 3
 
             # Fallback Configuration
             FALLBACK_PROVIDER=openai
@@ -315,8 +315,8 @@ jobs:
             LOG_DIR=./logs
 
             # Processing
-            MAX_QUEUE_SIZE=1
             MAX_CONCURRENT_WORKERS=1
+            MAX_QUEUE_SIZE=1
             MAX_VOICE_DURATION_SECONDS=10800
             TRANSCRIPTION_TIMEOUT=3600
             PROGRESS_RTF=0.15
