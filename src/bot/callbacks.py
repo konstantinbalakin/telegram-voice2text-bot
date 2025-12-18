@@ -614,7 +614,7 @@ class CallbackHandlers:
                     # Stop progress tracker
                     await progress.stop()
 
-                    # Check if variant already exists
+                    # Save variant (check if already exists first to avoid UNIQUE constraint error)
                     existing_variant = await self.variant_repo.get_variant(
                         usage_id=usage_id,
                         mode="magic",
@@ -624,12 +624,12 @@ class CallbackHandlers:
                     )
 
                     if existing_variant:
-                        # Update existing variant
-                        existing_variant.text_content = magic_text
-                        existing_variant.processing_time_seconds = processing_time
-                        await self.variant_repo.update(existing_variant)
+                        # Variant already exists (race condition or retry), use it
+                        logger.info(
+                            f"Magic variant already exists: usage_id={usage_id}, "
+                            "using cached version"
+                        )
                         variant = existing_variant
-                        logger.info(f"Updated existing magic variant: id={variant.id}")
                     else:
                         # Create new variant
                         variant = await self.variant_repo.create(
@@ -643,7 +643,10 @@ class CallbackHandlers:
                             llm_model=settings.llm_model,
                             processing_time_seconds=processing_time,
                         )
-                        logger.info(f"Created magic variant: id={variant.id}")
+                        logger.info(
+                            f"Generated magic text: usage_id={usage_id}, "
+                            f"time={processing_time:.2f}s"
+                        )
 
                 except Exception as e:
                     logger.error(f"Failed to generate magic text: {e}", exc_info=True)
