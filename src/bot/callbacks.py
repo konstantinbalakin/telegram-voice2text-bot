@@ -14,6 +14,7 @@ from src.storage.repositories import (
     TranscriptionStateRepository,
     TranscriptionVariantRepository,
     TranscriptionSegmentRepository,
+    UsageRepository,
 )
 from src.services.text_processor import TextProcessor
 from src.services.progress_tracker import ProgressTracker
@@ -45,6 +46,7 @@ class CallbackHandlers:
         state_repo: TranscriptionStateRepository,
         variant_repo: TranscriptionVariantRepository,
         segment_repo: TranscriptionSegmentRepository,
+        usage_repo: "UsageRepository",
         text_processor: Optional[TextProcessor] = None,
         bot_handlers: Optional["BotHandlers"] = None,
     ):
@@ -55,12 +57,14 @@ class CallbackHandlers:
             state_repo: Repository for transcription states
             variant_repo: Repository for transcription variants
             segment_repo: Repository for transcription segments
+            usage_repo: Repository for usage records
             text_processor: Text processor for LLM operations (optional)
             bot_handlers: BotHandlers instance for retranscription (optional, Phase 8)
         """
         self.state_repo = state_repo
         self.variant_repo = variant_repo
         self.segment_repo = segment_repo
+        self.usage_repo = usage_repo
         self.text_processor = text_processor
         self.bot_handlers = bot_handlers
 
@@ -83,6 +87,15 @@ class CallbackHandlers:
             keyboard: New inline keyboard markup
             state_repo: Repository for updating state (no nested sessions)
         """
+        # Get user-specific file number for filename generation
+        usage = await self.usage_repo.get_by_id(state.usage_id)
+        if usage:
+            file_number = await self.usage_repo.count_by_user_id(usage.user_id)
+        else:
+            # Fallback to usage_id if usage not found (shouldn't happen)
+            file_number = state.usage_id
+            logger.warning(f"Usage {state.usage_id} not found, using usage_id as file_number")
+
         if not state.is_file_message and len(new_text) <= settings.file_threshold_chars:
             # Simple case: text message, stays text message
             await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
@@ -122,12 +135,12 @@ class CallbackHandlers:
                 pdf_generator = PDFGenerator()
                 pdf_bytes = pdf_generator.generate_pdf(new_text)
                 file_obj = io.BytesIO(pdf_bytes)
-                file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.pdf"
+                file_obj.name = f"{file_number}_{state.active_mode}.pdf"
                 file_extension = "PDF"
             except Exception as e:
                 logger.warning(f"PDF generation failed, falling back to TXT: {e}")
                 file_obj = io.BytesIO(new_text.encode("utf-8"))
-                file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.txt"
+                file_obj.name = f"{file_number}_{state.active_mode}.txt"
                 file_extension = "TXT"
 
             new_file_msg = await context.bot.send_document(
@@ -172,12 +185,12 @@ class CallbackHandlers:
                 pdf_generator = PDFGenerator()
                 pdf_bytes = pdf_generator.generate_pdf(new_text)
                 file_obj = io.BytesIO(pdf_bytes)
-                file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.pdf"
+                file_obj.name = f"{file_number}_{state.active_mode}.pdf"
                 file_extension = "PDF"
             except Exception as e:
                 logger.warning(f"PDF generation failed, falling back to TXT: {e}")
                 file_obj = io.BytesIO(new_text.encode("utf-8"))
-                file_obj.name = f"transcription_{state.usage_id}_{state.active_mode}.txt"
+                file_obj.name = f"{file_number}_{state.active_mode}.txt"
                 file_extension = "TXT"
 
             file_msg = await context.bot.send_document(

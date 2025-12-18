@@ -232,6 +232,25 @@ class UsageRepository:
         usages = result.scalars().all()
         return sum(u.voice_duration_seconds or 0 for u in usages)
 
+    async def count_by_user_id(self, user_id: int) -> int:
+        """Count total number of transcriptions for a user.
+
+        Used for per-user file numbering to generate sequential file numbers.
+
+        Args:
+            user_id: User's internal ID
+
+        Returns:
+            Total count of usage records for this user
+        """
+        from sqlalchemy import func
+
+        result = await self.session.execute(
+            select(func.count(Usage.id)).where(Usage.user_id == user_id)
+        )
+        count = result.scalar()
+        return count if count is not None else 0
+
     async def cleanup_old_audio_files(self, ttl_days: int) -> int:
         """Delete audio files older than TTL (Phase 8).
 

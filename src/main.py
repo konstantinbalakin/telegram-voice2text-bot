@@ -26,6 +26,7 @@ from src.storage.repositories import (
     TranscriptionStateRepository,
     TranscriptionVariantRepository,
     TranscriptionSegmentRepository,
+    UsageRepository,
 )
 from src.transcription import get_transcription_router, shutdown_transcription_router, AudioHandler
 from src.services.prompt_loader import load_prompt
@@ -207,8 +208,9 @@ async def main() -> None:
                 state_repo = TranscriptionStateRepository(session)
                 variant_repo = TranscriptionVariantRepository(session)
                 segment_repo = TranscriptionSegmentRepository(session)
+                usage_repo = UsageRepository(session)
                 callback_handlers = CallbackHandlers(
-                    state_repo, variant_repo, segment_repo, text_processor, bot_handlers
+                    state_repo, variant_repo, segment_repo, usage_repo, text_processor, bot_handlers
                 )
                 await callback_handlers.handle_callback_query(update, context)  # type: ignore[arg-type]
 

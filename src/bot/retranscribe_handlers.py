@@ -290,6 +290,7 @@ async def handle_retranscribe(
             state_repo = TranscriptionStateRepository(session)
             variant_repo = TranscriptionVariantRepository(session)
             segment_repo = TranscriptionSegmentRepository(session)
+            usage_repo = UsageRepository(session)
 
             state = await state_repo.get_by_usage_id(usage_id)
 
@@ -319,7 +320,7 @@ async def handle_retranscribe(
 
             # Create CallbackHandlers instance for update_transcription_display
             callback_handlers = CallbackHandlers(
-                state_repo, variant_repo, segment_repo, None, bot_handlers
+                state_repo, variant_repo, segment_repo, usage_repo, None, bot_handlers
             )
 
             # Update message with new transcription (handles both text and file messages)
