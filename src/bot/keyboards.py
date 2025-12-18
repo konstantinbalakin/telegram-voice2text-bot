@@ -202,7 +202,23 @@ def create_transcription_keyboard(
                 ]
             )
 
-    # Row 4: Emoji option (Phase 5)
+    # Row 4: Magic mode (Phase 9) - publication-ready text
+    if settings.enable_magic_mode:
+        label = (
+            "🪄 Сделать красиво (вы здесь)"
+            if state.active_mode == "magic"
+            else "🪄 Сделать красиво"
+        )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=encode_callback_data("mode", state.usage_id, mode="magic"),
+                )
+            ]
+        )
+
+    # Row 5: Emoji option (Phase 5)
     if settings.enable_emoji_option:
         if state.emoji_level > 0:
             # Emoji mode active: show controls
@@ -268,7 +284,7 @@ def create_transcription_keyboard(
                 ]
             )
 
-    # Row 5: Timestamps option (Phase 6) - only if has segments (>5 min audio)
+    # Row 6: Timestamps option (Phase 6) - only if has segments (>5 min audio)
     if settings.enable_timestamps_option and has_segments:
         label = "Убрать таймкоды" if state.timestamps_enabled else "🕐 Таймкоды"
         keyboard.append(
@@ -279,7 +295,7 @@ def create_transcription_keyboard(
             ]
         )
 
-    # Row 6: Retranscribe (Phase 8) - only if audio file is saved
+    # Row 7: Retranscribe (Phase 8) - only if audio file is saved
     if settings.enable_retranscribe:
         keyboard.append(
             [

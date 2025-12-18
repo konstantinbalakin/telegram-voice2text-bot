@@ -241,6 +241,9 @@ class Settings(BaseSettings):
         default=False, description="Enable 'Structured' text mode (Phase 2)"
     )
     enable_summary_mode: bool = Field(default=False, description="Enable 'Summary' mode (Phase 4)")
+    enable_magic_mode: bool = Field(
+        default=True, description="Enable magic mode ('Make it beautiful') - publication-ready text"
+    )
     enable_emoji_option: bool = Field(default=False, description="Enable emoji option (Phase 5)")
     enable_timestamps_option: bool = Field(
         default=False, description="Enable timestamps option (Phase 6)"
