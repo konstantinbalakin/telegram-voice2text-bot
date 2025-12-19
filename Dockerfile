@@ -25,6 +25,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
+COPY prompts/ ./prompts/
 
 RUN useradd -m appuser && \
     mkdir -p /app/data /app/logs /home/appuser/.cache/huggingface && \
