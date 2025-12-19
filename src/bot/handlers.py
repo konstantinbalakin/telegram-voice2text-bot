@@ -1144,6 +1144,17 @@ class BotHandlers:
         Returns:
             (main_message, file_message): Main message (with keyboard) and optional file message
         """
+        # Get user-specific file number for filename generation
+        async with get_session() as session:
+            usage_repo = UsageRepository(session)
+            usage = await usage_repo.get_by_id(usage_id)
+            if usage:
+                file_number = await usage_repo.count_by_user_id(usage.user_id)
+            else:
+                # Fallback to usage_id if usage not found (shouldn't happen)
+                file_number = usage_id
+                logger.warning(f"Usage {usage_id} not found, using usage_id as file_number")
+
         if len(text) <= settings.file_threshold_chars:
             # Short text: send as single message
             msg = await request.user_message.reply_text(
@@ -1166,12 +1177,12 @@ class BotHandlers:
                 pdf_generator = PDFGenerator()
                 pdf_bytes = pdf_generator.generate_pdf(text)
                 file_obj = io.BytesIO(pdf_bytes)
-                file_obj.name = f"transcription_{usage_id}.pdf"
+                file_obj.name = f"{file_number}_original.pdf"
                 file_extension = "PDF"
             except Exception as e:
                 logger.warning(f"PDF generation failed, falling back to TXT: {e}")
                 file_obj = io.BytesIO(text.encode("utf-8"))
-                file_obj.name = f"transcription_{usage_id}.txt"
+                file_obj.name = f"{file_number}_original.txt"
                 file_extension = "TXT"
 
             file_msg = await request.user_message.reply_document(
@@ -1198,6 +1209,17 @@ class BotHandlers:
             request: Transcription request (will populate draft_messages)
             draft_text: Draft transcription text to send
         """
+        # Get user-specific file number for filename generation
+        async with get_session() as session:
+            usage_repo = UsageRepository(session)
+            usage = await usage_repo.get_by_id(request.usage_id)
+            if usage:
+                file_number = await usage_repo.count_by_user_id(usage.user_id)
+            else:
+                # Fallback to usage_id if usage not found (shouldn't happen)
+                file_number = request.usage_id
+                logger.warning(f"Usage {request.usage_id} not found, using usage_id as file_number")
+
         # Delete status message first
         try:
             await request.status_message.delete()
@@ -1230,12 +1252,12 @@ class BotHandlers:
                 pdf_generator = PDFGenerator()
                 pdf_bytes = pdf_generator.generate_pdf(draft_text)
                 file_obj = io.BytesIO(pdf_bytes)
-                file_obj.name = f"draft_{request.usage_id}.pdf"
+                file_obj.name = f"{file_number}_draft.pdf"
                 file_extension = "PDF"
             except Exception as e:
                 logger.warning(f"PDF generation failed for draft, falling back to TXT: {e}")
                 file_obj = io.BytesIO(draft_text.encode("utf-8"))
-                file_obj.name = f"draft_{request.usage_id}.txt"
+                file_obj.name = f"{file_number}_draft.txt"
                 file_extension = "TXT"
 
             file_msg = await request.user_message.reply_document(
