@@ -49,19 +49,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "if command -v semgrep >/dev/null 2>&1; then semgrep --config=auto \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || true; fi; if command -v bandit >/dev/null 2>&1 && [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then bandit \"$CLAUDE_TOOL_FILE_PATH\" 2>/dev/null || true; fi; if command -v gitleaks >/dev/null 2>&1; then gitleaks detect --source=\"$CLAUDE_TOOL_FILE_PATH\" --no-git 2>/dev/null || true; fi"
+            "command": "echo \"→ Running security checks...\"; if command -v semgrep >/dev/null 2>&1; then echo \"  - semgrep (static analysis)\"; semgrep --config=auto \"$CLAUDE_TOOL_FILE_PATH\" || true; fi; if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]] && command -v bandit >/dev/null 2>&1; then echo \"  - bandit (Python security)\"; poetry run bandit -q \"$CLAUDE_TOOL_FILE_PATH\" || true; fi; if command -v gitleaks >/dev/null 2>&1; then echo \"  - gitleaks (secrets detection)\"; gitleaks detect --source=\"$CLAUDE_TOOL_FILE_PATH\" --no-git || true; fi"
           },
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Formatting with black...\"; poetry run black \"$CLAUDE_TOOL_FILE_PATH\" 2>&1 || true; fi"
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Formatting with black...\"; poetry run black \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
           },
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Type checking with mypy...\"; poetry run mypy \"$CLAUDE_TOOL_FILE_PATH\" 2>&1 || true; fi"
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Type checking with mypy...\"; poetry run mypy \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
           },
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Linting with ruff...\"; poetry run ruff check --fix \"$CLAUDE_TOOL_FILE_PATH\" 2>&1 || true; fi"
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Linting with ruff...\"; poetry run ruff check --fix \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
           },
           {
             "type": "command",
