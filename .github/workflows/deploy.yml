@@ -315,12 +315,12 @@ jobs:
             LOG_DIR=./logs
 
             # Processing
-            MAX_CONCURRENT_WORKERS=1
-            MAX_QUEUE_SIZE=1
+            MAX_CONCURRENT_WORKERS=5
+            MAX_QUEUE_SIZE=10
             MAX_VOICE_DURATION_SECONDS=10800
             TRANSCRIPTION_TIMEOUT=3600
-            PROGRESS_RTF=0.15
-            PROGRESS_UPDATE_INTERVAL=5
+            PROGRESS_RTF=0.05
+            PROGRESS_UPDATE_INTERVAL=3
 
             # Quota
             DEFAULT_DAILY_QUOTA_SECONDS=60 #еще не внедрено
