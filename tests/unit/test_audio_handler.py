@@ -44,8 +44,18 @@ class TestAudioHandlerInit:
 
     def test_supported_formats(self, audio_handler):
         """Test supported audio formats."""
-        expected_formats = {".ogg", ".mp3", ".wav", ".m4a", ".opus", ".oga"}
-        assert audio_handler.supported_formats == expected_formats
+        # Standard audio formats
+        standard_formats = {".ogg", ".mp3", ".wav", ".m4a", ".opus", ".oga"}
+        for fmt in standard_formats:
+            assert fmt in audio_handler.supported_formats
+        # Additional audio formats (for documents)
+        additional_formats = {".aac", ".flac", ".wma", ".amr", ".webm", ".3gp"}
+        for fmt in additional_formats:
+            assert fmt in audio_handler.supported_formats
+        # Video formats (for audio extraction)
+        video_formats = {".mp4", ".mkv", ".avi", ".mov"}
+        for fmt in video_formats:
+            assert fmt in audio_handler.supported_formats
 
 
 class TestAudioHandlerDownloadVoice:
@@ -80,7 +90,7 @@ class TestAudioHandlerDownloadVoice:
     @pytest.mark.asyncio
     async def test_download_unsupported_format(self, audio_handler, mock_telegram_file):
         """Test download fails for unsupported audio format."""
-        mock_telegram_file.file_path = "/path/to/file.avi"
+        mock_telegram_file.file_path = "/path/to/file.xyz"
 
         with pytest.raises(ValueError, match="Unsupported audio format"):
             await audio_handler.download_voice_message(mock_telegram_file, "test_id")

@@ -32,7 +32,27 @@ class AudioHandler:
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Supported audio formats
-        self.supported_formats = {".ogg", ".oga", ".mp3", ".wav", ".m4a", ".opus"}
+        self.supported_formats = {
+            # Standard audio formats
+            ".ogg",
+            ".oga",
+            ".mp3",
+            ".wav",
+            ".m4a",
+            ".opus",
+            # Additional audio formats (for documents)
+            ".aac",
+            ".flac",
+            ".wma",
+            ".amr",
+            ".webm",
+            ".3gp",
+            # Video formats (for audio extraction)
+            ".mp4",
+            ".mkv",
+            ".avi",
+            ".mov",
+        }
 
         logger.info(f"AudioHandler initialized with temp_dir: {self.temp_dir}")
 
@@ -640,6 +660,130 @@ class AudioHandler:
             )
 
         return output_path
+
+    def extract_audio_track(self, input_path: Path) -> Path:
+        """
+        Extract audio track from video/media file.
+
+        Converts to mono Opus format optimized for Whisper.
+
+        Args:
+            input_path: Input video/media file
+
+        Returns:
+            Path to extracted audio file (OGG format)
+
+        Raises:
+            subprocess.CalledProcessError: If ffmpeg fails
+            ValueError: If file has no audio stream
+        """
+        # Check if file has audio stream
+        if not self._has_audio_stream(input_path):
+            raise ValueError(f"File has no audio stream: {input_path.name}")
+
+        original_size = input_path.stat().st_size
+        original_size_mb = original_size / (1024 * 1024)
+
+        output_path = input_path.parent / f"{input_path.stem}_extracted.ogg"
+
+        logger.info(f"Extracting audio from {input_path.name} ({original_size_mb:.2f}MB)")
+
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",  # Overwrite
+                "-i",
+                str(input_path),
+                "-vn",  # No video
+                "-ac",
+                "1",  # Mono
+                "-ar",
+                str(settings.audio_target_sample_rate),  # 16kHz
+                "-acodec",
+                "libopus",
+                "-b:a",
+                "32k",  # 32 kbps
+                "-vbr",
+                "on",
+                "-f",
+                "ogg",
+                str(output_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        converted_size = output_path.stat().st_size
+        converted_size_mb = converted_size / (1024 * 1024)
+
+        logger.info(
+            f"Audio extraction complete: {original_size_mb:.2f}MB → {converted_size_mb:.2f}MB"
+        )
+
+        return output_path
+
+    def _has_audio_stream(self, file_path: Path) -> bool:
+        """
+        Check if file contains an audio stream.
+
+        Args:
+            file_path: Path to media file
+
+        Returns:
+            True if file has audio stream, False otherwise
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-select_streams",
+                    "a",
+                    "-show_entries",
+                    "stream=codec_type",
+                    "-of",
+                    "csv=p=0",
+                    str(file_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return "audio" in result.stdout
+        except subprocess.CalledProcessError:
+            return False
+
+    def get_audio_duration_ffprobe(self, file_path: Path) -> Optional[float]:
+        """
+        Get audio duration using ffprobe.
+
+        Args:
+            file_path: Path to audio/video file
+
+        Returns:
+            Duration in seconds or None if unavailable
+        """
+        try:
+            result = subprocess.run(
+                [
+                    "ffprobe",
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    str(file_path),
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return float(result.stdout.strip())
+        except (subprocess.CalledProcessError, ValueError):
+            return None
 
     def _convert_to_wav(self, input_path: Path) -> Path:
         """

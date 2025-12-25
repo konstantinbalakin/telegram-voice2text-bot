@@ -308,6 +308,36 @@ OPENAI_FORMAT_REQUIREMENTS: dict[str, list[str] | None] = {
     "whisper-1": None,  # Legacy model supports OGA natively
 }
 
+# Supported MIME types for document/video processing
+SUPPORTED_AUDIO_MIMES: set[str] = {
+    "audio/aac",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/ogg",
+    "audio/opus",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/flac",
+    "audio/x-flac",
+    "audio/x-m4a",
+    "audio/m4a",
+    "audio/amr",
+    "audio/x-ms-wma",
+    "audio/webm",
+    "audio/3gpp",
+}
+
+SUPPORTED_VIDEO_MIMES: set[str] = {
+    "video/mp4",
+    "video/quicktime",  # .mov
+    "video/x-msvideo",  # .avi
+    "video/x-matroska",  # .mkv
+    "video/webm",
+    "video/3gpp",
+    "video/mpeg",
+}
+
 
 @lru_cache
 def get_settings() -> Settings:
