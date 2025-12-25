@@ -197,7 +197,7 @@ async def main() -> None:
     # Document handler (audio files sent as documents)
     if settings.enable_document_handler:
         application.add_handler(
-            MessageHandler(filters.DOCUMENT, bot_handlers.document_message_handler)
+            MessageHandler(filters.Document.ALL, bot_handlers.document_message_handler)
         )
         logger.info("Document handler enabled")
     else:
@@ -205,7 +205,9 @@ async def main() -> None:
 
     # Video handler (extract audio from video)
     if settings.enable_video_handler:
-        application.add_handler(MessageHandler(filters.VIDEO, bot_handlers.video_message_handler))
+        application.add_handler(
+            MessageHandler(filters.VIDEO, bot_handlers.video_message_handler)
+        )
         logger.info("Video handler enabled")
     else:
         logger.info("Video handler disabled")
