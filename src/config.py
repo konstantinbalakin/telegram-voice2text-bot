@@ -290,6 +290,16 @@ class Settings(BaseSettings):
         default=3000, description="Text longer than this is sent as .txt file instead of message"
     )
 
+    # Document and Video Support
+    enable_document_handler: bool = Field(
+        default=True,
+        description="Enable processing of audio files sent as documents (.aac, .flac, etc.)",
+    )
+    enable_video_handler: bool = Field(
+        default=True,
+        description="Enable processing of video files with audio extraction",
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
 
@@ -306,6 +316,36 @@ OPENAI_FORMAT_REQUIREMENTS: dict[str, list[str] | None] = {
     "gpt-4o-transcribe": ["mp3", "wav"],  # New models require conversion from OGA
     "gpt-4o-mini-transcribe": ["mp3", "wav"],  # New models require conversion from OGA
     "whisper-1": None,  # Legacy model supports OGA natively
+}
+
+# Supported MIME types for document/video processing
+SUPPORTED_AUDIO_MIMES: set[str] = {
+    "audio/aac",
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/ogg",
+    "audio/opus",
+    "audio/wav",
+    "audio/x-wav",
+    "audio/flac",
+    "audio/x-flac",
+    "audio/x-m4a",
+    "audio/m4a",
+    "audio/amr",
+    "audio/x-ms-wma",
+    "audio/webm",
+    "audio/3gpp",
+}
+
+SUPPORTED_VIDEO_MIMES: set[str] = {
+    "video/mp4",
+    "video/quicktime",  # .mov
+    "video/x-msvideo",  # .avi
+    "video/x-matroska",  # .mkv
+    "video/webm",
+    "video/3gpp",
+    "video/mpeg",
 }
 
 

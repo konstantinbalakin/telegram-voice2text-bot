@@ -13,7 +13,7 @@ from telegram import Update, InlineKeyboardMarkup, Message
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 
-from src.config import settings
+from src.config import settings, SUPPORTED_AUDIO_MIMES
 from src.storage.database import get_session
 from src.storage.repositories import (
     UserRepository,
@@ -1002,6 +1002,395 @@ class BotHandlers:
                     "❌ Произошла ошибка при обработке аудиофайла. "
                     "Пожалуйста, попробуйте еще раз."
                 )
+            except Exception:
+                pass
+
+    async def document_message_handler(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle document messages with audio MIME types.
+
+        Processes documents that contain audio (e.g., .aac, .flac files
+        sent as documents rather than audio messages).
+
+        Args:
+            update: Telegram update object
+            context: Telegram context object
+        """
+        user = update.effective_user
+        if not user or not update.message:
+            return
+
+        document = update.message.document
+        if not document:
+            return
+
+        # Check MIME type
+        mime_type = document.mime_type or ""
+        if mime_type not in SUPPORTED_AUDIO_MIMES:
+            # Not an audio document, ignore silently
+            logger.debug(f"Document ignored: unsupported MIME type {mime_type}")
+            return
+
+        logger.info(
+            f"Processing audio document: user={user.id}, "
+            f"file={document.file_name}, mime={mime_type}, "
+            f"size={document.file_size}"
+        )
+
+        # Validate file size
+        if document.file_size:
+            if settings.telethon_enabled and self.telegram_client:
+                max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+            else:
+                max_size = settings.max_file_size_bytes  # 20 MB
+
+            if document.file_size > max_size:
+                max_size_mb = max_size / 1024 / 1024
+                file_size_mb = document.file_size / 1024 / 1024
+                await update.message.reply_text(
+                    f"⚠️ Файл слишком большой.\n\n"
+                    f"Максимум: {max_size_mb:.0f} МБ\n"
+                    f"Ваш файл: {file_size_mb:.1f} МБ"
+                )
+                logger.warning(f"User {user.id} sent document too large: {file_size_mb:.1f} MB")
+                return
+
+        # Check queue capacity
+        queue_depth = self.queue_manager.get_queue_depth()
+        if queue_depth >= settings.max_queue_size:
+            await update.message.reply_text("⚠️ Очередь переполнена. Попробуйте позже.")
+            logger.warning(f"User {user.id} rejected: queue full")
+            return
+
+        # Send initial status
+        status_msg = await update.message.reply_text("📥 Загружаю аудио файл...")
+
+        try:
+            async with get_session() as session:
+                user_repo = UserRepository(session)
+                usage_repo = UsageRepository(session)
+
+                # Get or create user
+                db_user = await user_repo.get_by_telegram_id(user.id)
+                if not db_user:
+                    db_user = await user_repo.create(
+                        telegram_id=user.id,
+                        username=user.username,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                    )
+
+                # Create usage record
+                usage = await usage_repo.create(
+                    user_id=db_user.id,
+                    voice_file_id=document.file_id,
+                )
+                logger.info(f"Usage record {usage.id} created for document")
+
+            # Download file (hybrid: Bot API for ≤20MB, Client API for >20MB)
+            if document.file_size and document.file_size > settings.max_file_size_bytes:
+                if self.telegram_client and settings.telethon_enabled:
+                    file_path = await self.telegram_client.download_large_file(
+                        message_id=update.message.message_id,
+                        chat_id=update.message.chat_id,
+                        output_dir=self.audio_handler.temp_dir,
+                    )
+                    if not file_path:
+                        raise RuntimeError("Client API download returned None")
+                else:
+                    await status_msg.edit_text("⚠️ Файл слишком большой.")
+                    return
+            else:
+                telegram_file = await context.bot.get_file(document.file_id)
+                file_path = await self.audio_handler.download_voice_message(
+                    telegram_file, document.file_id
+                )
+
+            logger.info(f"Document downloaded: {file_path}")
+
+            # Get duration via ffprobe (documents don't have duration metadata)
+            duration_seconds = self.audio_handler.get_audio_duration_ffprobe(file_path)
+            if duration_seconds is None:
+                duration_seconds = 0  # Will be determined during transcription
+
+            # Validate duration
+            if duration_seconds > settings.max_voice_duration_seconds:
+                await status_msg.edit_text(
+                    f"⚠️ Максимальная длительность: "
+                    f"{settings.max_voice_duration_seconds // 60} мин\n\n"
+                    f"Ваш файл: {int(duration_seconds) // 60} мин "
+                    f"{int(duration_seconds) % 60} сек"
+                )
+                self.audio_handler.cleanup_file(file_path)
+                return
+
+            # Update usage with duration
+            async with get_session() as session:
+                usage_repo = UsageRepository(session)
+                await usage_repo.update(
+                    usage_id=usage.id,
+                    voice_duration_seconds=int(duration_seconds),
+                )
+
+            # Create transcription context
+            transcription_context = TranscriptionContext(
+                user_id=user.id,
+                duration_seconds=int(duration_seconds),
+                file_size_bytes=document.file_size or 0,
+                language="ru",
+            )
+
+            # Create and enqueue request
+            request = TranscriptionRequest(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                file_path=file_path,
+                duration_seconds=int(duration_seconds),
+                context=transcription_context,
+                status_message=status_msg,
+                user_message=update.message,
+                usage_id=usage.id,
+            )
+
+            try:
+                queue_position = await self.queue_manager.enqueue(request)
+                active_workers = self.queue_manager.get_processing_count()
+
+                if queue_position > 1 or active_workers > 0:
+                    actual_position = self.queue_manager.get_queue_position_by_id(request.id)
+                    wait_time, processing_time = self.queue_manager.get_estimated_wait_time_by_id(
+                        request.id, settings.progress_rtf
+                    )
+
+                    if wait_time < 60:
+                        wait_str = f"~{int(wait_time)}с"
+                    else:
+                        minutes = int(wait_time // 60)
+                        seconds = int(wait_time % 60)
+                        wait_str = f"~{minutes}м {seconds}с"
+
+                    if processing_time < 60:
+                        proc_str = f"~{int(processing_time)}с"
+                    else:
+                        minutes = int(processing_time // 60)
+                        seconds = int(processing_time % 60)
+                        proc_str = f"~{minutes}м {seconds}с"
+
+                    await status_msg.edit_text(
+                        f"📋 В очереди: позиция {actual_position}\n"
+                        f"⏱️ Ожидание: {wait_str}\n"
+                        f"🎯 Обработка: {proc_str}"
+                    )
+                else:
+                    await status_msg.edit_text("⚙️ Начинаю обработку...")
+
+            except asyncio.QueueFull:
+                await status_msg.edit_text("⚠️ Очередь переполнена.")
+                self.audio_handler.cleanup_file(file_path)
+
+        except Exception as e:
+            logger.error(f"Document processing error: {e}", exc_info=True)
+            try:
+                await status_msg.edit_text("❌ Ошибка обработки файла. Попробуйте другой формат.")
+            except Exception:
+                pass
+
+    async def video_message_handler(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle video messages by extracting audio track.
+
+        Extracts audio from video files for transcription.
+
+        Args:
+            update: Telegram update object
+            context: Telegram context object
+        """
+        user = update.effective_user
+        if not user or not update.message:
+            return
+
+        video = update.message.video
+        if not video:
+            return
+
+        logger.info(
+            f"Processing video: user={user.id}, "
+            f"file={video.file_name}, duration={video.duration}s, "
+            f"size={video.file_size}"
+        )
+
+        # Convert duration to int
+        duration_seconds = 0
+        if video.duration:
+            if isinstance(video.duration, timedelta):
+                duration_seconds = int(video.duration.total_seconds())
+            else:
+                duration_seconds = int(video.duration)
+
+        # Validate duration
+        if duration_seconds > settings.max_voice_duration_seconds:
+            await update.message.reply_text(
+                f"⚠️ Видео слишком длинное.\n\n"
+                f"Максимум: {settings.max_voice_duration_seconds // 60} мин\n"
+                f"Ваше видео: {duration_seconds // 60} мин {duration_seconds % 60} сек"
+            )
+            logger.warning(f"User {user.id} rejected: video duration {duration_seconds}s")
+            return
+
+        # Validate file size
+        if video.file_size:
+            if settings.telethon_enabled and self.telegram_client:
+                max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+            else:
+                max_size = settings.max_file_size_bytes
+
+            if video.file_size > max_size:
+                max_size_mb = max_size / 1024 / 1024
+                file_size_mb = video.file_size / 1024 / 1024
+                await update.message.reply_text(
+                    f"⚠️ Видео слишком большое.\n\n"
+                    f"Максимум: {max_size_mb:.0f} МБ\n"
+                    f"Ваше видео: {file_size_mb:.1f} МБ"
+                )
+                logger.warning(f"User {user.id} sent video too large: {file_size_mb:.1f} MB")
+                return
+
+        # Check queue
+        queue_depth = self.queue_manager.get_queue_depth()
+        if queue_depth >= settings.max_queue_size:
+            await update.message.reply_text("⚠️ Очередь переполнена. Попробуйте позже.")
+            logger.warning(f"User {user.id} rejected: queue full")
+            return
+
+        status_msg = await update.message.reply_text("📥 Загружаю видео...")
+
+        try:
+            async with get_session() as session:
+                user_repo = UserRepository(session)
+                usage_repo = UsageRepository(session)
+
+                # Get or create user
+                db_user = await user_repo.get_by_telegram_id(user.id)
+                if not db_user:
+                    db_user = await user_repo.create(
+                        telegram_id=user.id,
+                        username=user.username,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                    )
+
+                # Create usage record
+                usage = await usage_repo.create(
+                    user_id=db_user.id,
+                    voice_file_id=video.file_id,
+                )
+                logger.info(f"Usage record {usage.id} created for video")
+
+            # Download video
+            if video.file_size and video.file_size > settings.max_file_size_bytes:
+                if self.telegram_client and settings.telethon_enabled:
+                    video_path = await self.telegram_client.download_large_file(
+                        message_id=update.message.message_id,
+                        chat_id=update.message.chat_id,
+                        output_dir=self.audio_handler.temp_dir,
+                    )
+                    if not video_path:
+                        raise RuntimeError("Client API download returned None")
+                else:
+                    await status_msg.edit_text("⚠️ Видео слишком большое.")
+                    return
+            else:
+                telegram_file = await context.bot.get_file(video.file_id)
+                video_path = await self.audio_handler.download_voice_message(
+                    telegram_file, video.file_id
+                )
+
+            logger.info(f"Video downloaded: {video_path}")
+
+            # Extract audio track
+            await status_msg.edit_text("🎵 Извлекаю аудиодорожку...")
+
+            try:
+                file_path = self.audio_handler.extract_audio_track(video_path)
+            except ValueError as e:
+                await status_msg.edit_text("❌ Видео не содержит аудиодорожки.")
+                self.audio_handler.cleanup_file(video_path)
+                logger.warning(f"Video has no audio: {e}")
+                return
+
+            # Cleanup original video file
+            self.audio_handler.cleanup_file(video_path)
+
+            # Update usage with duration
+            async with get_session() as session:
+                usage_repo = UsageRepository(session)
+                await usage_repo.update(
+                    usage_id=usage.id,
+                    voice_duration_seconds=duration_seconds,
+                )
+
+            # Create transcription context
+            transcription_context = TranscriptionContext(
+                user_id=user.id,
+                duration_seconds=duration_seconds,
+                file_size_bytes=video.file_size or 0,
+                language="ru",
+            )
+
+            # Create and enqueue request
+            request = TranscriptionRequest(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                file_path=file_path,
+                duration_seconds=duration_seconds,
+                context=transcription_context,
+                status_message=status_msg,
+                user_message=update.message,
+                usage_id=usage.id,
+            )
+
+            try:
+                queue_position = await self.queue_manager.enqueue(request)
+                active_workers = self.queue_manager.get_processing_count()
+
+                if queue_position > 1 or active_workers > 0:
+                    actual_position = self.queue_manager.get_queue_position_by_id(request.id)
+                    wait_time, processing_time = self.queue_manager.get_estimated_wait_time_by_id(
+                        request.id, settings.progress_rtf
+                    )
+
+                    if wait_time < 60:
+                        wait_str = f"~{int(wait_time)}с"
+                    else:
+                        minutes = int(wait_time // 60)
+                        seconds = int(wait_time % 60)
+                        wait_str = f"~{minutes}м {seconds}с"
+
+                    if processing_time < 60:
+                        proc_str = f"~{int(processing_time)}с"
+                    else:
+                        minutes = int(processing_time // 60)
+                        seconds = int(processing_time % 60)
+                        proc_str = f"~{minutes}м {seconds}с"
+
+                    await status_msg.edit_text(
+                        f"📋 В очереди: позиция {actual_position}\n"
+                        f"⏱️ Ожидание: {wait_str}\n"
+                        f"🎯 Обработка: {proc_str}"
+                    )
+                else:
+                    await status_msg.edit_text("⚙️ Начинаю обработку...")
+
+            except asyncio.QueueFull:
+                await status_msg.edit_text("⚠️ Очередь переполнена.")
+                self.audio_handler.cleanup_file(file_path)
+
+        except Exception as e:
+            logger.error(f"Video processing error: {e}", exc_info=True)
+            try:
+                await status_msg.edit_text("❌ Ошибка обработки видео. Попробуйте другой формат.")
             except Exception:
                 pass
 
