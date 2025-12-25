@@ -195,10 +195,20 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.AUDIO, bot_handlers.audio_message_handler))
 
     # Document handler (audio files sent as documents)
-    application.add_handler(MessageHandler(filters.DOCUMENT, bot_handlers.document_message_handler))
+    if settings.enable_document_handler:
+        application.add_handler(
+            MessageHandler(filters.DOCUMENT, bot_handlers.document_message_handler)
+        )
+        logger.info("Document handler enabled")
+    else:
+        logger.info("Document handler disabled")
 
     # Video handler (extract audio from video)
-    application.add_handler(MessageHandler(filters.VIDEO, bot_handlers.video_message_handler))
+    if settings.enable_video_handler:
+        application.add_handler(MessageHandler(filters.VIDEO, bot_handlers.video_message_handler))
+        logger.info("Video handler enabled")
+    else:
+        logger.info("Video handler disabled")
 
     # Register callback query handler for interactive transcription
     if settings.interactive_mode_enabled:

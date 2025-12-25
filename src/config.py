@@ -290,6 +290,16 @@ class Settings(BaseSettings):
         default=3000, description="Text longer than this is sent as .txt file instead of message"
     )
 
+    # Document and Video Support
+    enable_document_handler: bool = Field(
+        default=True,
+        description="Enable processing of audio files sent as documents (.aac, .flac, etc.)",
+    )
+    enable_video_handler: bool = Field(
+        default=True,
+        description="Enable processing of video files with audio extraction",
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
 
