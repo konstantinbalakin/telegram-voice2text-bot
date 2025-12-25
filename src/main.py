@@ -205,9 +205,7 @@ async def main() -> None:
 
     # Video handler (extract audio from video)
     if settings.enable_video_handler:
-        application.add_handler(
-            MessageHandler(filters.VIDEO, bot_handlers.video_message_handler)
-        )
+        application.add_handler(MessageHandler(filters.VIDEO, bot_handlers.video_message_handler))
         logger.info("Video handler enabled")
     else:
         logger.info("Video handler disabled")
