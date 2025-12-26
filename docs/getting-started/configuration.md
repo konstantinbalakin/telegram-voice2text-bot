@@ -4,26 +4,33 @@
 
 ## Overview
 
-Bot configuration is managed through environment variables in `.env` file or system environment.
+Bot configuration is managed through environment variables in `.env` file. This guide covers the **production configuration** using OpenAI Whisper API + DeepSeek for text processing.
 
-## Setup .env File
+## Quick Setup
 
 ```bash
 # Copy template
 cp .env.example .env
 
 # Edit configuration
-nano .env  # or use your preferred editor
+nano .env
+```
+
+**Minimum required settings for production:**
+```env
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+OPENAI_API_KEY=sk-your-openai-key
+LLM_API_KEY=sk-your-deepseek-key
 ```
 
 ## Required Settings
 
-### Telegram Bot Token
+### 1. Telegram Bot Token
 
 **Required**. Get from [@BotFather](https://t.me/BotFather):
 
 ```env
-BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
+TELEGRAM_BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
 ```
 
 **How to get:**
@@ -32,193 +39,238 @@ BOT_TOKEN=1234567890:ABCdefGHIjklMNOpqrsTUVwxyz
 3. Follow instructions
 4. Copy token
 
-## Core Settings
+### 2. OpenAI API Key
 
-### Bot Mode
+**Required** for transcription. Get from [OpenAI Platform](https://platform.openai.com/api-keys):
 
 ```env
-BOT_MODE=polling  # or webhook
+OPENAI_API_KEY=sk-proj-...your_key_here
 ```
 
-- `polling` - For development and VPS (default)
-- `webhook` - For production with domain + SSL
+**Cost**: ~$0.006-0.012 per minute of audio
 
-### Database
+**How to get:**
+1. Sign up at https://platform.openai.com
+2. Go to API keys section
+3. Create new secret key
+4. Copy and save it (shown once!)
+
+### 3. DeepSeek API Key
+
+**Required** for text processing (структурирование, резюме, "сделать красиво"). Get from [DeepSeek Platform](https://platform.deepseek.com/api_keys):
 
 ```env
+LLM_API_KEY=sk-...your_deepseek_key_here
+```
+
+**Cost**: ~$0.0002 per structured text (30x cheaper than OpenAI)
+
+**How to get:**
+1. Sign up at https://platform.deepseek.com
+2. Go to API Keys section
+3. Create new key
+4. $5 free credit included!
+
+## Production Configuration
+
+### Transcription Provider
+
+```env
+# Use OpenAI for production (recommended)
+WHISPER_PROVIDERS=["openai"]
+PRIMARY_PROVIDER=openai
+
+# Model selection
+# whisper-1: $0.006/min, supports all formats
+# gpt-4o-transcribe: $0.012/min, better quality
+# gpt-4o-mini-transcribe: $0.012/min, faster
+OPENAI_MODEL=whisper-1
+```
+
+### Routing Strategy
+
+```env
+# Production default: automatic structuring
+WHISPER_ROUTING_STRATEGY=structure
+
+# Structure strategy settings
+STRUCTURE_PROVIDER=openai
+STRUCTURE_MODEL=whisper-1
+STRUCTURE_DRAFT_THRESHOLD=20  # Show draft for audio ≥20s
+STRUCTURE_EMOJI_LEVEL=1  # 0=none, 1=few, 2=moderate, 3=many
+```
+
+### LLM Text Processing
+
+```env
+# Enable LLM features (REQUIRED for interactive buttons)
+LLM_REFINEMENT_ENABLED=true
+LLM_PROVIDER=deepseek
+LLM_MODEL=deepseek-chat
+LLM_BASE_URL=https://api.deepseek.com
+```
+
+### Interactive Features
+
+```env
+# Enable interactive mode (production default)
+INTERACTIVE_MODE_ENABLED=true
+
+# Enable production buttons
+ENABLE_STRUCTURED_MODE=true     # 📝 Структурировать
+ENABLE_MAGIC_MODE=true          # 🪄 Сделать красиво
+ENABLE_SUMMARY_MODE=true        # 📋 О чем этот текст
+
+# Optional features (disabled by default)
+ENABLE_LENGTH_VARIATIONS=false
+ENABLE_EMOJI_OPTION=false
+ENABLE_TIMESTAMPS_OPTION=false
+ENABLE_RETRANSCRIBE=false
+```
+
+## Large Files Support
+
+For files >20 MB (up to 2 GB), enable Telethon:
+
+```env
+TELETHON_ENABLED=true
+TELEGRAM_API_ID=12345678
+TELEGRAM_API_HASH=your_api_hash_here
+```
+
+**How to get Telegram API credentials:**
+1. Visit https://my.telegram.org
+2. Login with your phone number
+3. Go to "API development tools"
+4. Create new application
+5. Copy `api_id` and `api_hash`
+
+## Performance & Limits
+
+```env
+# Queue settings
+MAX_QUEUE_SIZE=10
+MAX_CONCURRENT_WORKERS=1  # Sequential processing
+MAX_VOICE_DURATION_SECONDS=120  # 2 minutes max
+
+# Progress tracking
+PROGRESS_UPDATE_INTERVAL=5  # Update every 5 seconds
+```
+
+## Database
+
+```env
+# SQLite (default, recommended for <1000 users/day)
 DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
+
+# PostgreSQL (for scale)
+# DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/dbname
 ```
-
-**Options:**
-- SQLite (default): `sqlite+aiosqlite:///./data/bot.db`
-- PostgreSQL: `postgresql+asyncpg://user:pass@host:5432/dbname`
-
-## Whisper Configuration
-
-### Model Size
-
-```env
-WHISPER_MODEL_SIZE=medium
-```
-
-**Options:**
-- `tiny` - Fastest, lowest quality (~75MB)
-- `base` - Fast, good quality (~140MB)
-- `small` - Balanced (~480MB)
-- `medium` - **Recommended** for production (~1.5GB)
-- `large-v3` - Best quality, slowest (~3GB)
-
-**Recommendation**: `medium` for production (RTF ~0.3x on CPU)
-
-### Device
-
-```env
-WHISPER_DEVICE=cpu  # or cuda
-```
-
-- `cpu` - For servers without GPU (default)
-- `cuda` - For GPU acceleration (requires CUDA)
-
-### Compute Type
-
-```env
-WHISPER_COMPUTE_TYPE=int8
-```
-
-**Options:**
-- `int8` - **Recommended** (4x less memory, minimal quality loss)
-- `float16` - GPU only
-- `float32` - Highest quality, most memory
-
-### Performance & Queue Settings
-
-```env
-# Processing Limits
-TRANSCRIPTION_TIMEOUT=120
-MAX_CONCURRENT_WORKERS=3
-MAX_QUEUE_SIZE=100
-MAX_VOICE_DURATION_SECONDS=300
-
-# Progress Tracking (Phase 6)
-PROGRESS_UPDATE_INTERVAL=5
-PROGRESS_RTF=0.3
-```
-
-**Processing:**
-- `TRANSCRIPTION_TIMEOUT` - Max seconds for transcription (default: 120)
-- `MAX_CONCURRENT_WORKERS` - Concurrent transcriptions (default: 3, production: 1)
-- `MAX_QUEUE_SIZE` - Max queued requests (default: 100, production: 10)
-- `MAX_VOICE_DURATION_SECONDS` - Max audio duration (default: 300, production: 120)
-
-**Progress Tracking:**
-- `PROGRESS_UPDATE_INTERVAL` - Progress bar update interval in seconds (default: 5)
-- `PROGRESS_RTF` - Real-Time Factor for time estimation (default: 0.3 for medium/int8)
 
 ## Logging
 
 ```env
-LOG_LEVEL=INFO
+LOG_LEVEL=INFO  # DEBUG, INFO, WARNING, ERROR
 ```
-
-**Options:**
-- `DEBUG` - Verbose logging (development)
-- `INFO` - Standard logging (production)
-- `WARNING` - Warnings only
-- `ERROR` - Errors only
-
-## All Configuration Options
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `BOT_TOKEN` | - | **Required**. Telegram Bot Token |
-| `BOT_MODE` | `polling` | `polling` or `webhook` |
-| `WHISPER_MODEL_SIZE` | `base` | Whisper model size |
-| `WHISPER_DEVICE` | `cpu` | `cpu` or `cuda` |
-| `WHISPER_COMPUTE_TYPE` | `int8` | Quantization type |
-| `DATABASE_URL` | `sqlite+aiosqlite:///./data/bot.db` | Database connection string |
-| `LOG_LEVEL` | `INFO` | Logging level |
-| `TRANSCRIPTION_TIMEOUT` | `120` | Max transcription time (seconds) |
-| `MAX_CONCURRENT_WORKERS` | `3` | Concurrent transcriptions (production: 1) |
-| `MAX_QUEUE_SIZE` | `100` | Max queued requests (production: 10) |
-| `MAX_VOICE_DURATION_SECONDS` | `300` | Max audio duration in seconds (production: 120) |
-| `PROGRESS_UPDATE_INTERVAL` | `5` | Progress bar update interval (seconds) |
-| `PROGRESS_RTF` | `0.3` | Real-Time Factor for time estimation |
 
 ## Example Configurations
 
-### Development (Fast)
+### Production (API-based) ⭐
 
 ```env
-BOT_TOKEN=your_token_here
-BOT_MODE=polling
-WHISPER_MODEL_SIZE=base
-WHISPER_DEVICE=cpu
-WHISPER_COMPUTE_TYPE=int8
-LOG_LEVEL=DEBUG
+# Required
+TELEGRAM_BOT_TOKEN=your_token
+OPENAI_API_KEY=sk-your-openai-key
+LLM_API_KEY=sk-your-deepseek-key
+
+# Providers
+WHISPER_PROVIDERS=["openai"]
+WHISPER_ROUTING_STRATEGY=structure
+PRIMARY_PROVIDER=openai
+OPENAI_MODEL=whisper-1
+
+# LLM
+LLM_REFINEMENT_ENABLED=true
+LLM_PROVIDER=deepseek
+
+# Interactive features
+INTERACTIVE_MODE_ENABLED=true
+ENABLE_STRUCTURED_MODE=true
+ENABLE_MAGIC_MODE=true
+ENABLE_SUMMARY_MODE=true
+
+# Large files (optional)
+TELETHON_ENABLED=true
+TELEGRAM_API_ID=12345678
+TELEGRAM_API_HASH=your_hash
 ```
 
-### Production (Quality) - VPS 1GB RAM
+### Local Development (no API costs)
 
 ```env
-BOT_TOKEN=your_token_here
-BOT_MODE=polling
-WHISPER_MODEL_SIZE=medium
-WHISPER_DEVICE=cpu
-WHISPER_COMPUTE_TYPE=int8
-DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
-LOG_LEVEL=WARNING
-TRANSCRIPTION_TIMEOUT=120
-MAX_CONCURRENT_WORKERS=1
-MAX_QUEUE_SIZE=10
-MAX_VOICE_DURATION_SECONDS=120
-PROGRESS_UPDATE_INTERVAL=5
-PROGRESS_RTF=0.3
+# Required
+TELEGRAM_BOT_TOKEN=your_token
+
+# Local transcription
+WHISPER_PROVIDERS=["faster-whisper"]
+WHISPER_ROUTING_STRATEGY=single
+PRIMARY_PROVIDER=faster-whisper
+FASTER_WHISPER_MODEL_SIZE=medium
+FASTER_WHISPER_COMPUTE_TYPE=int8
+
+# Disable LLM features
+LLM_REFINEMENT_ENABLED=false
+INTERACTIVE_MODE_ENABLED=false
 ```
 
-**Note:** Sequential processing (workers=1) prevents crashes on limited VPS. Progress bar provides good UX.
+## Cost Estimation
 
-### GPU Server
+**Per 60 seconds of audio:**
+- OpenAI Whisper (whisper-1): $0.006
+- OpenAI gpt-4o models: $0.012
+- DeepSeek structuring: $0.0002
+- **Total**: ~$0.006-0.012 per minute
 
-```env
-BOT_TOKEN=your_token_here
-BOT_MODE=polling
-WHISPER_MODEL_SIZE=large-v3
-WHISPER_DEVICE=cuda
-WHISPER_COMPUTE_TYPE=float16
-LOG_LEVEL=INFO
-MAX_CONCURRENT_WORKERS=5
-```
+**Monthly costs** (example):
+- 100 minutes/day × 30 days = 3000 minutes/month
+- 3000 × $0.006 = **$18/month** (whisper-1)
+- 3000 × $0.0002 = **$0.60/month** (DeepSeek)
+- **Total**: ~$18-19/month for 100 min/day
 
-## Environment-Specific Setup
-
-### Docker
-
-Environment variables are set in `docker-compose.yml`:
-
-```yaml
-environment:
-  - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-  - WHISPER_MODEL_SIZE=medium
-```
-
-### VPS Deployment
-
-CI/CD sets environment via GitHub Secrets. See [CI/CD Guide](../deployment/cicd.md).
+See [Costs Guide](../deployment/costs.md) for detailed breakdown.
 
 ## Validation
 
+Verify configuration loads correctly:
+
 ```bash
-# Verify configuration loads correctly
-poetry run python -c "from src.config import settings; print(f'Bot configured: {settings.bot_token[:10]}...')"
+poetry run python -c "from src.config import settings; print(f'Bot configured: {settings.telegram_bot_token[:10]}...')"
 ```
+
+## Troubleshooting
+
+### "OPENAI_API_KEY not set"
+- Check `.env` file exists
+- Verify `OPENAI_API_KEY=sk-...` (no spaces, no quotes needed)
+- Restart bot after changes
+
+### "LLM_API_KEY required for structure strategy"
+- Add `LLM_API_KEY=sk-...` to `.env`
+- Or switch to `WHISPER_ROUTING_STRATEGY=single` and `LLM_REFINEMENT_ENABLED=false`
+
+### Interactive buttons don't work
+- Verify `INTERACTIVE_MODE_ENABLED=true`
+- Verify `LLM_REFINEMENT_ENABLED=true`
+- Check LLM_API_KEY is valid
 
 ## Next Steps
 
 - [Quick Start](quick-start.md) - Run the bot
-- [Development](../development/testing.md) - Testing and development
-- [Deployment](../deployment/docker.md) - Deploy to production
+- [Costs Guide](../deployment/costs.md) - Understand API costs
+- [Interactive Features](../features/interactive-modes.md) - Learn about buttons
 
 ## Related Documentation
 
-- [.env.example](../../.env.example) - Full configuration template
-- [Dependencies](../development/dependencies.md) - Package management
+- [.env.example](../../.env.example) - Full configuration template with all options
+- [Architecture](../development/architecture.md) - System design
+- [Docker Deployment](../deployment/docker.md) - Production deployment
