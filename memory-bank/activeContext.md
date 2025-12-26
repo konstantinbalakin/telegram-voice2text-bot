@@ -1,11 +1,11 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status (2025-12-19)
+## Current Status (2025-12-26)
 
 **Phase**: Phase 10 - Interactive Transcription Processing 🚀
-**Stage**: Phase 10.14 COMPLETE ✅ (Magic Mode)
-**Branch**: feature/magic-mode-button (PR #67 open)
-**Production Version**: v0.0.3+
+**Stage**: Phase 10.15 COMPLETE ✅ (Document & Video File Support)
+**Branch**: main
+**Production Version**: v0.0.3+ (commit 04837c1)
 **Production Status**: ✅ OPERATIONAL
 
 ### Infrastructure
@@ -38,6 +38,51 @@
 
 ## Recent Developments (Last 2 Weeks)
 
+### ✅ Phase 10.15: Document & Video File Support (2025-12-25)
+
+**What**: Universal file type support - bot now handles any audio-containing file
+
+**Key Implementation**:
+1. **Document Handler** (`document_message_handler`):
+   - MIME type validation (17+ audio formats: aac, flac, m4a, wma, etc.)
+   - Reuses existing download and transcription pipeline
+   - Silent ignore for non-audio documents
+
+2. **Video Handler** (`video_message_handler`):
+   - Audio track extraction using ffmpeg
+   - Pre-extraction audio stream validation (`_has_audio_stream`)
+   - Duration limits and size checks before extraction
+
+3. **Audio Handler Extensions**:
+   - `extract_audio_track()` - converts video to mono Opus (optimized for Whisper)
+   - `_has_audio_stream()` - ffprobe-based stream detection
+   - `get_audio_duration_ffprobe()` - duration detection for documents/video
+   - Extended format support: .aac, .flac, .wma, .amr, .webm, .3gp, .mp4, .mkv, .avi, .mov
+
+4. **Configuration**:
+   - `SUPPORTED_AUDIO_MIMES` - 17 audio MIME types
+   - `SUPPORTED_VIDEO_MIMES` - 7 video MIME types
+   - Handler registration in `main.py`
+
+**Files Changed**:
+- `src/bot/handlers.py` (+391 lines): document & video handlers
+- `src/transcription/audio_handler.py` (+146 lines): extraction methods
+- `src/config.py` (+40 lines): MIME type configuration
+- `src/main.py` (+16 lines): handler registration
+- `tests/unit/test_audio_extraction.py` (+143 lines): comprehensive tests
+- `.env.example` (+17 lines): configuration documentation
+
+**Technical Details**:
+- Uses ffmpeg for audio extraction (already required dependency)
+- Mono conversion (16kHz, 32kbps Opus) for optimal Whisper performance
+- Graceful error handling: "❌ Видео не содержит аудиодорожки"
+- Large file support via Telethon (up to 2GB for documents/video)
+
+**Status**: ✅ Complete, merged to main (PR #74), deployed
+**Impact**: Bot now supports ANY audio file format users send
+
+---
+
 ### ✅ Phase 10.14: Magic Mode (2025-12-19)
 
 **What**: New "🪄 Сделать красиво" button for publication-ready text transformation
@@ -50,11 +95,7 @@
 - Callback handler with progress tracker and variant caching
 - Fixed emoji_level=1, no length variations (simple UX)
 
-**Bug Fix**:
-- Mypy error: Changed from non-existent `update()` to cached variant pattern
-
-**Status**: ✅ Complete, PR #67 open, CI/CD running
-**Next**: Merge → Deploy → User feedback
+**Status**: ✅ Complete, merged, deployed
 
 ---
 
@@ -142,21 +183,19 @@ else:
 
 ## Next Steps
 
-### Immediate (Phase 10.14 Deployment)
-1. ✅ Implementation complete
-2. ✅ Commits created and pushed (3 commits)
-3. ✅ Pull request created (PR #67)
-4. ⏳ CI/CD checks running
-5. ⏳ Merge to main (after checks pass)
-6. ⏳ Deploy to production (automatic via CI/CD)
-7. ⏳ Manual testing with real voice messages
-8. ⏳ Gather user feedback on magic mode quality
-9. ⏳ Monitor LLM costs and performance
+### Immediate (Current Session)
+1. ✅ Phase 10.15 implementation complete (document & video support)
+2. ✅ Merged to main (PR #74)
+3. ✅ Deployed to production
+4. ⏳ Update Memory Bank documentation
+5. ⏳ Create documentation update PR
+6. ⏳ Monitor production for video/document usage patterns
 
 ### Future Considerations
-- **User feedback**: Monitor magic mode adoption and quality
-- **Prompt tuning**: A/B test different styles if needed
-- **Cost monitoring**: Track LLM usage for magic mode
+- **User feedback**: Monitor document/video file adoption and success rates
+- **Error analysis**: Track audio extraction failures, identify problematic formats
+- **Performance**: Monitor impact of video extraction on queue times
+- **Format expansion**: Add support for additional video containers if needed
 - **Phase 11+**: Analytics, quotas, billing, multi-language
 
 ---

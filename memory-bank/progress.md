@@ -45,6 +45,7 @@
 - **Phase 10.12**: StructureStrategy (automatic structured transcription) ✅ (2025-12-16)
 - **Phase 10.13**: OpenAI long audio chunking (unlimited duration) ✅ (2025-12-17)
 - **Phase 10.14**: Magic Mode (publication-ready text transformation) ✅ (2025-12-19)
+- **Phase 10.15**: Document & Video File Support (universal file type handling) ✅ (2025-12-25)
 
 ## Current Feature Set
 
@@ -59,11 +60,16 @@
 - ✅ Duration limits (120s max)
 
 ### File Handling
+- ✅ Voice messages (standard Telegram voice input)
+- ✅ Audio files (sent as Telegram audio messages)
+- ✅ Document files with audio MIME types (.aac, .flac, .m4a, .wma, etc.)
+- ✅ Video files with audio track extraction (.mp4, .mkv, .avi, .mov, .webm)
 - ✅ Large files via Telethon (up to 2GB)
 - ✅ Provider-aware format conversion (OGA → MP3/WAV for gpt-4o)
 - ✅ OpenAI long audio chunking (parallel/sequential with overlap)
 - ✅ PDF generation for long transcriptions
 - ✅ HTML formatting with Telegram parse mode
+- ✅ Audio extraction from video using ffmpeg
 
 ### Interactive Features (Phase 10)
 - ✅ Mode switching (original/structured/summary/magic)
@@ -199,6 +205,9 @@ OPENAI_CHUNKING=false  # Enable manual chunking if needed
 7. **Semantic Versioning**: Automatic patch increments, manual minor/major versions
 8. **Semaphore-Based Rate Limiting**: Control concurrent API calls for parallel chunking
 9. **Chunk Overlap**: Small overlap between chunks prevents word cutting at boundaries
+10. **Universal File Type Support**: Handle voice, audio, documents, and video through unified transcription pipeline
+11. **MIME Type Filtering**: Validate document MIME types before processing to avoid non-audio files
+12. **Audio Stream Detection**: Check for audio streams in video files before attempting extraction
 
 ---
 

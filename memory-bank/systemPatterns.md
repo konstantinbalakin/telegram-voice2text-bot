@@ -1301,6 +1301,203 @@ The hybrid approach means we don't over-engineer for scale we don't have yet, bu
 
 - **Pattern**: Provider-aware preprocessing > one-size-fits-all approach for multi-provider systems with different format requirements
 
+### 39. **Universal File Type Support Pattern** (added 2025-12-25)
+- **Where**: Document and video handlers in `src/bot/handlers.py` + audio extraction in `src/transcription/audio_handler.py`
+- **Why**: Users send audio content in various formats (documents, videos), not just voice messages
+- **Problem**: Bot only handled Telegram voice messages and audio files, missing documents (.aac, .flac) and videos
+- **Benefit**: Complete file type coverage, better UX, handles any audio-containing file
+- **Implementation**:
+  ```python
+  # MIME type-based filtering for documents
+  from src.config import SUPPORTED_AUDIO_MIMES
+
+  async def document_message_handler(update, context):
+      document = update.message.document
+      mime_type = document.mime_type or ""
+
+      # Validate MIME type
+      if mime_type not in SUPPORTED_AUDIO_MIMES:
+          logger.debug(f"Document ignored: unsupported MIME type {mime_type}")
+          return  # Silent ignore for non-audio documents
+
+      # Process like voice message (reuse existing pipeline)
+      # ... download, transcribe, respond
+
+  # Video handler with audio extraction
+  async def video_message_handler(update, context):
+      video = update.message.video
+
+      # Download video
+      video_path = await download_file(...)
+
+      # Extract audio track
+      audio_path = audio_handler.extract_audio_track(video_path)
+
+      # Continue with normal transcription pipeline
+      # ... transcribe, respond
+  ```
+
+- **Key Features**:
+  - **Document Handler**: Validates audio MIME types (17 formats), reuses download/transcription pipeline
+  - **Video Handler**: Extracts audio from video files (7 video formats), validates stream existence first
+  - **Silent Filtering**: Non-audio documents ignored without error messages (better UX)
+  - **Unified Pipeline**: All file types flow through same transcription logic
+
+- **Configuration**:
+  ```python
+  SUPPORTED_AUDIO_MIMES = {
+      "audio/aac", "audio/mp4", "audio/mpeg", "audio/mp3",
+      "audio/ogg", "audio/opus", "audio/wav", "audio/x-wav",
+      "audio/flac", "audio/x-flac", "audio/x-m4a", "audio/m4a",
+      "audio/amr", "audio/x-ms-wma", "audio/webm", "audio/3gpp"
+  }
+
+  SUPPORTED_VIDEO_MIMES = {
+      "video/mp4", "video/quicktime", "video/x-msvideo",
+      "video/x-matroska", "video/webm", "video/3gpp", "video/mpeg"
+  }
+  ```
+
+- **Handler Registration** (in `main.py`):
+  ```python
+  # Document handler (audio files sent as documents)
+  application.add_handler(
+      MessageHandler(filters.DOCUMENT, bot_handlers.document_message_handler)
+  )
+
+  # Video handler (extract audio from video)
+  application.add_handler(
+      MessageHandler(filters.VIDEO, bot_handlers.video_message_handler)
+  )
+  ```
+
+- **Pattern**: MIME type validation + unified processing pipeline > separate logic per file type
+
+### 40. **Audio Extraction from Video Pattern** (added 2025-12-25)
+- **Where**: `AudioHandler.extract_audio_track()` in `src/transcription/audio_handler.py`
+- **Why**: Video files contain audio tracks that need extraction before transcription
+- **Problem**: Whisper models require audio-only input, can't process video containers
+- **Benefit**: Support video files transparently, optimize for Whisper (mono, 16kHz)
+- **Implementation**:
+  ```python
+  def extract_audio_track(self, input_path: Path) -> Path:
+      """Extract audio track from video/media file.
+
+      Converts to mono Opus format optimized for Whisper.
+      """
+      # Check if file has audio stream
+      if not self._has_audio_stream(input_path):
+          raise ValueError(f"File has no audio stream: {input_path.name}")
+
+      output_path = input_path.parent / f"{input_path.stem}_extracted.ogg"
+
+      # Extract audio using ffmpeg
+      subprocess.run([
+          "ffmpeg", "-y", "-i", str(input_path),
+          "-vn",  # No video
+          "-ac", "1",  # Mono
+          "-ar", "16000",  # 16kHz sample rate
+          "-acodec", "libopus",  # Opus codec
+          "-b:a", "32k",  # 32 kbps bitrate
+          "-vbr", "on",  # Variable bitrate
+          "-f", "ogg",  # OGG container
+          str(output_path)
+      ], check=True, capture_output=True)
+
+      return output_path
+
+  def _has_audio_stream(self, file_path: Path) -> bool:
+      """Check if file contains an audio stream."""
+      result = subprocess.run([
+          "ffprobe", "-v", "error",
+          "-select_streams", "a",  # Audio streams only
+          "-show_entries", "stream=codec_type",
+          "-of", "csv=p=0",
+          str(file_path)
+      ], capture_output=True, text=True, check=True)
+
+      return "audio" in result.stdout
+  ```
+
+- **Key Features**:
+  - **Pre-validation**: Check audio stream existence before extraction (prevents errors)
+  - **Optimization**: Convert to mono Opus (16kHz, 32kbps) - ideal for Whisper
+  - **Cleanup**: Temporary video files deleted after extraction
+  - **Logging**: Size tracking (video → audio compression ratio)
+
+- **Error Handling**:
+  ```python
+  try:
+      audio_path = audio_handler.extract_audio_track(video_path)
+  except ValueError as e:
+      await status_msg.edit_text("❌ Видео не содержит аудиодорожки.")
+      audio_handler.cleanup_file(video_path)
+      return
+
+  # Cleanup original video after extraction
+  audio_handler.cleanup_file(video_path)
+  ```
+
+- **Benefits**:
+  - Optimal format for Whisper (mono, 16kHz)
+  - Significant size reduction (video → audio compression)
+  - Graceful failure for video-only files
+  - Reuses existing ffmpeg dependency
+
+- **Pattern**: Pre-validation + format optimization + cleanup > blind processing
+
+### 41. **ffprobe-Based Duration Detection Pattern** (added 2025-12-25)
+- **Where**: `AudioHandler.get_audio_duration_ffprobe()` in `src/transcription/audio_handler.py`
+- **Why**: Document files don't have duration metadata like Telegram voice messages
+- **Problem**: Need duration for validation/limits, but documents lack Telegram's duration field
+- **Benefit**: Accurate duration detection for any audio/video file
+- **Implementation**:
+  ```python
+  def get_audio_duration_ffprobe(self, file_path: Path) -> Optional[float]:
+      """Get audio duration using ffprobe.
+
+      Args:
+          file_path: Path to audio/video file
+
+      Returns:
+          Duration in seconds or None if unavailable
+      """
+      try:
+          result = subprocess.run([
+              "ffprobe", "-v", "error",
+              "-show_entries", "format=duration",
+              "-of", "default=noprint_wrappers=1:nokey=1",
+              str(file_path)
+          ], capture_output=True, text=True, check=True)
+
+          return float(result.stdout.strip())
+      except (subprocess.CalledProcessError, ValueError):
+          return None
+  ```
+
+- **Usage in Handlers**:
+  ```python
+  # For documents (no metadata)
+  duration_seconds = self.audio_handler.get_audio_duration_ffprobe(file_path)
+  if duration_seconds is None:
+      duration_seconds = 0  # Will be determined during transcription
+
+  # Validate duration
+  if duration_seconds > settings.max_voice_duration_seconds:
+      await status_msg.edit_text(f"⚠️ Максимальная длительность: {limit}")
+      return
+  ```
+
+- **Key Features**:
+  - **Universal**: Works for any audio/video format
+  - **Accurate**: Reads from file metadata, not estimates
+  - **Graceful fallback**: Returns None on failure (continue with 0 duration)
+  - **Validation**: Duration limits enforced before transcription
+
+- **Dependencies**: Uses ffprobe (part of ffmpeg, already required)
+
+- **Pattern**: ffprobe for file analysis + graceful fallback > assume duration from file size
+
 ## Development Workflow
 
 ### Git Strategy

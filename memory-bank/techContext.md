@@ -125,8 +125,8 @@ mypy = "^1.13"                       # Type checking
 
 ## System Dependencies
 
-**ffmpeg** (Required for audio preprocessing):
-- **Purpose**: Audio format conversion (mono, speed adjustment)
+**ffmpeg** (Required for audio preprocessing and video file support):
+- **Purpose**: Audio format conversion, video-to-audio extraction, duration detection
 - **Installation**:
   - macOS: `brew install ffmpeg`
   - Ubuntu/Debian: `apt-get install -y ffmpeg`
@@ -134,7 +134,10 @@ mypy = "^1.13"                       # Type checking
 - **Features using ffmpeg**:
   - `AUDIO_CONVERT_TO_MONO=true` - Convert stereo to mono for faster processing
   - `AUDIO_SPEED_MULTIPLIER` - Adjust playback speed (0.5x-2.0x)
-- **Fallback**: Bot works without ffmpeg, but preprocessing features are disabled with warnings
+  - **Video audio extraction** - Extract audio tracks from video files (.mp4, .mkv, .avi, .mov, .webm)
+  - **Duration detection** - ffprobe for document/video duration analysis
+  - **Audio stream validation** - Check if video contains audio before extraction
+- **Fallback**: Bot works without ffmpeg for voice messages, but document/video support requires ffmpeg
 
 **WeasyPrint System Dependencies** (NEW - 2025-12-09, Required for PDF generation):
 - **Purpose**: HTML to PDF conversion for large transcriptions (>3000 chars)
@@ -147,6 +150,123 @@ mypy = "^1.13"                       # Type checking
   - Cyrillic text support (FontConfiguration)
   - HTML rendering (bold, italic, lists, code blocks, links)
 - **Fallback**: If PDF generation fails, automatically falls back to .txt files
+
+## Supported File Formats (Added 2025-12-25)
+
+### Input File Types
+
+The bot now supports comprehensive file type handling through four message handlers:
+
+**1. Voice Messages** (`voice_message_handler`):
+- Standard Telegram voice input (recorded with microphone button)
+- Format: OGG/Opus (Telegram default)
+- Direct transcription, no preprocessing needed
+
+**2. Audio Files** (`audio_message_handler`):
+- Sent as Telegram "audio" messages (music files with metadata)
+- Formats: .mp3, .ogg, .opus, .wav, .m4a, etc.
+- Direct transcription
+
+**3. Document Files** (`document_message_handler`):
+- Audio files sent as documents
+- **Supported Audio MIME Types** (17 formats):
+  - `audio/aac` - AAC audio files (.aac)
+  - `audio/mp4` - MP4 audio (.m4a)
+  - `audio/mpeg`, `audio/mp3` - MP3 audio
+  - `audio/ogg`, `audio/opus` - OGG/Opus
+  - `audio/wav`, `audio/x-wav` - WAV audio
+  - `audio/flac`, `audio/x-flac` - FLAC lossless
+  - `audio/x-m4a`, `audio/m4a` - M4A audio
+  - `audio/amr` - AMR (Adaptive Multi-Rate)
+  - `audio/x-ms-wma` - Windows Media Audio
+  - `audio/webm` - WebM audio
+  - `audio/3gpp` - 3GP audio
+- **Silent Filtering**: Non-audio documents ignored without error
+
+**4. Video Files** (`video_message_handler`):
+- Video files with audio track extraction
+- **Supported Video MIME Types** (7 formats):
+  - `video/mp4` - MP4 video (.mp4)
+  - `video/quicktime` - QuickTime video (.mov)
+  - `video/x-msvideo` - AVI video (.avi)
+  - `video/x-matroska` - Matroska video (.mkv)
+  - `video/webm` - WebM video
+  - `video/3gpp` - 3GP video
+  - `video/mpeg` - MPEG video
+- **Audio Extraction**: ffmpeg extracts audio to mono Opus (16kHz, 32kbps)
+- **Validation**: Checks for audio stream before extraction
+- **Error Handling**: "❌ Видео не содержит аудиодорожки" if no audio
+
+### Audio Processing Pipeline
+
+```
+Input File (any type)
+  ↓
+Handler Selection (by Telegram update type)
+  ↓
+MIME Type Validation (for documents)
+  ├─ Audio MIME → Continue
+  └─ Other MIME → Silent ignore
+  ↓
+File Download (Bot API ≤20MB, Client API >20MB)
+  ↓
+Audio Extraction (for video files only)
+  ├─ Check audio stream exists
+  ├─ Extract to mono Opus (16kHz, 32kbps)
+  └─ Cleanup original video file
+  ↓
+Duration Detection
+  ├─ Voice/Audio: from Telegram metadata
+  └─ Document/Video: ffprobe analysis
+  ↓
+Format Optimization (provider-aware)
+  ├─ faster-whisper: Keep OGG/Opus
+  └─ OpenAI gpt-4o: Convert to MP3/WAV
+  ↓
+Transcription (unified pipeline for all types)
+  ↓
+Response with text + interactive keyboard
+```
+
+### Configuration
+
+**MIME Type Sets** (`src/config.py`):
+```python
+SUPPORTED_AUDIO_MIMES: set[str] = {
+    "audio/aac", "audio/mp4", "audio/mpeg", "audio/mp3",
+    "audio/ogg", "audio/opus", "audio/wav", "audio/x-wav",
+    "audio/flac", "audio/x-flac", "audio/x-m4a", "audio/m4a",
+    "audio/amr", "audio/x-ms-wma", "audio/webm", "audio/3gpp",
+}
+
+SUPPORTED_VIDEO_MIMES: set[str] = {
+    "video/mp4", "video/quicktime", "video/x-msvideo",
+    "video/x-matroska", "video/webm", "video/3gpp", "video/mpeg",
+}
+```
+
+**Handler Registration** (`src/main.py`):
+```python
+# Existing handlers
+application.add_handler(MessageHandler(filters.VOICE, bot_handlers.voice_message_handler))
+application.add_handler(MessageHandler(filters.AUDIO, bot_handlers.audio_message_handler))
+
+# NEW handlers (Phase 10.15)
+application.add_handler(MessageHandler(filters.DOCUMENT, bot_handlers.document_message_handler))
+application.add_handler(MessageHandler(filters.VIDEO, bot_handlers.video_message_handler))
+```
+
+### Implementation Details
+
+**Key Methods** (added in Phase 10.15):
+- `AudioHandler.extract_audio_track()` - Extract audio from video (ffmpeg)
+- `AudioHandler._has_audio_stream()` - Validate audio stream exists (ffprobe)
+- `AudioHandler.get_audio_duration_ffprobe()` - Detect duration for documents/video
+- `BotHandlers.document_message_handler()` - Handle audio documents
+- `BotHandlers.video_message_handler()` - Handle video files
+
+**Tests** (added in Phase 10.15):
+- `tests/unit/test_audio_extraction.py` - Audio stream detection, extraction success/failure
 
 ## Project Structure (Updated 2025-10-29)
 
