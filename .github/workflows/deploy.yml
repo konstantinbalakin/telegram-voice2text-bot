@@ -244,7 +244,7 @@ jobs:
             BOT_MODE=polling
             
             # Client API for support large files
-            TELETHON_ENABLED=false
+            TELETHON_ENABLED=true
             TELETHON_SESSION_NAME=bot_client
 
             # Transcription Provider Configuration
