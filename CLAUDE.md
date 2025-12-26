@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Telegram Voice2Text Bot - A Telegram bot for working with voice messages. Currently in initial setup stage.
+Telegram Voice2Text Bot - Production-ready Telegram bot for voice transcription with AI-powered text processing.
+
+**Tech Stack**: OpenAI Whisper API (transcription) + DeepSeek V3 (text processing) + Interactive buttons
 
 **GitHub Repository**: `konstantinbalakin/telegram-voice2text-bot`
 
@@ -89,22 +91,24 @@ gh pr create --title "feat: description" --body "..."
 
 ## Development Status
 
-✅ **Current Status**: Production-ready, deployed on VPS
+✅ **Current Status**: Production-ready, Phase 10.14 complete
 
 **Completed Phases**:
-- Phase 1: Project Setup ✅
-- Phase 2: Core Functionality (Database, Whisper, Bot) ✅
-- Phase 3: Docker & CI/CD ✅
-- Phase 4: VPS Deployment ✅
+- Phase 1-6: Project Setup, Core Functionality, Docker, VPS, Queue System ✅
+- Phase 7-9: Logging, Hybrid Transcription, Large Files (Telethon) ✅
+- Phase 10: Interactive Transcription System (all 14 sub-phases) ✅
 
-**Project Status**:
-- **Bot**: ✅ Live on Telegram, handling users
-- **Transcription**: ✅ faster-whisper medium/int8 (RTF ~0.3x)
-- **Database**: ✅ SQLite (ready for PostgreSQL migration)
+**Production Configuration**:
+- **Bot**: ✅ Live on Telegram, free during user acquisition
+- **Transcription**: ✅ OpenAI Whisper API (gpt-4o models + whisper-1)
+- **Text Processing**: ✅ DeepSeek V3 (структурирование, резюме, "сделать красиво")
+- **Interactive Features**: ✅ 3 buttons - Структурировать, Сделать красиво, О чем этот текст
+- **Large Files**: ✅ Telethon support up to 2 GB
+- **Database**: ✅ SQLite with variant caching
 - **Docker**: ✅ Automated builds and deployments
 - **CI/CD**: ✅ GitHub Actions pipeline active
 
-**Next Phase**: Advanced features (quotas, billing, summarization)
+**Next Phase**: Analytics dashboard, quotas & billing, multi-language
 
 ## Additional Instructions
 - @memory-bank/!memory-bank.md

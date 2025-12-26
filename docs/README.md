@@ -12,6 +12,13 @@ New to the project? Start here:
 - **[Configuration](getting-started/configuration.md)** - Configure the bot
 - **[Quick Start](getting-started/quick-start.md)** - Run your first bot
 
+### ✨ Features
+
+Learn about bot capabilities:
+
+- **[Interactive Modes](features/interactive-modes.md)** - Структурировать, Сделать красиво, О чем этот текст
+- **[LLM Integration](features/llm-integration.md)** - DeepSeek V3 text processing
+
 ### 💻 Development
 
 For contributors and developers:
@@ -31,6 +38,7 @@ Deploy to production:
 - **[VPS Setup](deployment/vps-setup.md)** - Deploy to VPS server
 - **[CI/CD Pipeline](deployment/cicd.md)** - Automated deployment with GitHub Actions
 - **[Migration Runbook](deployment/migration-runbook.md)** - Database migration operations
+- **[API Costs](deployment/costs.md)** - Understanding and optimizing costs
 
 ### 📊 Research
 
@@ -74,8 +82,12 @@ docs/
 │
 ├── getting-started/               # For new users
 │   ├── installation.md            # Setup instructions
-│   ├── configuration.md           # Environment configuration
+│   ├── configuration.md           # Environment configuration (OpenAI + DeepSeek)
 │   └── quick-start.md             # 5-minute start guide
+│
+├── features/                      # Bot features
+│   ├── interactive-modes.md       # 3 interactive buttons
+│   └── llm-integration.md         # DeepSeek V3 text processing
 │
 ├── development/                   # For developers
 │   ├── architecture.md            # System architecture
@@ -89,7 +101,8 @@ docs/
 │   ├── docker.md                  # Docker deployment
 │   ├── vps-setup.md               # VPS setup guide
 │   ├── cicd.md                    # CI/CD pipeline
-│   └── migration-runbook.md       # Migration operations
+│   ├── migration-runbook.md       # Migration operations
+│   └── costs.md                   # API costs and optimization
 │
 └── research/                      # Performance data
     └── benchmarks/                # Model benchmarks

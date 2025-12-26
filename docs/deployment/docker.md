@@ -2,7 +2,7 @@
 
 [← Back to Documentation](../README.md)
 
-Docker - самый простой способ запуска бота. Все зависимости, включая Whisper модели, будут установлены автоматически.
+Docker - самый простой способ запуска бота. Все зависимости автоматически устанавливаются в контейнере.
 
 ## Quick Start
 
@@ -13,11 +13,21 @@ cd telegram-voice2text-bot
 
 # 2. Configure .env file
 cp .env.example .env
-nano .env  # Set BOT_TOKEN
+nano .env  # Set TELEGRAM_BOT_TOKEN, OPENAI_API_KEY, LLM_API_KEY
 
 # 3. Start
 docker-compose up -d
+
+# 4. Check logs
+docker-compose logs -f bot
 ```
+
+**Required API keys:**
+- `TELEGRAM_BOT_TOKEN` - from @BotFather
+- `OPENAI_API_KEY` - from https://platform.openai.com/api-keys
+- `LLM_API_KEY` - from https://platform.deepseek.com/api_keys
+
+See [Configuration Guide](../getting-started/configuration.md) for detailed setup instructions.
 
 ## Container Management
 
