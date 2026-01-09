@@ -2,9 +2,9 @@
 
 ## Technology Stack
 
-**Current Status**: ✅ Selected and approved (2025-10-12)
+**Current Status**: ✅ API-First Architecture (2025-01-09)
 
-## Core Technologies (DECIDED)
+### Core Technologies
 
 ### Programming Language: **Python 3.11+**
 
@@ -32,38 +32,40 @@
 - aiogram: Good, but python-telegram-bot more established
 - pytelegrambotapi: Synchronous, not suitable for our async architecture
 
-### Voice Processing: **faster-whisper v1.2.0**
+### Transcription Stack
 
-**Selected**: `faster-whisper` v1.2.0 (August 2025)
+**Primary: OpenAI Whisper API**
+- **Models**: whisper-1 (default), gpt-4o-transcribe, gpt-4o-mini-transcribe
+- **Performance**: 5-10s for 1-minute audio
+- **Quality**: Best-in-class for Russian speech
+- **Cost**: $0.006/minute
+- **Added**: 2025-12-15
 
-**Critical Decision**:
-- ✅ **4x faster** than openai-whisper
-- ✅ **75% less memory** usage (int8 quantization)
-- ✅ Same accuracy as original Whisper
-- ✅ CPU-optimized with CTranslate2
-- ✅ GPU support available
-- ⚠️ **ffmpeg required** for audio preprocessing (mono conversion, speed adjustment)
+**Fallback: faster-whisper v1.2.0 (local)**
+- **Model**: medium/int8/beam1
+- **Performance**: 20-36s for 1-minute audio
+- **Quality**: Good (but not excellent like OpenAI)
+- **Cost**: Free
+- **Role**: Reliability fallback when OpenAI API unavailable
+- **Status**: Kept for reliability, not primary
 
-**Production Configuration** (finalized 2025-10-24): `medium / int8 / beam1`
-- **Performance**: RTF ~0.3x (3x faster than audio duration)
-  - 7s audio → ~2s, 30s audio → ~10s, 60s audio → ~20s
-- **Memory**: ~2GB RAM peak (tested in production, not ~3.5GB as initially estimated)
-- **Quality**: Excellent for Russian language, good for long informal speech
-- **Rationale**: Prioritized quality over speed after comprehensive benchmarking
+**Decision Rationale:**
+- API-first provides 4-7x faster transcription
+- Better quality for Russian speech
+- Enables LLM-powered text processing features
+- Cost acceptable for UX quality (~$0.006 per message)
 
-**Alternative Configurations**:
-- `tiny/int8`: Fast but poor quality (22-78% similarity in tests)
-- `small/int8`: Faster (~2s for 7s audio) but lower accuracy
-- `medium/int8/beam5`: Better quality but 2x slower
-- OpenAI API: Best quality but costs $0.006/minute
+### Text Processing
 
-📄 Benchmark results: `memory-bank/benchmarks/final-decision.md`
+**Provider: DeepSeek V3**
+- **Model**: deepseek-chat
+- **Features**: Structuring, Magic, Summary modes
+- **Performance**: 2-5s processing time
+- **Cost**: ~$0.0002 per 60s audio
+- **Quality**: Excellent Russian text transformation
+- **Added**: 2025-12-04
 
-**Provider Architecture**:
-- **Active Providers**: faster-whisper (local), OpenAI API (optional)
-- **Removed**: openai-whisper (original Whisper) - larger, slower, removed 2025-10-24
-- **Routing**: Single provider, fallback, or benchmark mode
-- **Configuration**: ENV-driven for flexibility
+**Decision Rationale:** See [architecture-evolution.md](./architecture-evolution.md)
 
 ## Complete Dependency Stack
 
@@ -267,6 +269,57 @@ application.add_handler(MessageHandler(filters.VIDEO, bot_handlers.video_message
 
 **Tests** (added in Phase 10.15):
 - `tests/unit/test_audio_extraction.py` - Audio stream detection, extraction success/failure
+
+---
+
+## Cost Structure (Added 2025-01-09)
+
+### Per-Message Costs
+
+**Per 60-second message:**
+- OpenAI transcription: $0.006
+- DeepSeek processing: ~$0.0002
+- **Total: ~$0.0062 per message**
+
+### Monthly Estimates
+
+**Scenario: 100 messages/day**
+- 100 messages/day × 30 days = 3,000 messages
+- 3,000 × 60s = 180,000 seconds = 50 hours
+- **Cost: 3,000 × $0.0062 = $18.60/month**
+
+**Scenario: 1,000 messages/day**
+- 1,000 messages/day × 30 days = 30,000 messages
+- 30,000 × 60s = 1,800,000 seconds = 500 hours
+- **Cost: 30,000 × $0.0062 = $186/month**
+
+### Comparison: API-First vs Local-Only
+
+| Metric | API-First | Local-Only |
+|--------|-----------|------------|
+| **Cost** | $18.60/month (100 daily) | $0/month |
+| **Speed** | 7-15s total | 20-36s |
+| **Quality** | Excellent (OpenAI) | Good (faster-whisper) |
+| **Features** | Structure, Magic, Summary | Basic transcription only |
+| **Memory** | <500MB RAM | ~2GB RAM |
+| **UX** | Users love it | Too slow, poor UX |
+
+**Conclusion**: API costs are acceptable for the UX quality and features provided
+
+### Cost Optimization Strategies
+
+**Implemented:**
+- ✅ Variant caching prevents duplicate LLM calls
+- ✅ Fallback to local when API unavailable
+- ✅ Efficient batching (future improvement)
+
+**Future Considerations:**
+- Free tier with daily limits (e.g., 10 messages/day free)
+- Paid tiers for heavy users
+- Common phrase caching
+- Hybrid mode: Short = local, long = API
+
+---
 
 ## Project Structure (Updated 2025-10-29)
 
@@ -805,21 +858,36 @@ Key APIs to use:
 
 ## Technical Decisions Log
 
-| Date | Area | Decision | Alternatives Considered | Rationale |
-|------|------|----------|------------------------|-----------|
-| 2025-10-12 | Language | Python 3.11+ | Node.js, Go, Rust | Best Whisper integration, mature ecosystem |
-| 2025-10-12 | Bot Framework | python-telegram-bot 22.5 | aiogram, pytelegrambotapi | Most mature, async support, both polling/webhook |
-| 2025-10-12 | Voice Processing | faster-whisper 1.2.0 | openai-whisper, cloud APIs | 4x faster, less memory, no API costs |
-| 2025-10-12 | Architecture | Hybrid Queue (Option 3) | Monolith, Microservices | Balance simplicity/scalability |
-| 2025-10-12 | Database | SQLAlchemy + SQLite/PostgreSQL | MongoDB, raw SQL | Async ORM, migration support |
-| 2025-10-12 | Deployment | Docker + VPS | Serverless, PaaS | Full control, cost-effective |
-| 2025-10-16 | Docker Base Image | python:3.11-slim-bookworm | Alpine, full Python image | Good balance of size and compatibility |
-| 2025-10-16 | Dockerfile Strategy | Single-stage | Multi-stage build | Simpler, adequate optimization for use case |
-| 2025-10-16 | Build Optimization | Build cache mounting | No cache | Significantly faster rebuilds (minutes vs tens of minutes) |
-| 2025-10-19 | CI/CD Platform | GitHub Actions | GitLab CI, Jenkins, CircleCI | Free for public repos, native GitHub integration, excellent caching |
-| 2025-10-19 | Branch Protection | Protected main branch | Open main branch | Enforces code review, prevents direct commits |
-| 2025-10-19 | Deployment Strategy | Automated via SSH | Manual deployment, Kubernetes | Simple, reliable, zero-downtime rolling updates |
-| 2025-10-19 | Docker Registry | Docker Hub | GitHub Container Registry, private registry | Free for public images, widely used, reliable |
+**Recent Updates (2025-01-09): API-First Architecture**
+
+| Date | Area | Decision | Status | Rationale |
+|------|------|----------|--------|-----------|
+| 2025-12-25 | Transcription | **OpenAI API primary** | ✅ Active | 4-7x faster, better quality |
+| 2025-12-25 | Text Processing | **DeepSeek V3** | ✅ Active | Cost-effective LLM |
+| 2025-12-25 | Fallback | **Local model** | ✅ Active | Reliability |
+| 2025-12-15 | OpenAI Provider | **gpt-4o-transcribe** | ✅ Active | Even better quality |
+| 2025-12-04 | LLM Integration | **DeepSeek V3** | ✅ Active | Intelligent text processing |
+| 2025-11-20 | Hybrid Strategy | **Draft + LLM** | ⚠️ Replaced | Superseded by API-first |
+
+**Historical Decisions (2025-10-12 → 2025-12-25): Local-First Architecture**
+
+| Date | Area | Decision | Status | Rationale |
+|------|------|----------|--------|-----------|
+| 2025-10-12 | Language | Python 3.11+ | ✅ Active | Best Whisper integration, mature ecosystem |
+| 2025-10-12 | Bot Framework | python-telegram-bot 22.5 | ✅ Active | Most mature, async support, both polling/webhook |
+| 2025-10-12 | Voice Processing | faster-whisper 1.2.0 | ⚠️ Fallback | 4x faster, less memory, no API costs (too slow) |
+| 2025-10-12 | Architecture | Hybrid Queue (Option 3) | ✅ Active | Balance simplicity/scalability |
+| 2025-10-12 | Database | SQLAlchemy + SQLite/PostgreSQL | ✅ Active | Async ORM, migration support |
+| 2025-10-12 | Deployment | Docker + VPS | ✅ Active | Full control, cost-effective |
+| 2025-10-16 | Docker Base Image | python:3.11-slim-bookworm | ✅ Active | Good balance of size and compatibility |
+| 2025-10-16 | Dockerfile Strategy | Single-stage | ✅ Active | Simpler, adequate optimization for use case |
+| 2025-10-16 | Build Optimization | Build cache mounting | ✅ Active | Significantly faster rebuilds (minutes vs tens of minutes) |
+| 2025-10-19 | CI/CD Platform | GitHub Actions | ✅ Active | Free for public repos, native GitHub integration, excellent caching |
+| 2025-10-19 | Branch Protection | Protected main branch | ✅ Active | Enforces code review, prevents direct commits |
+| 2025-10-19 | Deployment Strategy | Automated via SSH | ✅ Active | Simple, reliable, zero-downtime rolling updates |
+| 2025-10-19 | Docker Registry | Docker Hub | ✅ Active | Free for public images, widely used, reliable |
+
+**For complete evolution story:** See [architecture-evolution.md](./architecture-evolution.md)
 
 ## Learning Resources
 

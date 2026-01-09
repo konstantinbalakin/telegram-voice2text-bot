@@ -1,2262 +1,704 @@
 # System Patterns: Telegram Voice2Text Bot
 
-## Architecture Overview
-
-**Current Status**: ✅ Designed (2025-10-12) - Hybrid Queue Architecture
-
-**Architecture Pattern**: Monolithic application with internal async queue system
-
-This is a **transitional architecture** that balances MVP speed with future scalability. The system is built as a single Python application but structured to allow migration to microservices if needed.
-
-## Core Architecture
-
-### High-Level Design
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Telegram Bot API                         │
-└───────────────────────┬─────────────────────────────────────┘
-                        │ (Polling initially, Webhook later)
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Bot Handler Layer                          │
-│  Components:                                                 │
-│  - handlers.py: Message/command handlers                    │
-│  - middleware.py: Quota check, rate limiting                │
-│  - bot.py: Bot lifecycle management                         │
-└───────────────────────┬─────────────────────────────────────┘
-                        │ Enqueue Task
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Asyncio Processing Queue                        │
-│  Components:                                                 │
-│  - queue_manager.py: Queue wrapper (max 100 tasks)         │
-│  - worker_pool.py: Background worker coroutines            │
-│  - task_models.py: Task data structures                    │
-│                                                              │
-│  Concurrency Control:                                        │
-│  - Semaphore limits to 3 parallel workers                  │
-│  - Graceful backpressure when queue full                   │
-└───────────────────────┬─────────────────────────────────────┘
-                        │ Process Task
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Whisper Service (Thread Pool)                   │
-│  Components:                                                 │
-│  - whisper_service.py: faster-whisper wrapper              │
-│  - audio_handler.py: Download & preprocessing              │
-│                                                              │
-│  Implementation:                                             │
-│  - ThreadPoolExecutor (max 3 workers)                      │
-│  - Model: faster-whisper "base" with int8                  │
-│  - Timeout: 120 seconds                                     │
-└───────────────────────┬─────────────────────────────────────┘
-                        │ Store & Respond
-                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Database Layer                             │
-│  Components:                                                 │
-│  - database.py: SQLAlchemy async engine                    │
-│  - models.py: User, Usage, Transaction models              │
-│  - repositories.py: Data access patterns                   │
-│                                                              │
-│  Storage: SQLite (MVP) → PostgreSQL (production)           │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### System Components
-
-#### 1. **Bot Handler Layer** (`src/bot/`)
-**Responsibility**: Interface with Telegram, handle user interactions
-
-- **handlers.py**:
-  - `/start`, `/help` commands
-  - Voice message handler
-  - Error message formatting
-
-- **middleware.py**:
-  - Quota validation before processing
-  - Rate limiting (1 request per 10 sec per user)
-  - User creation/lookup
-
-- **bot.py**:
-  - Bot initialization
-  - Polling/webhook setup
-  - Graceful shutdown
-
-**Pattern**: Handler-based routing with middleware chain
-
-#### 2. **Processing Queue** (`src/processing/`)
-**Responsibility**: Decouple message receipt from processing
-
-- **queue_manager.py**:
-  - Asyncio Queue wrapper
-  - Max size: 100 tasks
-  - Timeout handling on enqueue
-
-- **worker_pool.py**:
-  - Background coroutines (workers)
-  - Fetch tasks from queue
-  - Semaphore-controlled parallelism
-
-- **task_models.py**:
-  - `TranscriptionTask` data class
-  - Task lifecycle states
-
-**Pattern**: Producer-Consumer with bounded queue
-
-#### 3. **Transcription Service** (`src/transcription/`)
-**Responsibility**: Voice-to-text conversion with flexible provider architecture
-
-**Provider Architecture** (implemented 2025-10-20, finalized 2025-10-24):
-- **factory.py**:
-  - Provider factory pattern
-  - ENV-driven provider initialization
-  - Supports multiple providers simultaneously
-  - Graceful handling of unavailable providers
-
-- **providers/**:
-  - `base.py`: Abstract base class for all providers
-  - `faster_whisper_provider.py`: Local faster-whisper integration (production default)
-  - `openai_provider.py`: OpenAI API integration (optional fallback)
-  - Provider lifecycle: initialize() → transcribe() → shutdown()
-
-- **routing/router.py**:
-  - Strategy-based provider selection
-  - Single provider, fallback, or benchmark mode
-  - Benchmark mode for empirical testing (used for model selection)
-
-- **whisper_service.py**:
-  - Legacy service wrapper (maintained for backward compatibility)
-  - Thread pool execution for blocking operations
-  - Model caching
-
-- **audio_handler.py**:
-  - Download from Telegram
-  - Format validation
-  - Temporary file cleanup
-
-**Pattern**: Strategy pattern + Factory pattern + Service layer with thread pool isolation
-
-**Key Design Decision (2025-10-24)**: Provider architecture designed for flexibility but simplified after benchmarking. Initially supported 3 providers; removed openai-whisper after proving faster-whisper medium was superior in both speed and quality. Architecture allows easy addition of new providers if needed (e.g., Azure, Google Cloud).
-
-#### 4. **Storage Layer** (`src/storage/`)
-**Responsibility**: Data persistence and retrieval
-
-- **database.py**:
-  - Async SQLAlchemy engine
-  - Session management
-  - Connection pooling
-
-- **models.py**:
-  - `User`: Telegram user data & quotas
-  - `Usage`: Transcription history
-  - `Transaction`: Future billing (stub)
-
-- **repositories.py**:
-  - Repository pattern for data access
-  - Query abstraction
-
-**Pattern**: Repository pattern with async ORM
-
-#### 5. **Quota System** (`src/quota/`)
-**Responsibility**: Usage limits and billing (future)
-
-- **quota_manager.py**:
-  - Check user quota before processing
-  - Deduct quota after success
-  - Daily reset logic
-
-- **billing.py**:
-  - Future payment integration (stub)
-  - Transaction management
-
-**Pattern**: Service layer with transactional guarantees
-
-### Data Flow
-
-#### Primary Flow: Voice Message → Transcription
-
-```
-1. User sends voice message
-   ↓
-2. Bot receives update (polling/webhook)
-   ↓
-3. Voice handler invoked
-   ↓
-4. Middleware checks quota
-   ├─ Exceeded → Error message
-   └─ OK → Continue
-   ↓
-5. Create TranscriptionTask
-   ↓
-6. Enqueue task
-   ├─ Queue full → Backpressure message
-   └─ OK → Send "Processing..." status
-   ↓
-7. Worker picks up task (async)
-   ↓
-8. Download audio file (async)
-   ↓
-9. Transcribe in thread pool (blocking, with timeout)
-   ├─ Timeout → Error
-   ├─ Exception → Error
-   └─ Success → Continue
-   ↓
-10. Save usage to DB (transaction)
-    ↓
-11. Send result to user
-    ↓
-12. Mark task complete
-```
-
-**Asynchronous**: Steps 1-6, 7-8, 10-12
-**Synchronous (thread pool)**: Step 9 (Whisper)
-
-## Key Technical Decisions
-
-### Decision Log
-
-| Date | Decision | Rationale | Confidence |
-|------|----------|-----------|-----------|
-| 2025-10-12 | Hybrid Queue Architecture | Balance MVP speed with scalability | 85% |
-| 2025-10-12 | Asyncio queue (in-process) | Simple for MVP, easy to migrate to Redis later | 80% |
-| 2025-10-12 | ThreadPoolExecutor for Whisper | Whisper is CPU-bound, avoid blocking event loop | 95% |
-| 2025-10-12 | Semaphore (max 3 workers) | Limit memory usage, prevent OOM | 90% |
-| 2025-10-12 | SQLite → PostgreSQL path | Fast MVP start, clear upgrade path | 85% |
-| 2025-10-12 | Repository pattern | Abstracts DB access, testable | 80% |
-| 2025-10-20 | Provider architecture (Strategy pattern) | Enable flexible provider switching and benchmarking | 90% |
-| 2025-10-24 | Production model: medium/int8/beam1 | Comprehensive benchmarking showed best quality/speed balance | 95% |
-| 2025-10-24 | Remove openai-whisper provider | faster-whisper medium superior in all metrics, -2-3GB Docker image | 90% |
-| 2025-10-28 | Documentation reorganization | Hierarchical docs/ structure improves navigation and scalability | 90% |
-| 2025-10-29 | CI/CD must include optional deps | Poetry optional dependencies require explicit --extras in export | 95% |
-| 2025-10-29 | Queue-based concurrency control | Prevent crashes on 1 GB RAM / 1 vCPU VPS, sequential processing with live progress | 95% |
-| 2025-10-29 | Duration limit 120s (2 min) | Balance resource protection with user needs (solves 4-min crash) | 90% |
-| 2025-10-29 | Privacy: transcription_length only | Store analytics without sensitive text data | 85% |
-| 2025-10-29 | Sequential processing (max_concurrent=1) | Conservative approach for resource-constrained deployment | 90% |
-| 2025-10-29 | Automated database migrations | Test migrations in CI, apply before deploy, rollback on failure | 95% |
-| 2025-10-29 | Health check with schema verification | Prevent bot startup with outdated schema, docker health checks | 90% |
-| 2025-10-29 | Queue size optimization (10 max) | Conservative limit for 1GB VPS, adequate buffering with progress feedback | 85% |
-| 2025-11-03 | Centralized logging with version tracking | Essential for production observability, size-based rotation per user request | 95% |
-| 2025-11-03 | Separate build and deploy workflows | Enables testing between stages, automatic versioning without manual overhead | 90% |
-| 2025-11-03 | Size-based log rotation only | User request: "Если мало логов, то пусть хранятся долго" - predictable disk usage | 90% |
-| 2025-11-19 | Atomic counter for queue position | `qsize()` unreliable due to worker immediately pulling items; dedicated counter provides accurate position | 95% |
-| 2025-11-19 | UUID suffix for file downloads | Prevent filename collisions when multiple users process same file_id | 95% |
-| 2025-11-19 | Dual list tracking for queue | Separate _pending_requests and _processing_requests lists for accurate wait time calculation | 95% |
-| 2025-11-19 | Callback pattern for queue updates | Notify handlers when queue changes to enable dynamic UI updates | 90% |
-| 2025-11-19 | Time calculation with parallel processing | Wait time = (processing + pending ahead) × RTF / max_concurrent | 95% |
-| 2025-11-20 | Hybrid transcription strategy | Duration-based routing: <20s = quality, ≥20s = draft + LLM refinement | 95% |
-| 2025-11-20 | LLM post-processing pattern | Use fast draft model + LLM refinement for long audio instead of slow quality model | 90% |
-| 2025-11-20 | Staged UI updates for refinement | Show draft immediately, then refinement in progress, then final - keeps user informed | 95% |
-| 2025-11-20 | Audio preprocessing pipeline | Optional mono conversion and speed adjustment before transcription | 85% |
-| 2025-11-20 | Abstract LLM provider pattern | Enable multiple LLM providers (DeepSeek, OpenAI, etc.) via factory + abstract base class | 90% |
-| 2025-11-20 | Graceful degradation for LLM | Always fall back to draft text on any LLM error (timeout, API, network) | 95% |
-| 2025-11-20 | Feature flags for production safety | Disable new features by default (llm_refinement_enabled=false), gradual rollout | 95% |
-| 2025-11-30 | Hybrid download strategy for large files | Bot API (≤20MB) + Client API (>20MB), seamless fallback | 95% |
-| 2025-11-30 | Telethon over Pyrogram | Telethon actively maintained (v1.42.0, Nov 2025), Pyrogram stagnant (v2.0.106, Apr 2023) | 90% |
-| 2025-11-30 | Session-based Client API auth | Bot token auto-authenticates, session persists across restarts, no phone/SMS needed | 95% |
-| 2025-11-30 | Dynamic file size limits | 2GB when Client API enabled, 20MB fallback when disabled | 90% |
-| 2025-11-30 | Optional cryptg dependency | Performance boost for Telethon, but not required for core functionality | 80% |
-| 2025-12-15 | Provider-aware audio format conversion | Preprocess audio based on target provider's format requirements (OpenAI gpt-4o needs MP3/WAV, faster-whisper optimal with OGA) | 95% |
-| 2025-12-17 | OpenAI long audio chunking | Implement audio splitting with overlap for gpt-4o models exceeding duration limits | 95% |
-| 2025-12-17 | Three-strategy approach for long audio | Model switch (default), parallel chunking (fast), sequential chunking (context preservation) | 90% |
-| 2025-12-17 | Semaphore-based rate limiting for chunks | Limit concurrent API calls (max 3) to avoid rate limits when processing chunks | 95% |
-
-## Design Patterns in Use
-
-### 1. **Producer-Consumer Pattern**
-- **Where**: Bot handlers (producer) → Queue → Workers (consumer)
-- **Why**: Decouple receiving messages from processing them
-- **Benefit**: Bot never blocks, handles backpressure gracefully
-
-### 2. **Repository Pattern**
-- **Where**: `repositories.py` for database access
-- **Why**: Abstract SQLAlchemy queries, easier testing
-- **Benefit**: Can swap DB implementation without changing business logic
-
-### 3. **Service Layer Pattern**
-- **Where**: `WhisperService`, `QuotaManager`
-- **Why**: Encapsulate business logic separate from handlers
-- **Benefit**: Reusable, testable, clear responsibilities
-
-### 4. **Thread Pool Pattern**
-- **Where**: Whisper transcription execution
-- **Why**: Isolate blocking CPU-intensive work from async event loop
-- **Benefit**: Async code remains responsive
-
-### 5. **Middleware Pattern**
-- **Where**: Quota checking before handler execution
-- **Why**: Cross-cutting concerns (quota, rate limit)
-- **Benefit**: Keep handlers focused on core logic
-
-### 6. **Configuration Object Pattern**
-- **Where**: `Settings` class with Pydantic
-- **Why**: Centralized, validated configuration
-- **Benefit**: Type-safe, environment-aware
-
-### 7. **Strategy Pattern** (added 2025-10-20)
-- **Where**: Provider routing in `TranscriptionRouter`
-- **Why**: Enable switching between different transcription providers at runtime
-- **Benefit**: Support benchmark mode, fallback strategies, easy provider testing
-- **Implementation**:
-  - `SingleProviderStrategy`: Use one provider
-  - `FallbackStrategy`: Try primary, fall back to secondary
-  - `BenchmarkStrategy`: Test all providers, compare results
-
-### 8. **Factory Pattern** (added 2025-10-20)
-- **Where**: `ProviderFactory` in `factory.py`
-- **Why**: Centralized provider instantiation based on configuration
-- **Benefit**: Hide provider initialization complexity, graceful degradation if provider unavailable
-- **Usage**: ENV-driven provider selection (`WHISPER_PROVIDERS=["faster-whisper", "openai"]`)
-
-### 9. **Queue-Based Request Management Pattern** (added 2025-10-29)
-- **Where**: `QueueManager` in `src/services/queue_manager.py`
-- **Why**: Prevent resource exhaustion under concurrent load, ensure FIFO processing
-- **Benefit**: Crash prevention, predictable processing order, backpressure handling
-- **Implementation**:
-  - `asyncio.Queue` for FIFO request storage (max 50 requests)
-  - `asyncio.Semaphore` for concurrency control (max_concurrent=1)
-  - Background worker with graceful error handling
-  - Request/response tracking with timeout support
-- **Usage**: Bot handlers enqueue `TranscriptionRequest`, worker processes sequentially
-- **Key Characteristic**: Sequential processing (max_concurrent=1) on resource-constrained VPS prevents crashes while maintaining acceptable UX
-
-### 10. **Progress Tracking Pattern** (added 2025-10-29)
-- **Where**: `ProgressTracker` in `src/services/progress_tracker.py`
-- **Why**: Provide live feedback during long-running operations (10-40s transcriptions)
-- **Benefit**: Improved UX, reduces perceived wait time, shows system is working
-- **Implementation**:
-  - Background asyncio task updates Telegram message every 5 seconds
-  - Visual progress bar: `🔄 [████████░░░░] 40%`
-  - RTF-based time estimation (processing_time = duration × 0.3)
-  - Telegram rate limit handling (RetryAfter, TimedOut)
-- **Usage**: Created at transcription start, updates automatically, stopped on completion
-- **Pattern**: Observer pattern - tracks progress without blocking main operation
-
-### 11. **Staged Database Writes Pattern** (added 2025-10-29)
-- **Where**: `UsageRepository` in `src/storage/repositories.py`
-- **Why**: Track request lifecycle for analytics, handle partial failures
-- **Benefit**: Detailed analytics, failure point identification, privacy-friendly data collection
-- **Implementation**:
-  - **Stage 1** (download start): Create record with `user_id`, `voice_file_id`, `created_at`
-  - **Stage 2** (download complete): Update with `voice_duration_seconds`, `updated_at`
-  - **Stage 3** (transcription complete): Update with `model_size`, `processing_time_seconds`, `transcription_length`, `llm_model`, `updated_at`
-  - **Stage 4** (LLM refinement, hybrid mode only): Update with `llm_processing_time_seconds`, `updated_at`
-- **Privacy Feature**: Stores `transcription_length` (int) instead of `transcription_text` (string)
-- **Performance Tracking**: Separate fields for Whisper and LLM timing enable detailed analytics
-- **Usage**: Enables tracking failed downloads, failed transcriptions, and full lifecycle timing
-- **Pattern**: State pattern - records progress through lifecycle stages
-
-### 12. **Graceful Degradation Pattern** (added 2025-10-29)
-- **Where**: Handler duration validation and queue capacity checks
-- **Why**: Provide clear feedback when system cannot process request
-- **Benefit**: Better UX than silent failures or crashes, guides users to acceptable behavior
-
-### 13. **Hybrid Download Strategy Pattern** (added 2025-11-30)
-- **Where**: File download logic in `src/bot/handlers.py` + `TelegramClientService`
-- **Why**: Overcome Bot API's 20 MB file size limit for downloads
-- **Benefit**: Support files up to 2 GB transparently, seamless user experience
-- **Implementation**:
-  - **≤20 MB files**: Use Bot API `get_file()` (fast, existing infrastructure)
-  - **>20 MB files**: Use Telethon Client API `download_media()` (MTProto, up to 2 GB)
-  - **Fallback**: If Client API unavailable/disabled, reject with clear message
-  - **Dynamic limits**: 2 GB max when enabled, 20 MB when disabled
-- **Architecture**:
-  ```python
-  class TelegramClientService:
-      - Telethon MTProto client wrapper
-      - Session-based authentication (bot_token)
-      - Async context manager for lifecycle
-      - Automatic session persistence
-
-  # Usage in handlers
-  if file_size > 20MB and client_enabled:
-      file = await telegram_client.download_large_file(...)
-  else:
-      file = await bot.get_file(...)
-  ```
-- **Session Management**: `bot_client.session` file stores auth, persists across restarts
-- **Security**: Session files excluded from git, credentials in .env only
-- **Pattern**: Strategy pattern - runtime selection of download strategy based on file size
-- **Implementation**:
-  - **Duration validation**: Reject files > 120s with clear message showing user's duration vs limit
-  - **Queue capacity**: Reject when queue full, show current queue depth
-  - **Clear error messages**: Use emoji and Russian language for user-friendly communication
-- **Examples**:
-  ```
-  ⚠️ Максимальная длительность: 120с (2 мин)
-  Ваш файл: 150с (2 мин 30с)
-
-  ⚠️ Очередь переполнена. Пожалуйста, попробуйте через несколько минут.
-  В очереди сейчас: 50 запросов
-  ```
-- **Pattern**: Fail-fast with informative feedback
-
-## Component Relationships
-
-```
-handlers.py
-    ├─> middleware.py (quota check)
-    ├─> queue_manager.py (enqueue task)
-    └─> database.py (user lookup)
-
-worker_pool.py
-    ├─> queue_manager.py (dequeue task)
-    ├─> audio_handler.py (download)
-    ├─> whisper_service.py (transcribe)
-    ├─> database.py (save usage)
-    └─> bot.py (send result)
-
-whisper_service.py
-    └─> ThreadPoolExecutor (run blocking code)
-
-quota_manager.py
-    └─> database.py (check/update quotas)
-```
-
-**Key Dependencies**:
-- All components depend on `config.py` (Settings)
-- Database layer is independent (no upward dependencies)
-- Bot layer doesn't know about Worker internals (queue abstraction)
-- Provider layer is pluggable (factory + strategy pattern)
-
-## Benchmark Methodology (implemented 2025-10-20, completed 2025-10-24)
-
-### Purpose
-Empirical testing framework to select optimal transcription configuration based on real-world performance metrics.
-
-### Architecture
-**Benchmark Mode**: Special routing strategy that processes same audio through multiple providers/configurations simultaneously for comparison.
-
-**Implementation**:
-```python
-# In config.py
-BENCHMARK_MODE=true
-BENCHMARK_CONFIGS=[
-  {"provider_name": "faster-whisper", "model_size": "medium", "compute_type": "int8", "beam_size": 1},
-  {"provider_name": "openai"}  # Reference quality
-]
-```
-
-**Workflow**:
-1. Bot receives voice message (when BENCHMARK_MODE=true)
-2. Router creates multiple provider instances on-demand (per config)
-3. Processes audio through all providers in parallel
-4. Collects results: transcribed text, processing time, memory usage
-5. Saves all results to separate files for manual analysis
-6. Returns OpenAI result to user (reference quality)
-
-### Testing Protocol (2025-10-22 to 2025-10-24)
-
-**Test Suite**:
-- 3 representative audio samples (7s short, 24s medium, 163s long)
-- Russian language, informal speech
-- Real Telegram voice messages
-
-**Configurations Tested**: 30+
-- faster-whisper: tiny/small/medium with various beam sizes (1, 3, 5, 7, 10)
-- Compute types: int8, float32
-- openai-whisper: tiny/base/small/medium (later removed)
-- OpenAI API: whisper-1 (reference)
-
-**Metrics Collected**:
-- **RTF (Real-Time Factor)**: processing_time / audio_duration
-- **Memory**: Peak RAM usage during transcription
-- **Quality**: Manual comparison against OpenAI API reference
-- **Similarity**: Automated text similarity percentage
-
-**Results Storage**: `docs/quality_compare/YYYY-MM-DD_*.md`
-
-### Key Findings
-
-**Performance vs Quality Trade-off**:
-- tiny/int8: RTF 0.05x (extremely fast), 22-78% quality (unacceptable)
-- small/int8/beam1: RTF 0.2x (fast), ~90% quality (acceptable)
-- medium/int8/beam1: RTF 0.3x (balanced), ~95-100% quality (excellent)
-- medium/int8/beam5: RTF 0.6x (slower), marginally better quality
-
-**Memory Characteristics**:
-- tiny: <1GB
-- small: ~2.4GB
-- medium: ~3.5GB peak
-- Memory scales with model size, not beam size
-
-**Decision**: medium/int8/beam1 selected as production default (quality prioritized, still 3x faster than audio).
-
-### Lessons Learned
-
-1. **Automated metrics insufficient**: Text similarity % missed nuances; manual transcript review essential
-2. **Beam size impact minimal for Russian**: beam1 (greedy) vs beam5 showed little quality difference, but 2x speed difference
-3. **Long audio challenges**: All local models showed quality degradation on 163s sample vs short clips
-4. **Provider comparison value**: Testing openai-whisper proved faster-whisper medium superior, enabled confident removal
-5. **Benchmark mode invaluable**: Parallel testing saved days of manual configuration switching
-
-**Artifacts**:
-- `memory-bank/benchmarks/fast-whisper.md`: Rollup summary
-- `memory-bank/benchmarks/final-decision.md`: Decision rationale
-- `docs/quality_compare/`: Raw benchmark results
-
-## Critical Implementation Paths
-
-### Hot Path 1: Voice Message Processing
-**Performance Target**: <30 seconds for 1-minute audio
-
-```python
-# Critical path pseudocode
-async def voice_handler(update):
-    user = await get_user()  # DB query ~50ms
-    if not await check_quota(user):  # DB query ~50ms
-        return error()
-
-    task = create_task()
-    await queue.put(task)  # Instant (bounded queue)
-    await send_status()  # Telegram API ~200ms
-
-async def worker():
-    task = await queue.get()  # Wait for task
-    audio = await download_audio()  # Telegram API ~1-2s
-
-    # Thread pool (blocking, but isolated)
-    text = await run_in_executor(whisper.transcribe, audio)  # 10-30s
-
-    await save_usage()  # DB query ~50ms
-    await send_result()  # Telegram API ~200ms
-```
-
-**Bottleneck**: Whisper transcription (10-30s)
-**Mitigation**: faster-whisper, int8 quantization, limited parallelism
-
-### Hot Path 2: Quota Check
-**Performance Target**: <100ms
-
-```python
-async def check_quota(user):
-    if user.is_unlimited:
-        return True
-
-    if user.last_reset_date < today:
-        await reset_quota(user)  # One-time per day
-
-    return user.today_usage < user.daily_quota
-```
-
-**Optimization**: In-memory cache for unlimited users (future)
-
-## Integration Points
-
-### Telegram Bot API
-**Mode**: Polling (MVP) → Webhook (production)
-
-**Key Methods**:
-- `get_updates()`: Polling for new messages
-- `send_message()`: Send text responses
-- `edit_message_text()`: Update status messages
-- `get_file()`: Get voice file metadata
-- `download_file()`: Download voice data
-
-**Rate Limits**:
-- 30 messages/second (global)
-- 20 messages/minute per chat
-
-### faster-whisper
-**Integration**: Thread pool executor
-
-```python
-model = WhisperModel("base", device="cpu", compute_type="int8")
-
-# In thread pool:
-segments, info = model.transcribe(
-    audio_path,
-    language="ru",
-    beam_size=5
-)
-```
-
-**Model Loading**: Once at startup, cached in memory
-
-### SQLite/PostgreSQL
-**Integration**: SQLAlchemy async
-
-```python
-engine = create_async_engine(DATABASE_URL)
-async_session = sessionmaker(engine, class_=AsyncSession)
-```
-
-**Migrations**: Alembic for schema versioning
-
-## Scalability Considerations
-
-### Current Limits (MVP)
-- **Concurrent transcriptions**: 3
-- **Queue size**: 100 tasks
-- **Memory**: ~2GB (3 models + overhead)
-- **Expected load**: 10-50 users
-
-### Scaling Strategy
-
-**Phase 1 (Current)**: Single process
-- Vertical scaling (bigger VPS)
-- Optimize model size (base → tiny if needed)
-
-**Phase 2**: Add Redis queue
-- Replace asyncio.Queue with Redis
-- Enables multiple bot processes
-- Horizontal scaling begins
-
-**Phase 3**: Separate worker service
-- Bot service (stateless, many instances)
-- Worker service (stateful, GPU-enabled)
-- True microservices
-
-### Bottleneck Analysis
-1. **Whisper processing**: Solved by limiting parallelism
-2. **Memory**: Solved by int8 quantization
-3. **Database**: SQLite limits, migrate to PostgreSQL
-4. **Queue**: In-memory limits, migrate to Redis
-
-## Security Considerations
-
-### API Token Management
-- ✅ Token in `.env` file (gitignored)
-- ✅ Never logged or exposed
-- ✅ Pydantic validation ensures presence
-
-### User Data
-- Voice files: Downloaded to `/tmp`, deleted after processing
-- Transcriptions: Stored in DB (consider retention policy)
-- User IDs: Telegram user_id only (no PII)
-
-### Input Validation
-- Voice duration: Max 5 minutes (300 seconds)
-- File size: Telegram limits (20MB max)
-- Rate limiting: 1 request per 10 seconds per user
-
-### Future Considerations
-- Encrypt transcriptions at rest
-- GDPR compliance (data deletion)
-- Audit logging for unlimited users
-
-## Performance Characteristics
-
-### Expected Performance (MVP)
-
-| Metric | Target | Measured |
-|--------|--------|----------|
-| Transcription (1 min audio) | <30s | TBD |
-| Quota check latency | <100ms | TBD |
-| End-to-end (receive → respond) | <35s | TBD |
-| Concurrent users | 10-50 | TBD |
-| Memory usage | <2GB | TBD |
-
-### Monitoring Points
-- Queue length (alert if >80% full)
-- Worker processing time
-- Database query duration
-- Whisper model load time
-- Telegram API response time
-
-## Migration Path
-
-### From MVP to Production
-
-**Current Architecture** (MVP):
-```
-Single Process
-├─ Bot (asyncio)
-├─ Queue (asyncio.Queue)
-└─ Workers (asyncio + ThreadPool)
-```
-
-**Future Architecture** (Scalable):
-```
-Bot Service (N instances)
-    ↓ Redis Queue
-Worker Service (M instances)
-    ├─ CPU workers
-    └─ GPU workers (optional)
-```
-
-**Migration Steps**:
-1. Add Redis adapter to QueueManager
-2. Extract worker logic to separate main.py
-3. Deploy as separate containers
-4. Scale independently
-
-**Key Insight**: Architecture is designed for this migration to be straightforward.
-
-## Notes
-
-This architecture prioritizes:
-1. **Speed to MVP**: Single codebase, simple deployment
-2. **Maintainability**: Clear separation of concerns
-3. **Extensibility**: Easy to add text processing pipeline
-4. **Scalability path**: Can migrate to microservices when needed
-
-The hybrid approach means we don't over-engineer for scale we don't have yet, but we also don't paint ourselves into a corner.
-
-### 13. **Version-Enriched Logging Pattern** (added 2025-11-03)
-- **Where**: `VersionEnrichmentFilter` in `src/utils/logging_config.py`
-- **Why**: Correlate logs with specific deployments for debugging and post-mortem analysis
-- **Benefit**: Every log entry knows its version, enabling filtering by deployment
-- **Implementation**:
-  - Custom logging filter adds version and container_id to all log records
-  - Version from `APP_VERSION` environment variable (set by CI/CD)
-  - Short form (7 chars) for readability: 09f9af8
-  - JSON formatter includes version in every log entry
-- **Usage**: All logs automatically include version, no code changes needed
-- **Pattern**: Cross-cutting concern handled at logging infrastructure level
-
-### 14. **Size-Based Log Rotation Pattern** (added 2025-11-03)
-- **Where**: `RotatingFileHandler` configuration in `src/utils/logging_config.py`
-- **Why**: Predictable disk usage, logs kept longer when generation is low
-- **Benefit**: No data loss from time-based rotation, clear disk usage ceiling
-- **Implementation**:
-  - app.log: 10MB per file, 5 backups (60MB max)
-  - errors.log: 5MB per file, 5 backups (30MB max)
-  - deployments.jsonl: Never rotated (minimal size growth)
-- **User Requirement**: "Если мало логов, то пусть хранятся долго"
-- **Pattern**: Resource management with user-friendly behavior
-
-### 15. **Deployment Event Tracking Pattern** (added 2025-11-03)
-- **Where**: `log_deployment_event()` in `src/utils/logging_config.py`
-- **Why**: Track application lifecycle across deployments
-- **Benefit**: JSONL format enables time-series analysis of deployments
-- **Implementation**:
-  - Separate file: `deployments.jsonl`
-  - Events: startup (with config), ready, shutdown
-  - One JSON object per line for easy streaming analysis
-  - Includes full version, timestamp, container_id
-- **Usage**: Called from `src/main.py` at lifecycle events
-- **Pattern**: Append-only event log for audit trail
-
-### 16. **Automatic Semantic Versioning Pattern** (added 2025-11-03)
-- **Where**: `.github/workflows/build-and-tag.yml`
-- **Why**: Remove manual version management overhead, user-friendly version numbers
-- **Benefit**: Every merge to main gets readable version (v0.1.1), automatic GitHub releases
-- **Implementation**:
-  - Parse last tag: `git describe --tags --abbrev=0`
-  - Increment patch version automatically
-  - Create annotated git tag
-  - Push tag to trigger deploy workflow
-- **Version Format**: v{major}.{minor}.{patch}
-- **Manual Override**: Create tag manually for minor/major bumps
-- **Pattern**: Convention-based automation with escape hatch
-
-### 17. **Separated Build and Deploy Workflow Pattern** (added 2025-11-03)
-- **Where**: `.github/workflows/build-and-tag.yml` + `.github/workflows/deploy.yml`
-- **Why**: Enable testing and verification between build and deploy stages
-- **Benefit**: Deploy specific versions, rollback capability, safer releases
-- **Implementation**:
-  - **Build workflow**: Triggered by push to main
-    - Test migrations
-    - Build Docker image
-    - Create version tag
-    - Push image with version tag
-  - **Deploy workflow**: Triggered by tag creation
-    - Run migrations on VPS
-    - Deploy specific version
-    - Health checks
-- **Rollback**: Redeploy previous tag or create new tag pointing to old commit
-- **Pattern**: Two-phase deployment with artifact versioning
-
-### 18. **Atomic Counter for Queue Position Pattern** (added 2025-11-19)
-- **Where**: `QueueManager._total_pending` in `src/services/queue_manager.py`
-- **Why**: `asyncio.Queue.qsize()` is unreliable because background worker immediately pulls items
-- **Benefit**: Accurate queue position tracking regardless of worker timing
-- **Implementation**:
-  - Add `_total_pending: int = 0` counter in `__init__`
-  - Increment BEFORE `put()`: `self._total_pending += 1; position = self._total_pending`
-  - Decrement in `finally` block: `self._total_pending -= 1`
-  - Return position from `enqueue()` for immediate use by caller
-- **Problem Solved**: Race condition where position was recalculated after worker already consumed items
-- **Key Insight**: Counter operations are atomic within same coroutine (no await between increment and assignment)
-- **Pattern**: Atomic counter for tracking logical position vs physical queue state
-
-### 19. **Unique File Naming with UUID Pattern** (added 2025-11-19)
-- **Where**: `AudioHandler.download_voice_message()` and `download_from_url()` in `src/transcription/audio_handler.py`
-- **Why**: Multiple users may forward same voice message (same file_id), causing filename collision
-- **Benefit**: Each download creates unique file, preventing concurrent access conflicts
-- **Implementation**:
-  ```python
-  unique_suffix = uuid.uuid4().hex[:8]  # 8 hex chars = 4 billion combinations
-  audio_file = self.temp_dir / f"{file_id}_{unique_suffix}{extension}"
-  ```
-- **Problem Solved**: First request deletes file after processing, second request fails with FileNotFoundError
-- **Key Insight**: file_id is unique per file in Telegram, but multiple users can access same file
-- **Usage Pattern**: Always add UUID suffix when temporary files may be accessed concurrently by multiple requests for same resource
-- **Pattern**: Resource isolation through unique naming
-
-### 20. **Callback Pattern for Queue State Changes** (added 2025-11-19)
-- **Where**: `QueueManager._on_queue_changed` callback in `src/services/queue_manager.py`
-- **Why**: Need to update all users' messages when queue state changes (request starts processing)
-- **Benefit**: Dynamic UI updates without polling, decoupled notification logic
-- **Implementation**:
-  - `set_on_queue_changed(callback)`: Register async callback
-  - Callback called in `_process_request()` after moving request from pending to processing
-  - Handler implements callback to iterate and update all pending messages
-- **Usage**: `queue_manager.set_on_queue_changed(self._update_queue_messages)`
-- **Pattern**: Observer pattern for queue state changes
-
-### 21. **Dual List Tracking Pattern** (added 2025-11-19)
-- **Where**: `_pending_requests` and `_processing_requests` in `src/services/queue_manager.py`
-- **Why**: Need to calculate accurate wait times based on both queued and processing items
-- **Benefit**: Accurate time estimation, proper accounting for all work in progress
-- **Implementation**:
-  ```python
-  # In enqueue():
-  self._pending_requests.append(request)
-
-  # In _process_request():
-  self._pending_requests.remove(request)
-  self._processing_requests.append(request)
-
-  # After completion:
-  self._processing_requests.remove(request)
-  ```
-- **Time Calculation**:
-  ```python
-  processing_duration = sum(r.duration_seconds for r in self._processing_requests)
-  pending_duration = sum(r.duration_seconds for r in pending_ahead)
-  wait_time = (processing_duration + pending_duration) * rtf / max_concurrent
-  ```
-- **Pattern**: State tracking with separate collections for different lifecycle stages
-
-### 22. **Dynamic Message Update Pattern** (added 2025-11-19)
-- **Where**: `_update_queue_messages()` in `src/bot/handlers.py`
-- **Why**: Keep users informed of queue progress without requiring them to check
-- **Benefit**: Better UX, transparency about wait times
-- **Implementation**:
-  - Called when any request starts processing
-  - Iterates through all pending requests
-  - Calculates new position and times for each
-  - Updates Telegram message via `edit_text()`
-  - Handles errors gracefully (message deleted, etc.)
-- **Message Format**:
-  ```
-  📋 В очереди: позиция {position}
-  ⏱️ Ожидание в очереди: {wait_time}
-  🎯 Обработка вашего сообщения: {processing_time}
-  ```
-- **Pattern**: Proactive notification with error tolerance
-
-### 23. **Time Formatting with Appropriate Units** (added 2025-11-19)
-- **Where**: Queue notification messages in `src/bot/handlers.py`
-- **Why**: Times displayed should be easy to read at a glance
-- **Benefit**: Better readability for users
-- **Implementation**:
-  ```python
-  if time < 60:
-      time_str = f"~{int(time)}с"
-  else:
-      minutes = int(time // 60)
-      seconds = int(time % 60)
-      time_str = f"~{minutes}м {seconds}с"
-  ```
-- **Usage**: Applied to both wait time and processing time displays
-- **Pattern**: User-friendly formatting based on magnitude
-
-### 24. **Hybrid Transcription Strategy Pattern** (added 2025-11-20)
-- **Where**: `HybridStrategy` in `src/transcription/routing/strategies.py`
-- **Why**: Balance speed and quality based on audio duration - long audio needs fast processing
-- **Benefit**: 6x performance improvement for long audio while maintaining quality
-- **Implementation**:
-  - Short audio (<20s): Use quality model directly (medium/int8)
-  - Long audio (≥20s): Use fast draft model (small/beam1) + LLM refinement
-  - Methods: `select_provider()`, `get_model_for_duration()`, `requires_refinement()`
-- **Performance**: 60s audio from 36s → ~6s (3s draft + 3s LLM)
-- **Pattern**: Strategy pattern with duration-based routing
-
-### 25. **LLM Post-Processing Pattern** (added 2025-11-20)
-- **Where**: `LLMService` in `src/services/llm_service.py`, integrated in `handlers.py`
-- **Why**: Improve quality of fast draft transcriptions without slow model inference
-- **Benefit**: Better quality than draft alone, faster than quality model, cost-effective
-- **Implementation**:
-  - Draft transcription from fast model (small/beam1)
-  - Send to LLM API (DeepSeek V3) for refinement
-  - Retry logic with exponential backoff (3 attempts)
-  - Graceful fallback to draft on any error
-- **Cost**: ~$0.0002 per 60s audio (30x cheaper than OpenAI Whisper API)
-- **Pattern**: Service layer with retry logic and graceful degradation
-
-### 26. **Staged UI Updates Pattern** (added 2025-11-20)
-- **Where**: Handler integration in `src/bot/handlers.py`
-- **Why**: Keep users informed during multi-stage processing (draft → refinement)
-- **Benefit**: Immediate feedback, transparency about what's happening
-- **Implementation**:
-  1. **Stage 1**: Show draft transcription immediately
-     ```
-     ✅ Черновик готов:
-     [draft text]
-     🔄 Улучшаю текст...
-     ```
-  2. **Stage 2**: Show final refined transcription
-     ```
-     ✨ Готово!
-     [refined text]
-     ```
-- **Pattern**: Progressive disclosure - show partial results immediately, refine later
-
-### 27. **Audio Preprocessing Pipeline Pattern** (added 2025-11-20)
-- **Where**: `AudioHandler.preprocess_audio()` in `src/transcription/audio_handler.py`
-- **Why**: Optimize audio for transcription (mono, speed adjustment) to improve quality or speed
-- **Benefit**: Optional optimizations without blocking main flow, graceful fallback on errors
-- **Implementation**:
-  - Pipeline: Original → Mono conversion (optional) → Speed adjustment (optional)
-  - Each step wrapped in try-except with fallback to previous file
-  - ffmpeg-based transformations with validation
-  - Cleanup of intermediate files
-- **Configuration**: Disabled by default, opt-in via environment variables
-- **Pattern**: Pipeline pattern with graceful degradation
-
-### 28. **Abstract LLM Provider Pattern** (added 2025-11-20)
-- **Where**: `LLMProvider` base class in `src/services/llm_service.py`
-- **Why**: Support multiple LLM providers (DeepSeek, OpenAI, Anthropic) with same interface
-- **Benefit**: Easy to add new providers, switch providers via configuration
-- **Implementation**:
-  ```python
-  class LLMProvider(ABC):
-      @abstractmethod
-      async def refine_text(self, text: str, prompt: str) -> str:
-          pass
-
-      @abstractmethod
-      async def close(self) -> None:
-          pass
-
-  class DeepSeekProvider(LLMProvider):
-      # Implementation with httpx, tenacity retry logic
-  ```
-- **Factory**: `LLMFactory.create_provider()` instantiates based on configuration
-- **Pattern**: Abstract base class + Factory pattern for pluggable providers
-
-### 29. **Graceful Degradation for LLM Pattern** (added 2025-11-20)
-- **Where**: `LLMService.refine_transcription()` and handler integration
-- **Why**: LLM APIs can fail (timeout, rate limits, network errors) - must not block users
-- **Benefit**: Always deliver transcription even if LLM fails, better UX than errors
-- **Implementation**:
-  - All LLM errors caught (timeout, HTTP errors, network errors, unexpected errors)
-  - Automatic fallback to draft text on any error
-  - Retry logic (3 attempts) before giving up
-  - User sees draft immediately, refinement is bonus
-- **Error Types Handled**: `LLMTimeoutError`, `LLMAPIError`, generic `Exception`
-- **Pattern**: Fail-safe with automatic fallback
-
-### 30. **Feature Flags for Production Safety Pattern** (added 2025-11-20)
-- **Where**: `llm_refinement_enabled` setting in `src/config.py`
-- **Why**: New features should be disabled by default for safe production rollout
-- **Benefit**: Deploy code without activating feature, gradual rollout, easy rollback
-- **Implementation**:
-  - Feature disabled by default: `llm_refinement_enabled: bool = Field(default=False)`
-  - Check at runtime: `if settings.llm_refinement_enabled: ...`
-  - Enable for specific test users first
-  - Monitor metrics before full rollout
-- **Rollout Plan**: Deploy → Enable for test users → Monitor → Gradual rollout
-- **Pattern**: Feature toggle for risk mitigation
-
-### 31. **Relative LLM Instructions Pattern** (added 2025-12-04)
-- **Where**: `prompts/emoji.md` and emoji level instructions in `TextProcessor.add_emojis()`
-- **Why**: Hard-coded values (e.g., "1-2 emojis") don't scale with varying text lengths
-- **Problem**: User feedback: "На маленький текст это норм. А вот если большой текст, то эти смайлы теряются"
-- **Benefit**: LLM adapts output to content size naturally, better UX across all text lengths
-- **Implementation**:
-  ```python
-  # BAD: Hard-coded counts
-  instructions = {
-      1: "Добавь 1-2 эмодзи в текст",  # Gets lost in long texts
-      2: "Добавь 3-5 эмодзи в текст",  # Too many for short texts
-  }
-
-  # GOOD: Relative qualitative descriptions
-  instructions = {
-      1: "Добавь минимальное количество эмодзи - только самые важные моменты.",
-      2: "Добавь умеренное количество эмодзи - выдели ключевые идеи и эмоции.",
-      3: "Добавь щедрое количество эмодзи - сделай текст живым и выразительным.",
-  }
-  ```
-- **Application**: Use for any LLM feature that scales with content (emojis, summaries, expansions, condensations)
-- **Key Insight**: LLMs are better at understanding qualitative goals than following rigid quantitative rules across varying contexts
-- **Pattern**: Qualitative descriptions + trust LLM adaptation > hard-coded numbers
-
-### 32. **Threshold-Based File Delivery Pattern** (added 2025-12-08)
-- **Where**: All message sending paths (`_send_transcription_result()`, `_send_draft_messages()`, `_send_variant_message()`, `update_transcription_display()`)
-- **Why**: Telegram has 4096 character hard limit for messages; long transcriptions must be sent as files
-- **Problem**: Phase 10.7 only implemented file handling for interactive variants, initial results and drafts still split into multiple parts
-- **Benefit**: Consistent UX across all message types, no data loss, no split messages
-- **Implementation**:
-  ```python
-  FILE_THRESHOLD_CHARS = 3000  # Conservative threshold (< 4096 limit)
-
-  if len(text) <= FILE_THRESHOLD_CHARS:
-      # Send as message
-      await message.reply_text(text, reply_markup=keyboard)
-  else:
-      # Send as file (two-message pattern)
-      info_msg = await message.reply_text("📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard)
-      file_obj = io.BytesIO(text.encode("utf-8"))
-      file_obj.name = f"transcription_{usage_id}.txt"
-      file_msg = await message.reply_document(document=file_obj, filename=file_obj.name)
-  ```
-- **Two-Message Pattern**: Info message with keyboard + separate file message
-  - Info message: Keeps keyboard accessible, provides context
-  - File message: Contains full transcription content
-- **State Tracking**: `is_file_message` and `file_message_id` in TranscriptionState
-  - Enables dynamic transitions between text and file formats
-  - Supports 4 scenarios: text↔text, file↔file, text↔file, file↔text
-- **Application**: Initial transcription, draft messages, variant messages, retranscription updates
-- **Key Insight**: Use consistent threshold across ALL message types to avoid user confusion
-- **Bug Fix Context**: Was only implemented for variants (Phase 10.7), extended to all paths in Phase 10.7.1
-
-### 33. **Circular Import Resolution Pattern** (added 2025-12-08)
-- **Where**: `src/bot/retranscribe_handlers.py` importing `CallbackHandlers` from `src/bot/callbacks.py`
-- **Why**: Top-level imports between callback modules created circular dependency preventing bot startup
-- **Problem**: `ImportError: cannot import name 'CallbackHandlers' from partially initialized module 'src.bot.callbacks'`
-- **Benefit**: Maintains modularity while avoiding initialization cycles
-- **Implementation**:
-  ```python
-  # ❌ BAD: Top-level import (circular dependency)
-  from src.bot.callbacks import CallbackHandlers
-
-  async def handle_retranscribe(...):
-      callback_handlers = CallbackHandlers(...)
-      await callback_handlers.update_transcription_display(...)
-
-  # ✅ GOOD: Function-level import (no circular dependency)
-  async def handle_retranscribe(...):
-      from src.bot.callbacks import CallbackHandlers  # Import inside function
-      callback_handlers = CallbackHandlers(...)
-      await callback_handlers.update_transcription_display(...)
-  ```
-- **When to Use**: When two modules need to import each other's classes/functions
-- **Trade-offs**:
-  - ✅ Avoids circular import errors
-  - ✅ Maintains code organization
-  - ⚠️ Slight performance overhead (import on every call)
-  - ⚠️ Less obvious dependencies (not visible at module level)
-- **Alternative Solutions**:
-  1. **Dependency Injection**: Pass CallbackHandlers instance as parameter (preferred for frequent calls)
-  2. **Shared Module**: Move shared code to third module imported by both
-  3. **TYPE_CHECKING**: Use for type hints only (doesn't solve runtime imports)
-- **Pattern**: Import inside function > module-level import when circular dependency exists
-- **Critical for**: Bot startup - without this fix, bot crashes on initialization
-
-### 34. **Parent-Child Usage Tracking Pattern** (added 2025-12-09)
-- **Where**: Usage model and retranscription logic
-- **Why**: Need to preserve original statistics when retranscribing while tracking full history
-- **Problem**: Overwriting usage record loses original data, prevents analytics on retranscription patterns
-- **Benefit**: Complete history preserved, enables analytics, supports future features (retranscription history UI)
-- **Implementation**:
-  ```python
-  # Database schema
-  class Usage(Base):
-      id: Mapped[int] = mapped_column(Integer, primary_key=True)
-      parent_usage_id: Mapped[Optional[int]] = mapped_column(
-          Integer, ForeignKey("usage.id", ondelete="CASCADE"), nullable=True, index=True
-      )
-      # Other fields...
-
-  # Creating child usage record
-  child_usage = await usage_repo.create(
-      user_id=usage.user_id,
-      voice_file_id=usage.voice_file_id,
-      voice_duration_seconds=usage.voice_duration_seconds,
-      model_size=result.model_name,  # New model
-      processing_time_seconds=result.processing_time,  # New time
-      transcription_length=len(result.text),  # New length
-      parent_usage_id=usage_id,  # Link to original
-      original_file_path=usage.original_file_path,  # Preserve file path
-  )
-
-  # Update state to point to child for continued interaction
-  state.usage_id = child_usage.id
-  ```
-- **Use Cases**:
-  - Retranscription with better model
-  - Multiple retranscription attempts
-  - A/B testing different models
-  - Cost analysis (how many retranscriptions per original?)
-- **Key Features**:
-  - Supports chains: original → child1 → child2 → ...
-  - CASCADE delete: parent deletion removes all children
-  - State migration: subsequent operations link to child
-  - Analytics queries: JOIN on parent_usage_id to build full chain
-- **Pattern**: Database relationship > overwriting records for preserving history
-
-### 35. **Progress Bar with Dynamic Duration Pattern** (added 2025-12-09)
-- **Where**: Retranscription progress tracking
-- **Why**: Different retranscription methods have vastly different processing times
-- **Problem**: Fixed duration progress bars misleading when actual time varies (RTF 0.5 vs fixed 30s)
-- **Benefit**: Accurate time estimates, better UX, realistic user expectations
-- **Implementation**:
-  ```python
-  # Calculate duration based on method
-  if method == "free":
-      # Free method: faster-whisper medium model, RTF-based
-      progress_duration = int(
-          usage.voice_duration_seconds * settings.retranscribe_free_model_rtf
-      )
-  else:
-      # Paid method: OpenAI API, fixed duration
-      progress_duration = settings.llm_processing_duration
-
-  # Create progress tracker with calculated duration
-  progress = ProgressTracker(
-      message=cast(Message, query.message),
-      duration_seconds=progress_duration,
-      rtf=1.0,  # Duration already calculated above
-      update_interval=settings.progress_update_interval,
-  )
-  await progress.start()
-  ```
-- **Key Insight**: Use RTF for compute-based methods, fixed duration for API-based methods
-- **Configuration**:
-  - `RETRANSCRIBE_FREE_MODEL_RTF=0.5` - RTF for local model
-  - `LLM_PROCESSING_DURATION=30` - Fixed duration for API calls
-- **Pattern**: Method-specific duration calculation > single fixed duration
-
-### 36. **Refinement Control via Context Pattern** (added 2025-12-09)
-- **Where**: TranscriptionContext flag propagated through transcription pipeline
-- **Why**: Retranscription uses quality models that don't need LLM refinement
-- **Problem**: Hybrid strategy always ran refinement for long audio, wasting time during retranscription
-- **Benefit**: Faster retranscription, cost savings, cleaner separation of concerns
-- **Implementation**:
-  ```python
-  # 1. Add flag to context model
-  @dataclass
-  class TranscriptionContext:
-      language: str = "ru"
-      provider_preference: Optional[str] = None
-      disable_refinement: bool = False  # NEW
-
-  # 2. Pass flag when retranscribing
-  transcription_context = TranscriptionContext(
-      language="ru",
-      provider_preference=provider_name,
-      disable_refinement=True,  # Skip refinement for retranscription
-  )
-
-  # 3. Check flag in handler before refinement
-  needs_refinement = False
-  if isinstance(self.transcription_router.strategy, HybridStrategy):
-      needs_refinement = self.transcription_router.strategy.requires_refinement(
-          request.duration_seconds
-      )
-
-  # Skip refinement if explicitly disabled
-  if request.context.disable_refinement:
-      needs_refinement = False
-      logger.info("LLM refinement disabled by context")
-  ```
-- **Benefits**:
-  - Behavior modification without code changes
-  - Reusable for other scenarios (testing, specific user preferences)
-  - Clear separation: context dictates behavior, handler executes
-- **Pattern**: Context flags > hardcoded behavior for flexible control
-
-### 37. **Provider-Aware Preprocessing Pattern** (added 2025-12-15)
-- **Where**: Audio format conversion in `src/transcription/audio_handler.py`
-- **Why**: Different transcription providers have different audio format requirements
-- **Problem**: OpenAI's new gpt-4o-transcribe/mini models don't support `.oga` format (Telegram's default), causing transcription failures
-- **Benefit**: Each provider receives audio in optimal format automatically, enables support for new models
-
-### 38. **Audio Chunking with Overlap Pattern** (added 2025-12-17)
-- **Where**: OpenAI long audio handling in `src/transcription/providers/openai_provider.py`
-- **Why**: OpenAI's gpt-4o models have duration limits (~1400-1500 seconds), longer audio fails to transcribe
-- **Problem**: Voice messages exceeding 23 minutes fail with OpenAI's gpt-4o models
-- **Benefit**: Enables transcription of unlimited duration audio while maintaining quality through context preservation
-- **Implementation**:
-  ```python
-  # Check duration and route to appropriate handler
-  if context.duration_seconds > settings.openai_gpt4o_max_duration:
-      return await self._handle_long_audio(audio_path, context)
-
-  # Split audio into chunks with overlap
-  def _split_audio_into_chunks(self, audio_path: Path) -> List[Path]:
-      audio = AudioSegment.from_file(audio_path)
-      chunk_size_ms = settings.openai_chunk_size_seconds * 1000
-      overlap_ms = settings.openai_chunk_overlap_seconds * 1000
-
-      chunks = []
-      for i in range(0, len(audio), chunk_size_ms - overlap_ms):
-          chunk = audio[i:i + chunk_size_ms]
-          # Save chunk to temporary file
-          chunks.append(chunk_path)
-
-      return chunks
-
-  # Process chunks in parallel with semaphore for rate limiting
-  async def _transcribe_chunks_parallel(self, chunks: List[Path]) -> str:
-      semaphore = asyncio.Semaphore(settings.openai_max_parallel_chunks)
-
-      async def transcribe_one(chunk_path):
-          async with semaphore:
-              return await self._transcribe_single_file(chunk_path)
-
-      results = await asyncio.gather(*[transcribe_one(chunk) for chunk in chunks])
-      return " ".join(results)
-  ```
-- **Key Features**:
-  - **Three strategies**: Automatic model switch (fast), parallel chunking (2-3x faster), sequential chunking (context preservation)
-  - **Overlap**: 2-second overlap between chunks prevents word cutting
-  - **Parallel processing**: Semaphore limits concurrent API calls (max 3) to avoid rate limiting
-  - **Sequential processing**: Uses prompt parameter with last 224 tokens for context preservation
-  - **Cleanup**: Temporary chunk files deleted in finally block
-- **Configuration**:
-  ```python
-  OPENAI_GPT4O_MAX_DURATION=1400              # Duration threshold
-  OPENAI_CHANGE_MODEL=true                    # Auto-switch to whisper-1 (default)
-  OPENAI_CHUNKING=false                       # Enable audio splitting
-  OPENAI_CHUNK_SIZE_SECONDS=1200              # Chunk size (300-1400s)
-  OPENAI_CHUNK_OVERLAP_SECONDS=2              # Overlap (0-10s)
-  OPENAI_PARALLEL_CHUNKS=true                 # Parallel vs sequential
-  OPENAI_MAX_PARALLEL_CHUNKS=3                # Concurrency limit (1-10)
-  ```
-- **Strategy Selection**:
-  1. **Model switch** (default): If duration > 1400s, use whisper-1 (no limit)
-  2. **Parallel chunking**: Fast (2-3x), no context between chunks, good for independent segments
-  3. **Sequential chunking**: Slower, preserves context via prompt, good for continuous speech
-- **Dependencies**: Uses pydub ^0.25.1 (Production/Stable, MIT) for audio manipulation
-- **Pattern**: Duration-based routing + chunking strategy + parallel/sequential processing + cleanup
-- **Implementation**:
-  ```python
-  # In audio_handler.py
-  def preprocess_audio(
-      self,
-      audio_path: Path,
-      target_provider: Optional[str] = None  # Provider-aware parameter
-  ) -> Path:
-      """Preprocess audio with provider-specific optimization."""
-
-      # Provider-aware format optimization
-      if target_provider:
-          path = self._optimize_for_provider(path, target_provider)
-
-      # Other preprocessing steps...
-      return path
-
-  def _optimize_for_provider(
-      self,
-      input_path: Path,
-      provider_name: str
-  ) -> Path:
-      """Select optimal format based on provider requirements."""
-
-      if provider_name == "openai":
-          # Check model requirements
-          model = settings.openai_model
-          if model in ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"]:
-              # New models require MP3/WAV
-              return self._convert_to_mp3(input_path)
-          else:
-              # whisper-1 supports OGA
-              return input_path
-
-      elif provider_name == "faster-whisper":
-          # OGA optimal for local processing
-          return input_path
-
-      else:
-          # Unknown provider, no optimization
-          return input_path
-  ```
-
-  ```python
-  # In bot handlers
-  # Detect active provider before preprocessing
-  target_provider = None
-  if self.transcription_router:
-      target_provider = self.transcription_router.get_active_provider_name()
-
-  # Pass to audio handler for optimization
-  processed_path = self.audio_handler.preprocess_audio(
-      request.file_path,
-      target_provider=target_provider
-  )
-  ```
-
-- **Key Features**:
-  - **Smart conversion**: Only converts when necessary (OGA → MP3 for gpt-4o models)
-  - **Optimal format per provider**: FasterWhisper keeps OGA, OpenAI gets MP3/WAV
-  - **Backward compatible**: Optional parameter, graceful fallback
-  - **Configurable**: Choose MP3 or WAV via `OPENAI_4O_TRANSCRIBE_PREFERRED_FORMAT`
-  - **Robust error handling**: Fallback to original format on any error
-
-- **Configuration**:
-  ```python
-  # Mapping models to supported formats
-  OPENAI_FORMAT_REQUIREMENTS = {
-      "gpt-4o-transcribe": ["mp3", "wav"],        # Requires conversion
-      "gpt-4o-mini-transcribe": ["mp3", "wav"],   # Requires conversion
-      "whisper-1": None,                           # Supports OGA
-  }
-
-  # User-configurable format preference
-  openai_4o_transcribe_preferred_format: str = "mp3"  # or "wav"
-  ```
-
-- **Impact**:
-  - ✅ Enables OpenAI's latest transcription models (gpt-4o-transcribe, gpt-4o-mini-transcribe)
-  - ✅ Maintains optimal performance for each provider
-  - ✅ Future-proof architecture for new providers/models
-  - ✅ Zero user-facing changes (completely transparent)
-
-- **Pattern**: Provider-aware preprocessing > one-size-fits-all approach for multi-provider systems with different format requirements
-
-### 39. **Universal File Type Support Pattern** (added 2025-12-25)
-- **Where**: Document and video handlers in `src/bot/handlers.py` + audio extraction in `src/transcription/audio_handler.py`
-- **Why**: Users send audio content in various formats (documents, videos), not just voice messages
-- **Problem**: Bot only handled Telegram voice messages and audio files, missing documents (.aac, .flac) and videos
-- **Benefit**: Complete file type coverage, better UX, handles any audio-containing file
-- **Implementation**:
-  ```python
-  # MIME type-based filtering for documents
-  from src.config import SUPPORTED_AUDIO_MIMES
-
-  async def document_message_handler(update, context):
-      document = update.message.document
-      mime_type = document.mime_type or ""
-
-      # Validate MIME type
-      if mime_type not in SUPPORTED_AUDIO_MIMES:
-          logger.debug(f"Document ignored: unsupported MIME type {mime_type}")
-          return  # Silent ignore for non-audio documents
-
-      # Process like voice message (reuse existing pipeline)
-      # ... download, transcribe, respond
-
-  # Video handler with audio extraction
-  async def video_message_handler(update, context):
-      video = update.message.video
-
-      # Download video
-      video_path = await download_file(...)
-
-      # Extract audio track
-      audio_path = audio_handler.extract_audio_track(video_path)
-
-      # Continue with normal transcription pipeline
-      # ... transcribe, respond
-  ```
-
-- **Key Features**:
-  - **Document Handler**: Validates audio MIME types (17 formats), reuses download/transcription pipeline
-  - **Video Handler**: Extracts audio from video files (7 video formats), validates stream existence first
-  - **Silent Filtering**: Non-audio documents ignored without error messages (better UX)
-  - **Unified Pipeline**: All file types flow through same transcription logic
-
-- **Configuration**:
-  ```python
-  SUPPORTED_AUDIO_MIMES = {
-      "audio/aac", "audio/mp4", "audio/mpeg", "audio/mp3",
-      "audio/ogg", "audio/opus", "audio/wav", "audio/x-wav",
-      "audio/flac", "audio/x-flac", "audio/x-m4a", "audio/m4a",
-      "audio/amr", "audio/x-ms-wma", "audio/webm", "audio/3gpp"
-  }
-
-  SUPPORTED_VIDEO_MIMES = {
-      "video/mp4", "video/quicktime", "video/x-msvideo",
-      "video/x-matroska", "video/webm", "video/3gpp", "video/mpeg"
-  }
-  ```
-
-- **Handler Registration** (in `main.py`):
-  ```python
-  # Document handler (audio files sent as documents)
-  application.add_handler(
-      MessageHandler(filters.DOCUMENT, bot_handlers.document_message_handler)
-  )
-
-  # Video handler (extract audio from video)
-  application.add_handler(
-      MessageHandler(filters.VIDEO, bot_handlers.video_message_handler)
-  )
-  ```
-
-- **Pattern**: MIME type validation + unified processing pipeline > separate logic per file type
-
-### 40. **Audio Extraction from Video Pattern** (added 2025-12-25)
-- **Where**: `AudioHandler.extract_audio_track()` in `src/transcription/audio_handler.py`
-- **Why**: Video files contain audio tracks that need extraction before transcription
-- **Problem**: Whisper models require audio-only input, can't process video containers
-- **Benefit**: Support video files transparently, optimize for Whisper (mono, 16kHz)
-- **Implementation**:
-  ```python
-  def extract_audio_track(self, input_path: Path) -> Path:
-      """Extract audio track from video/media file.
-
-      Converts to mono Opus format optimized for Whisper.
-      """
-      # Check if file has audio stream
-      if not self._has_audio_stream(input_path):
-          raise ValueError(f"File has no audio stream: {input_path.name}")
-
-      output_path = input_path.parent / f"{input_path.stem}_extracted.ogg"
-
-      # Extract audio using ffmpeg
-      subprocess.run([
-          "ffmpeg", "-y", "-i", str(input_path),
-          "-vn",  # No video
-          "-ac", "1",  # Mono
-          "-ar", "16000",  # 16kHz sample rate
-          "-acodec", "libopus",  # Opus codec
-          "-b:a", "32k",  # 32 kbps bitrate
-          "-vbr", "on",  # Variable bitrate
-          "-f", "ogg",  # OGG container
-          str(output_path)
-      ], check=True, capture_output=True)
-
-      return output_path
-
-  def _has_audio_stream(self, file_path: Path) -> bool:
-      """Check if file contains an audio stream."""
-      result = subprocess.run([
-          "ffprobe", "-v", "error",
-          "-select_streams", "a",  # Audio streams only
-          "-show_entries", "stream=codec_type",
-          "-of", "csv=p=0",
-          str(file_path)
-      ], capture_output=True, text=True, check=True)
-
-      return "audio" in result.stdout
-  ```
-
-- **Key Features**:
-  - **Pre-validation**: Check audio stream existence before extraction (prevents errors)
-  - **Optimization**: Convert to mono Opus (16kHz, 32kbps) - ideal for Whisper
-  - **Cleanup**: Temporary video files deleted after extraction
-  - **Logging**: Size tracking (video → audio compression ratio)
-
-- **Error Handling**:
-  ```python
-  try:
-      audio_path = audio_handler.extract_audio_track(video_path)
-  except ValueError as e:
-      await status_msg.edit_text("❌ Видео не содержит аудиодорожки.")
-      audio_handler.cleanup_file(video_path)
-      return
-
-  # Cleanup original video after extraction
-  audio_handler.cleanup_file(video_path)
-  ```
-
-- **Benefits**:
-  - Optimal format for Whisper (mono, 16kHz)
-  - Significant size reduction (video → audio compression)
-  - Graceful failure for video-only files
-  - Reuses existing ffmpeg dependency
-
-- **Pattern**: Pre-validation + format optimization + cleanup > blind processing
-
-### 41. **ffprobe-Based Duration Detection Pattern** (added 2025-12-25)
-- **Where**: `AudioHandler.get_audio_duration_ffprobe()` in `src/transcription/audio_handler.py`
-- **Why**: Document files don't have duration metadata like Telegram voice messages
-- **Problem**: Need duration for validation/limits, but documents lack Telegram's duration field
-- **Benefit**: Accurate duration detection for any audio/video file
-- **Implementation**:
-  ```python
-  def get_audio_duration_ffprobe(self, file_path: Path) -> Optional[float]:
-      """Get audio duration using ffprobe.
-
-      Args:
-          file_path: Path to audio/video file
-
-      Returns:
-          Duration in seconds or None if unavailable
-      """
-      try:
-          result = subprocess.run([
-              "ffprobe", "-v", "error",
-              "-show_entries", "format=duration",
-              "-of", "default=noprint_wrappers=1:nokey=1",
-              str(file_path)
-          ], capture_output=True, text=True, check=True)
-
-          return float(result.stdout.strip())
-      except (subprocess.CalledProcessError, ValueError):
-          return None
-  ```
-
-- **Usage in Handlers**:
-  ```python
-  # For documents (no metadata)
-  duration_seconds = self.audio_handler.get_audio_duration_ffprobe(file_path)
-  if duration_seconds is None:
-      duration_seconds = 0  # Will be determined during transcription
-
-  # Validate duration
-  if duration_seconds > settings.max_voice_duration_seconds:
-      await status_msg.edit_text(f"⚠️ Максимальная длительность: {limit}")
-      return
-  ```
-
-- **Key Features**:
-  - **Universal**: Works for any audio/video format
-  - **Accurate**: Reads from file metadata, not estimates
-  - **Graceful fallback**: Returns None on failure (continue with 0 duration)
-  - **Validation**: Duration limits enforced before transcription
-
-- **Dependencies**: Uses ffprobe (part of ffmpeg, already required)
-
-- **Pattern**: ffprobe for file analysis + graceful fallback > assume duration from file size
-
-## Development Workflow
-
-### Git Strategy
-**Workflow**: Feature Branch Workflow with Protected Main Branch (documented in `.github/WORKFLOW.md`)
-
-**Branch Protection** (implemented 2025-10-19):
-- Main branch is protected on GitHub
-- All changes must go through Pull Requests
-- CI checks must pass before merge allowed
-- Prevents accidental direct commits to main
-
-**Branch Structure**:
-```
-main (protected, PR-only)
-  ├── feature/database-models ✅ merged
-  ├── feature/whisper-service ✅ merged
-  ├── feature/bot-handlers ✅ merged
-  ├── feature/test-cicd ✅ merged
-  └── feature/your-next-feature
-```
-
-**Commit Convention**: Conventional Commits format
-- `feat:` - New functionality
-- `fix:` - Bug fixes
-- `refactor:` - Code refactoring
-- `docs:` - Documentation
-- `test:` - Tests
-- `chore:` - Maintenance tasks
-
-**PR Process**:
-1. Create feature branch from `main`
-2. Implement feature with regular commits
-3. Push to GitHub for backup
-4. Create PR when complete
-5. Review and merge via GitHub
-6. Delete feature branch
-
-**Phase-Based Branching**:
-- Phase 2: `feature/database-models`, `feature/whisper-service`
-- Phase 3: `feature/queue-system`
-- Phase 4: `feature/bot-handlers`
-- Phase 5: `feature/integration`
-- Phase 6: `feature/docker-deployment`
-
-**Integration with Tools**:
-- `/commit` slash command for git commits
-- `gh pr create` for pull request creation
-- Conventional commit messages for clear history
-
-**Repository**: `konstantinbalakin/telegram-voice2text-bot`
-
-### Development Cycle Pattern
-```
-1. Start: Review Memory Bank → Understand context
-2. Plan: Break down task → Create todos
-3. Branch: Create feature branch
-4. Code: Implement → Test → Commit
-5. Push: Regular pushes to GitHub (backup)
-6. Document: Update Memory Bank, README, .env.example
-7. PR: Create pull request with comprehensive summary
-8. Auto-merge: Merge via gh pr merge (solo development)
-9. Sync: git checkout main && git pull origin main
-10. Update: Memory Bank reflects final state
-```
-
-**Key Principles**:
-- Work in feature branches, never directly in `main`
-- Regular commits with conventional format
-- Push often for backup and visibility
-- **Document before PR** - ensure Memory Bank is current
-- PR-based code review (even solo development)
-- **Auto-merge for speed** - `gh pr merge <PR> --merge --delete-branch`
-- Memory Bank updates at significant milestones
-
-**Documentation Commit Pattern** (NEW):
-```bash
-# After code + tests, before PR:
-git add .claude/memory-bank/activeContext.md .claude/memory-bank/progress.md
-git add README.md .env.example  # if changed
-git commit -m "docs: update documentation after Phase X completion"
-git push
-```
-
-**Why Document Before PR**:
-- PR contains complete picture: code + tests + docs
-- Documentation synchronized with code
-- Future developers see current state
-- Memory Bank ready for next Claude Code session
-
-### CI/CD Pipeline (implemented 2025-10-19, optimized 2025-10-28)
-
-**Platform**: GitHub Actions
-
-**Architecture**: Two separate workflows for separation of concerns
-
-#### CI Workflow (`.github/workflows/ci.yml`)
-**Trigger**: On pull requests to `main` branch
-**Purpose**: Quality gates before code merge
-
-**Optimization** (2025-10-28): Conditional execution for docs-only changes
-- Uses `tj-actions/changed-files@v45` to detect file changes
-- Ignores: `memory-bank/**`, `*.md`, `docs/**`, `.claude/**`, `CLAUDE.md`
-- Workflows always run (creates required status checks) but skip expensive steps when only docs changed
-- Prevents PR merge blocking while saving CI minutes
-
-**Steps**:
-1. **Change Detection** (always runs)
-   - Checkout code with full history
-   - Run `changed-files` action to detect non-docs changes
-   - Set output `any_changed` for conditional steps
-
-2. **Environment Setup** (conditional: `if any_changed == 'true'`)
-   - Ubuntu latest runner
-   - Python 3.11
-   - Poetry installation
-   - Dependency caching (.venv cached by poetry.lock hash)
-
-3. **Testing** (conditional)
-   - `pytest` with coverage reporting
-   - Coverage uploaded to Codecov
-   - Dummy TELEGRAM_BOT_TOKEN for tests
-
-4. **Code Quality Checks** (conditional, all must pass):
-   - `mypy src/` - Type checking (strict mode)
-   - `ruff check src/` - Linting
-   - `black --check src/` - Formatting verification
-
-**Fail Fast**: If any check fails, PR cannot be merged
-
-**Smart Skipping**: Docs-only PRs complete successfully without running expensive operations
-
-#### Build & Deploy Workflow (`.github/workflows/build-and-deploy.yml`)
-**Trigger**: On push to `main` branch (after PR merge)
-**Purpose**: Automated build and deployment
-
-**Optimization** (2025-10-28): Conditional execution for docs-only merges
-- Same `changed-files` detection as CI workflow
-- Build job runs always but skips expensive steps when only docs changed
-- Deploy job conditionally runs only if code changes detected
-- Saves Docker Hub bandwidth and VPS resources for docs-only merges
-
-**Build Stage** (conditional steps):
-1. **Change Detection** (always runs)
-   - Checkout code with full history
-   - Run `changed-files` action
-   - Export `any_changed` output for deploy job
-
-2. **Build Steps** (conditional: `if any_changed == 'true'`)
-   - Export Poetry dependencies → requirements.txt
-   - Set up Docker Buildx
-   - Login to Docker Hub (secrets: DOCKER_USERNAME, DOCKER_PASSWORD)
-   - Build Docker image with cache
-   - Push with two tags:
-     - `{username}/telegram-voice2text-bot:latest` (stable)
-     - `{username}/telegram-voice2text-bot:{commit-sha}` (versioned)
-   - Use GitHub Actions cache for Docker layers
-
-**Deploy Stage** (conditional: `if needs.build.outputs.any_changed == 'true'`):
-1. SSH to VPS server (secrets: VPS_HOST, VPS_USER, VPS_SSH_KEY)
-2. Pull latest code (for docker-compose.yml updates)
-3. Create .env file with secrets from GitHub
-4. Pull new Docker image by commit SHA
-5. Tag as latest locally
-6. Rolling update: `docker compose up -d --no-deps bot`
-7. Health check verification (15s wait)
-8. Cleanup old images (keep last 3)
-
-**Skip Logic**: If only documentation changed, deploy stage doesn't run at all
-
-**Zero Downtime Strategy**:
-- Use `--no-deps` flag for isolated bot service update
-- Health checks verify container is healthy before considering deployment successful
-- Automatic rollback if health check fails
-
-**Environment**: Uses GitHub "production" environment for secret management
-
-### CI/CD Patterns
-
-**Pattern 0: Optional Dependencies in CI/CD** (added 2025-10-29)
-- **Issue**: Poetry optional dependencies not automatically included in exports
-- **Symptom**: Docker images built without optional packages, causing runtime failures
-- **Solution**: Explicitly include extras in all CI/CD poetry export commands
-- **Example**: `poetry export -f requirements.txt -o requirements.txt --extras "faster-whisper"`
-- **Critical**: Local scripts and CI/CD must use identical export commands
-- **Detection**: Compare Docker image sizes - missing deps result in significantly smaller images
-
-**Pattern 1: Fail Fast**
-- Tests run first, before code quality checks
-- Any failure stops the pipeline immediately
-- Prevents wasted time on bad builds
-
-**Pattern 2: Immutable Versioning**
-- Every commit gets unique SHA-tagged Docker image
-- Enables rollback to any previous version
-- `latest` tag always points to most recent successful build
-
-**Pattern 3: Secrets Management**
-- All sensitive data in GitHub Secrets
-- Never committed to repository
-- Injected at runtime via environment variables
-
-**Pattern 4: Caching Strategy**
-- Poetry dependencies cached by poetry.lock hash
-- Docker build layers cached in GitHub Actions
-- Significantly faster builds (minutes vs tens of minutes)
-
-**Pattern 5: Quality Gates**
-- Protected branch enforces PR workflow
-- CI checks must pass before merge
-- No manual merge to main possible
-
-**Pattern 6: Conditional Execution** (added 2025-10-28)
-- Workflows always run to create required status checks
-- Expensive operations skip when only docs changed
-- Uses `tj-actions/changed-files` for smart detection
-- Saves CI minutes and resources while maintaining merge requirements
-
-### Deployment Automation Benefits
-
-1. **Consistency**: Same process every time, no manual steps
-2. **Speed**: Merge to main → production in ~10 minutes
-3. **Safety**: Health checks catch failures, automatic rollback
-4. **Traceability**: Every deployment tracked by commit SHA
-5. **Reliability**: Tested process, no human error
-
-## Logging and Observability Patterns (added 2025-11-03)
-
-### Pattern 1: Version-Enriched Logging
-**Problem**: Need to correlate logs with specific deployments for post-mortem analysis.
-
-**Solution**: Custom logging filter that adds version and container_id to every log entry.
-
-**Implementation**:
-```python
-class VersionEnrichmentFilter(logging.Filter):
-    def filter(self, record):
-        record.version = get_version()
-        record.container_id = socket.gethostname()
-        return True
-```
-
-**Benefits**:
-- Every log entry knows its deployment version
-- Can filter logs by specific version: `jq 'select(.version=="v0.1.1")' app.log`
-- Enables multi-version debugging in staging/production
-- Container ID helps with multi-instance deployments
-
-**Example Log Entry**:
-```json
-{
-  "timestamp": "2025-11-03T20:10:13.628064+00:00",
-  "level": "INFO",
-  "logger": "root",
-  "version": "v0.0.1",
-  "container_id": "3f33660445f8",
-  "message": "Logging configured..."
-}
-```
-
-### Pattern 2: Size-Based Log Rotation
-**Problem**: Time-based rotation deletes logs even when generation is low.
-
-**Decision**: Use size-based rotation ONLY (per user request: "Если мало логов, то пусть хранятся долго")
-
-**Configuration**:
-- `app.log`: 10MB per file, 5 backups → ~60MB max
-- `errors.log`: 5MB per file, 5 backups → ~30MB max
-- `deployments.jsonl`: Never rotated → ~365KB/year
-
-**Benefits**:
-- Logs persist longer when generation is low
-- Predictable disk usage (~90MB max)
-- No data loss from time-based expiry
-- Low-traffic periods fully logged
-
-**Implementation**:
-```python
-handler = RotatingFileHandler(
-    filename="app.log",
-    maxBytes=10_000_000,  # 10MB
-    backupCount=5
-)
-```
-
-### Pattern 3: Deployment Event Tracking
-**Problem**: Need to understand deployment lifecycle and configuration changes.
-
-**Solution**: Dedicated JSONL file for deployment events, never rotated.
-
-**Events Tracked**:
-1. **startup**: Bot starting with full configuration snapshot
-2. **ready**: Bot fully initialized and accepting requests
-3. **shutdown**: Graceful shutdown (when implemented)
-
-**Example Deployment Log**:
-```json
-{
-  "timestamp": "2025-11-03T20:10:13.629654+00:00",
-  "event": "startup",
-  "version": "v0.0.1",
-  "container_id": "3f33660445f8",
-  "config": {
-    "bot_mode": "polling",
-    "database_url": "/app/data/bot.db",
-    "whisper_providers": ["faster-whisper"],
-    "max_queue_size": 10,
-    "max_concurrent_workers": 1
-  }
-}
-```
-
-**Benefits**:
-- Full history of all deployments
-- Configuration changes tracked over time
-- Enables rollback decision support
-- ~1KB per deployment, minimal disk usage
-
-### Pattern 4: Structured JSON Logging
-**Problem**: Plain text logs difficult to parse and analyze programmatically.
-
-**Solution**: JSON-formatted logs with python-json-logger library.
-
-**Benefits**:
-- Easy parsing with jq: `cat app.log | jq 'select(.level=="ERROR")'`
-- Machine-readable for log aggregation tools
-- Structured context: additional fields without parsing
-- Consistent format across services
-
-**Example Analysis**:
-```bash
-# Count errors by logger
-cat app.log | jq -r '.logger' | sort | uniq -c
-
-# Filter logs by version
-jq 'select(.version=="v0.0.1")' app.log
-
-# Extract timestamps for specific events
-jq -r 'select(.message | contains("Processing")) | .timestamp' app.log
-```
-
-### Pattern 5: Optional Remote Syslog
-**Problem**: Want centralized logging without forcing complexity in MVP.
-
-**Solution**: Optional syslog handler configuration via environment variables.
-
-**Configuration**:
-```bash
-SYSLOG_ENABLED=true
-SYSLOG_HOST=logs.papertrailapp.com
-SYSLOG_PORT=514
-```
-
-**Benefits**:
-- Easy integration with Papertrail, Loggly, etc.
-- Opt-in: disabled by default for simplicity
-- Same log format sent to both file and syslog
-- Enables log aggregation as project grows
-
-## Versioning and Release Patterns (added 2025-11-03)
-
-### Pattern 1: Automatic Semantic Versioning
-**Problem**: Manual version management is overhead, git SHA not user-friendly.
-
-**Solution**: Automated semantic versioning with separate workflows.
-
-**Architecture**:
-```
-Build & Tag Workflow (on push to main)
-  ↓
-1. Test migrations
-2. Calculate next version (v0.1.0 → v0.1.1)
-3. Build Docker image
-4. Push with version tags
-5. Create git tag
-6. Create GitHub Release
-  ↓ (tag pushed triggers next workflow)
-Deploy Workflow (on tag push)
-  ↓
-1. Run migrations on VPS
-2. Deploy specific version
-3. Health checks
-```
-
-**Version Calculation**:
-```bash
-LAST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
-VERSION=${LAST_TAG#v}  # Remove 'v' prefix
-IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-NEW_PATCH=$((PATCH + 1))
-NEW_VERSION="v${MAJOR}.${MINOR}.${NEW_PATCH}"
-```
-
-**Benefits**:
-- Zero manual version management for patches
-- User-friendly versions (v0.1.1 vs 09f9af8)
-- Separation of build and deploy
-- Testable between stages
-- Full version history
-
-### Pattern 2: Separated Build and Deploy Workflow
-**Problem**: Combined workflow makes testing difficult and limits flexibility.
-
-**Solution**: Two separate workflows with tag-based trigger.
-
-**Advantages**:
-1. **Testing**: Can build and test before deploying
-2. **Rollback**: Can deploy any previous version manually
-3. **Staging**: Can deploy same version to multiple environments
-4. **Debugging**: Workflow failures isolated
-
-**Implementation**:
-- Build workflow: Creates version, builds image, pushes tag
-- Tag push: Triggers deploy workflow automatically
-- Deploy workflow: Can also be triggered manually via workflow_dispatch
-
-### Pattern 3: workflow_dispatch for Manual Deployments
-**Problem**: workflow_run trigger has limitations with tag references.
-
-**Discovered Issue**: `workflow_run` receives `refs/heads/main` instead of tag, causing Docker image name issues.
-
-**Solution**: Use `workflow_dispatch` for manual deployments:
-```bash
-gh workflow run deploy.yml -f version=v0.0.1
-```
-
-**Benefits**:
-- Reliable deployment of any version
-- Works around GitHub Actions security limitations
-- Enables re-deployment of previous versions
-- Full control over when deployment happens
-
-**Pattern**:
-```yaml
-on:
-  push:
-    tags: ['v*.*.*']  # Automatic for manually created tags
-  workflow_dispatch:  # Manual trigger
-    inputs:
-      version:
-        description: 'Version tag to deploy (e.g., v0.1.0)'
-        required: true
-        type: string
-```
-
-### Pattern 4: Version-Tagged Docker Images
-**Problem**: Need to deploy and rollback specific versions easily.
-
-**Solution**: Multiple Docker image tags per build.
-
-**Tags Created**:
-- `konstantinbalakin/telegram-voice2text-bot:v0.1.1` (semantic version)
-- `konstantinbalakin/telegram-voice2text-bot:09f9af8` (git SHA)
-- `konstantinbalakin/telegram-voice2text-bot:latest` (most recent)
-
-**Benefits**:
-- Easy rollback: `docker pull ...bot:v0.1.0`
-- Version history preserved
-- Can compare versions easily
-- Latest always available for testing
-
-### Pattern 5: GitHub Releases for Changelog
-**Problem**: Need user-facing changelog without manual work.
-
-**Solution**: Automated GitHub Release creation on tag push.
-
-**Release Contents**:
-- Release notes with Docker pull commands
-- Link to full changelog (git compare)
-- Automated from commit messages
-- Tagged with semantic version
-
-**Benefits**:
-- Automatic documentation of releases
-- Users can see what changed
-- Links to specific Docker images
-- Historical record of changes
-
-## GitHub Actions Workflow Patterns (added 2025-11-03)
-
-### Pattern 1: Explicit Permissions for Tag Pushing
-**Problem**: GitHub Actions can't push tags by default.
-
-**Error**: `Permission to konstantinbalakin/telegram-voice2text-bot.git denied to github-actions[bot]`
-
-**Solution**: Explicitly grant permissions in workflow:
-```yaml
-jobs:
-  build:
-    permissions:
-      contents: write  # Push tags
-      packages: write  # Push Docker images
-```
-
-**Key Learning**: Default `GITHUB_TOKEN` has read-only permissions for security. Must explicitly grant write access per job.
-
-### Pattern 2: Workflow Trigger Limitations
-**Problem**: Workflows triggered by `GITHUB_TOKEN` don't trigger other workflows (security feature).
-
-**Impact**: Build & Tag workflow creates a tag, but Deploy workflow doesn't trigger automatically.
-
-**Reason**: Prevents infinite workflow loops and security issues.
-
-**Solutions**:
-1. **workflow_dispatch**: Manual trigger with version input (WORKS)
-2. **workflow_run**: Automatic trigger after workflow completes (HAS LIMITATIONS)
-3. **PAT (Personal Access Token)**: Use instead of GITHUB_TOKEN (more permissive)
-
-**Chosen**: workflow_dispatch for reliability and control.
-
-### Pattern 3: workflow_run Limitations and Solution
-**Issue**: `workflow_run` trigger receives branch reference instead of tag.
-
-**Problem**:
-```yaml
-on:
-  workflow_run:
-    workflows: ["Build and Tag"]
-    types: [completed]
-```
-
-**Result**: `GITHUB_REF=refs/heads/main` instead of `refs/tags/v0.1.1`
-
-**Impact**: Docker image names become `...bot:refs/heads/main` (invalid)
-
-**Solution (2025-11-04)**: Use `git describe --tags --abbrev=0` to get latest tag from repository
-```yaml
-- name: Extract version from tag
-  id: version
-  run: |
-    if [ "${{ github.event_name }}" = "workflow_run" ]; then
-      git fetch --tags
-      VERSION=$(git describe --tags --abbrev=0)
-    fi
-```
-
-**Requirements**:
-- Need `fetch-depth: 0` in checkout step (full git history)
-- Works because Build & Tag workflow pushes tag BEFORE workflow_run fires
-- Enables fully automatic deployment without workflow_dispatch
-
-**Documentation**: Added to troubleshooting in git-workflow.md
-
-### Pattern 4: Iterative Workflow Testing
-**Experience**: Required 5 workflow runs to identify and fix all issues.
-
-**Issues Found**:
-1. poetry.lock not synced (CI failed)
-2. mypy type error (CI failed)
-3. unused import (ruff failed)
-4. black formatting (CI failed)
-5. GitHub Actions permissions (deploy failed)
-6. workflow_run limitations (deploy didn't trigger)
-
-**Learning**: Test workflows incrementally, expect multiple iterations, document issues for future reference.
+**Last Updated**: 2025-01-09
+**Architecture**: API-First (OpenAI + DeepSeek + Local Fallback)
 
 ---
 
-## Interactive Transcription Architecture (Phase 10, Dec 2025)
+## Current Architecture Overview
 
-### Pattern 1: Callback Data Encoding
-**Problem**: Telegram has 64-byte limit for inline button callback_data.
+### High-Level Design
 
-**Solution**: Compact encoding format
-```python
-# Format: "action:usage_id:param1=val1,param2=val2"
-encode_callback_data("mode", 125, mode="structured")
-# Result: "mode:125:mode=structured" (24 bytes)
+Current architecture is **API-first** with intelligent text processing:
+
+```
+User Input (Voice/Audio/Video)
+  ↓
+File Detection & Download
+  ↓
+┌──────────────────────────────────────┐
+│ Primary: OpenAI API (whisper-1)      │
+│ - Fast: 5-10s for 1-minute audio      │
+│ - Quality: Best-in-class Russian      │
+└──────────────────────────────────────┘
+  ↓ (if API fails)
+┌──────────────────────────────────────┐
+│ Fallback: faster-whisper (local)     │
+│ - Model: medium/int8/beam1           │
+│ - Slower: 20-36s for 1-minute audio  │
+└──────────────────────────────────────┘
+  ↓
+┌──────────────────────────────────────┐
+│ LLM: DeepSeek V3                     │
+│ - Structure, Magic, Summary modes    │
+│ - 2-5s processing time               │
+└──────────────────────────────────────┘
+  ↓
+Interactive Keyboard + Variant Caching
 ```
 
-**Validation**: Raises ValueError if exceeds 64 bytes
-**Decoding**: Parse back to dict with action, usage_id, params
+**See:** [architecture-evolution.md](./architecture-evolution.md) for complete story
 
-### Pattern 2: allowed_updates Configuration ⚠️ CRITICAL
-**Problem**: Inline buttons don't respond, show "Загрузка..." indefinitely.
+---
 
-**Root Cause**: python-telegram-bot doesn't receive callback_query updates by default.
+## Essential Patterns (15 Critical Patterns)
 
-**Solution**: Explicitly specify allowed_updates in start_polling()
+### 1. API-First Transcription Pattern
+
+**Problem:** Local transcription too slow (20-36s) for good UX
+
+**Solution:** Use OpenAI API as primary, local model as fallback
+
+**Implementation:**
 ```python
-await application.updater.start_polling(
-    drop_pending_updates=True,
-    allowed_updates=Update.ALL_TYPES,  # CRITICAL: Required for callbacks
+# In routing strategy
+if primary_provider == "openai":
+    try:
+        result = await openai_provider.transcribe(audio)
+    except APIError:
+        result = await fallback_provider.transcribe(audio)
+```
+
+**Benefits:**
+- 4-7x faster (5-10s vs 20-36s)
+- Better quality (OpenAI > local)
+- Reliable (fallback ensures availability)
+
+**Added:** 2025-12-25
+**Location:** `src/transcription/routing/strategies.py`
+
+---
+
+### 2. LLM Text Processing Pattern
+
+**Problem:** Raw transcription needs intelligent structuring
+
+**Solution:** Use DeepSeek V3 for text transformation
+
+**Implementation:**
+```python
+# In TextProcessor
+async def create_structured(self, text: str) -> str:
+    prompt = load_prompt("prompts/structured.md")
+    refined = await llm_service.refine_text(text, prompt)
+    return sanitize_html(refined)
+```
+
+**Features:**
+- Structured mode (paragraphs, headings, lists)
+- Magic mode (publication-ready, author's voice)
+- Summary mode (key points)
+
+**Benefits:**
+- Professional-looking text
+- Scannable structure
+- Quick comprehension
+
+**Added:** 2025-12-04
+**Location:** `src/services/text_processor.py`
+
+---
+
+### 3. Fallback Strategy Pattern
+
+**Problem:** API can fail (network, rate limits, downtime)
+
+**Solution:** Graceful degradation to local model
+
+**Implementation:**
+```python
+try:
+    result = await openai_provider.transcribe(audio)
+except (APIError, Timeout, NetworkError) as e:
+    logger.warning(f"OpenAI failed: {e}, using fallback")
+    result = await faster_whisper_provider.transcribe(audio)
+```
+
+**Key Features:**
+- Automatic fallback on errors
+- User sees result either way
+- Logging for monitoring
+
+**Benefits:**
+- Always returns transcription
+- No user-facing errors
+- Reliability = trust
+
+**Added:** 2025-12-15
+**Location:** `src/transcription/routing/strategies.py`
+
+---
+
+### 4. Variant Caching Pattern
+
+**Problem:** Re-generating same text variant wastes API money
+
+**Solution:** Cache in database with composite key
+
+**Implementation:**
+```python
+# Check cache first
+existing = await variant_repo.get_variant(
+    usage_id, mode="structured", length="default", emoji=1
 )
-```
+if existing:
+    return existing.text_content
 
-**Location**: `src/main.py:219`
-
-**Impact**: Without this, callback_query events never reach the bot. Non-obvious requirement that caused significant debugging.
-
-### Pattern 3: Send Message Before Keyboard
-**Problem**: Need message_id to create TranscriptionState, but keyboard depends on state.
-
-**Solution**: Two-step process
-1. Send message without keyboard
-2. Create TranscriptionState with message_id
-3. Add keyboard via `edit_reply_markup()`
-
-```python
-# Step 1: Send message
-sent_message = await context.bot.send_message(...)
-
-# Step 2: Create state
-state = await state_repo.create(
-    usage_id=usage_id,
-    message_id=sent_message.message_id,  # Now we have ID
-    ...
-)
-
-# Step 3: Add keyboard
-keyboard = create_transcription_keyboard(state, ...)
-await context.bot.edit_message_reply_markup(
-    chat_id=chat_id,
-    message_id=sent_message.message_id,
-    reply_markup=keyboard
-)
-```
-
-**Why**: Avoids race conditions, ensures message_id exists before state creation.
-
-### Pattern 4: Session Management for Callbacks
-**Problem**: Callbacks need database access but invoked per-request.
-
-**Solution**: Async wrapper with session context manager
-```python
-async def callback_query_wrapper(update, context):
-    async with get_session() as session:
-        state_repo = TranscriptionStateRepository(session)
-        variant_repo = TranscriptionVariantRepository(session)
-        segment_repo = TranscriptionSegmentRepository(session)
-
-        callback_handlers = CallbackHandlers(
-            state_repo, variant_repo, segment_repo, text_processor
-        )
-        await callback_handlers.handle_callback_query(update, context)
-
-application.add_handler(CallbackQueryHandler(callback_query_wrapper))
-```
-
-**Why**: Creates fresh session per callback, ensures proper transaction management.
-
-### Pattern 5: Variant Caching Strategy
-**Design Decision**: On-demand generation with database caching
-
-**Implementation**:
-```python
-# Check if variant exists
-variant = await variant_repo.get_variant(
+# Generate and cache
+structured = await text_processor.create_structured(original)
+await variant_repo.create(
     usage_id=usage_id,
     mode="structured",
-    length_level="default",
-    emoji_level=0,
-    timestamps_enabled=False
+    text_content=structured
+)
+```
+
+**Key:**
+- Composite unique key: (usage_id, mode, length, emoji, timestamps)
+- Prevents duplicate LLM calls
+- Fast re-display on mode switch
+
+**Benefits:**
+- Cost savings (no duplicate API calls)
+- Fast re-display (database read vs LLM call)
+- Better UX (instant mode switching)
+
+**Added:** 2025-12-03
+**Location:** `src/storage/repositories.py`
+
+---
+
+### 5. Interactive Keyboard Pattern
+
+**Problem:** Users want text variations without re-sending
+
+**Solution:** Inline keyboard with mode switching
+
+**Implementation:**
+```python
+keyboard = InlineKeyboardMarkup([
+    [InlineKeyboardButton("Исходный текст", callback_data="mode:original")],
+    [InlineKeyboardButton("📝 Структурировать", callback_data="mode:structured")],
+    [InlineKeyboardButton("🪄 Сделать красиво", callback_data="mode:magic")],
+    [InlineKeyboardButton("📋 О чем этот текст", callback_data="mode:summary")],
+])
+```
+
+**Key Features:**
+- Mode switching (original/structured/magic/summary)
+- Emoji/length/timestamps options
+- "Currently viewing" indicator
+- State tracking in database
+
+**Benefits:**
+- Rich interaction without re-sending
+- Explore different transformations
+- Single message for all variants
+
+**Added:** 2025-12-03
+**Location:** `src/bot/keyboards.py`, `src/bot/callbacks.py`
+
+---
+
+### 6. File Delivery Pattern
+
+**Problem:** Telegram 4096 char limit, long text needs file
+
+**Solution:** Threshold-based delivery (text vs file)
+
+**Implementation:**
+```python
+FILE_THRESHOLD_CHARS = 3000  # Conservative limit
+
+if len(text) <= FILE_THRESHOLD_CHARS:
+    # Send as message with keyboard
+    await message.reply_text(text, reply_markup=keyboard)
+else:
+    # Send as file + info message with keyboard
+    info_msg = await message.reply_text("📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard)
+    file_obj = io.BytesIO(text.encode("utf-8"))
+    await message.reply_document(document=file_obj, filename="transcription.txt")
+```
+
+**Key Features:**
+- Threshold: 3000 chars (conservative)
+- Two-message pattern (info + file)
+- Keyboard on info message
+- State tracking (is_file_message)
+
+**Benefits:**
+- No data loss for long text
+- Professional PDF for >3000 chars
+- Consistent UX across all message types
+
+**Added:** 2025-12-08
+**Location:** `src/bot/handlers.py`
+
+---
+
+### 7. Progress Tracking Pattern
+
+**Problem:** Long operations need user feedback
+
+**Solution:** Background task updates message every 5 seconds
+
+**Implementation:**
+```python
+progress = ProgressTracker(
+    message=status_msg,
+    duration_seconds=audio_duration,
+    rtf=0.3,  # Real-time factor
+    update_interval=5
+)
+await progress.start()
+
+# Automatically updates with progress bar:
+# 🔄 [████████░░░░] 40% (12s / 30s)
+
+await progress.stop()
+```
+
+**Key Features:**
+- Visual progress bar
+- RTF-based time estimation
+- Telegram rate limit handling
+- Graceful cleanup
+
+**Benefits:**
+- Reduces perceived wait time
+- Shows system is working
+- Transparent about progress
+
+**Added:** 2025-10-29
+**Location:** `src/services/progress_tracker.py`
+
+---
+
+### 8. Queue Management Pattern
+
+**Problem:** Concurrent transcriptions crash VPS (1GB RAM)
+
+**Solution:** Bounded queue with sequential processing
+
+**Implementation:**
+```python
+queue_manager = QueueManager(
+    max_queue_size=10,  # Max pending requests
+    max_concurrent=1,    # Sequential processing
 )
 
-if not variant:
-    # Generate on first request
-    structured_text = await text_processor.create_structured(original_text)
+# Enqueue with position tracking
+position = await queue_manager.enqueue(request)
 
-    # Cache in database
-    variant = await variant_repo.create(
-        usage_id=usage_id,
-        mode="structured",
-        text_content=structured_text,
-        ...
+# Worker processes sequentially
+async def _process_request(request):
+    result = await transcribe(request.file_path)
+    await send_result(request.chat_id, result)
+```
+
+**Key Features:**
+- FIFO queue (max 10 pending)
+- Sequential processing (1 at a time)
+- Atomic position tracking
+- Graceful backpressure
+
+**Benefits:**
+- No crashes (resource limits respected)
+- Fair ordering (FIFO)
+- Predictable performance
+
+**Added:** 2025-10-29
+**Location:** `src/services/queue_manager.py`
+
+---
+
+### 9. Provider-Aware Preprocessing Pattern
+
+**Problem:** Different providers need different audio formats
+
+**Solution:** Preprocess based on target provider
+
+**Implementation:**
+```python
+def preprocess_audio(audio_path, target_provider):
+    if target_provider == "openai":
+        model = settings.openai_model
+        if model in ["gpt-4o-transcribe", "gpt-4o-mini-transcribe"]:
+            # These models require MP3/WAV
+            return convert_to_mp3(audio_path)
+        else:
+            # whisper-1 supports OGA
+            return audio_path
+    elif target_provider == "faster-whisper":
+        # OGA optimal for local
+        return audio_path
+```
+
+**Key Features:**
+- Smart format conversion (only when needed)
+- Optimal format per provider
+- Backward compatible
+
+**Benefits:**
+- Enables new OpenAI models (gpt-4o-*)
+- No unnecessary conversions
+- Best performance per provider
+
+**Added:** 2025-12-15
+**Location:** `src/transcription/audio_handler.py`
+
+---
+
+### 10. Graceful Degradation Pattern
+
+**Problem:** LLM failures shouldn't block users
+
+**Solution:** Always fallback to original text
+
+**Implementation:**
+```python
+try:
+    structured = await llm_service.refine_text(original, prompt)
+    final_text = sanitize_html(structured)
+except (LLMTimeoutError, LLMAPIError, Exception) as e:
+    logger.error(f"LLM failed: {e}")
+    final_text = original  # Fallback to original
+
+# Always return something
+await send_result(final_text)
+```
+
+**Key Features:**
+- Try LLM first
+- Catch all exceptions
+- Fallback to original
+- Never block user
+
+**Benefits:**
+- Users always get result
+- No error messages for failures
+- Better UX (graceful vs broken)
+
+**Added:** 2025-11-20
+**Location:** `src/bot/handlers.py`, `src/services/llm_service.py`
+
+---
+
+### 11. Feature Flags Pattern
+
+**Problem:** Need safe rollout for new features
+
+**Solution:** Environment-based feature toggles
+
+**Implementation:**
+```python
+# In config.py
+interactive_mode_enabled: bool = Field(default=False)
+enable_structured_mode: bool = Field(default=False)
+enable_magic_mode: bool = Field(default=False)
+
+# In handlers
+if settings.enable_structured_mode:
+    keyboard.add(structured_button)
+```
+
+**Key Features:**
+- Master switch + per-feature flags
+- Disabled by default
+- Gradual rollout possible
+
+**Benefits:**
+- Deploy code without activating
+- Test with specific users
+- Quick disable if issues
+
+**Added:** 2025-12-03
+**Location:** `src/config.py`, `src/bot/keyboards.py`
+
+---
+
+### 12. State Management Pattern
+
+**Problem:** Track UI state per transcription (mode, emoji, length)
+
+**Solution:** Database model with state fields
+
+**Implementation:**
+```python
+class TranscriptionState(Base):
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usage_id: Mapped[int] = mapped_column(ForeignKey("usage.id"))
+    message_id: Mapped[int]  # For keyboard updates
+    active_mode: Mapped[str]  # "original", "structured", "magic", "summary"
+    emoji_level: Mapped[int]  # 0-3
+    length_level: Mapped[str]  # "shorter", "short", "default", "long", "longer"
+    timestamps_enabled: Mapped[bool]
+    is_file_message: Mapped[bool]
+```
+
+**Key Features:**
+- Tracks all UI state
+- Allows mode switching
+- Keyboard updates based on state
+
+**Benefits:**
+- Rich interactive UX
+- State persistence
+- Accurate keyboard display
+
+**Added:** 2025-12-03
+**Location:** `src/storage/models.py`
+
+---
+
+### 13. Error Handling Pattern
+
+**Problem:** Users see cryptic errors, don't know what to do
+
+**Solution:** Clear, actionable error messages in Russian
+
+**Implementation:**
+```python
+try:
+    result = await transcribe(audio)
+except AudioTooLongError:
+    await message.reply_text(
+        f"⚠️ Максимальная длительность: {limit}с\n"
+        f"Ваш файл: {user_duration}с ({user_duration // 60}м {user_duration % 60}с)"
     )
+except QueueFullError:
+    await message.reply_text(
+        f"⚠️ Очередь переполнена. Попробуйте через {wait_time}с.\n"
+        f"В очереди: {queue_depth} запросов"
+    )
+except TranscriptionError:
+    await message.reply_text("❌ Не удалось обработать. Попробуйте снова.")
 ```
 
-**Benefits**:
-- Avoid regenerating same variant
-- Minimize LLM API calls (cost control)
-- Fast re-display on mode switch
-- Composite unique key prevents duplicates
+**Key Features:**
+- Russian language
+- Emoji for clarity
+- Actionable advice
+- Context information (duration, queue depth)
 
-### Pattern 6: Feature Flag System
-**Design**: Master switch + phase-specific flags
+**Benefits:**
+- Users understand what happened
+- Clear next steps
+- Better support experience
 
+**Added:** 2025-10-29
+**Location:** `src/bot/handlers.py`
+
+---
+
+### 14. Long Audio Handling Pattern
+
+**Problem:** OpenAI gpt-4o models have ~23min duration limit
+
+**Solution:** Three strategies (model switch, parallel chunking, sequential)
+
+**Implementation:**
 ```python
-# Master switch
-interactive_mode_enabled: bool = False
-
-# Phase-specific flags (Phase 2+)
-enable_structured_mode: bool = False
-enable_summary_mode: bool = False
-enable_emoji_option: bool = False
-enable_timestamps_option: bool = False
-enable_length_variations: bool = False
-enable_retranscribe: bool = False
+if duration > settings.openai_gpt4o_max_duration:
+    if settings.openai_change_model:
+        # Strategy 1: Switch to whisper-1 (no limit)
+        return await openai_provider.transcribe(audio, model="whisper-1")
+    elif settings.openai_chunking:
+        if settings.openai_parallel_chunks:
+            # Strategy 2: Parallel chunking (fast)
+            chunks = split_audio(audio, overlap=2s)
+            results = await asyncio.gather(*[transcribe(c) for c in chunks])
+        else:
+            # Strategy 3: Sequential chunking (context preservation)
+            chunks = split_audio(audio, overlap=2s)
+            results = []
+            for chunk in chunks:
+                context = results[-1] if results else None
+                result = await transcribe(chunk, context=context)
+                results.append(result)
+        return " ".join(results)
 ```
 
-**Benefits**:
-- Gradual rollout per feature
-- Test in production with specific users
-- Quick disable if issues found
-- Infrastructure deployed before features enabled
+**Key Features:**
+- Auto model switch (default)
+- Parallel chunking (2-3x faster)
+- Sequential chunking (context preservation)
+- 2-second overlap prevents word cutting
 
-### Pattern 7: Segment Storage Threshold
-**Design Decision**: Only save segments for long audio (>300s / 5 minutes)
+**Benefits:**
+- Unlimited duration audio
+- Flexible strategies
+- No quality loss
 
-**Rationale**:
-- Segments needed for timestamp feature
-- Timestamps only useful for long audio
-- Reduces database storage for short messages
-- Configurable via `TIMESTAMPS_MIN_DURATION`
+**Added:** 2025-12-17
+**Location:** `src/transcription/providers/openai_provider.py`
 
+---
+
+### 15. Multi-File Support Pattern
+
+**Problem:** Users send audio in various formats (documents, videos)
+
+**Solution:** Universal file type handling
+
+**Implementation:**
 ```python
-# Save segments conditionally
-segments = await self.segment_repo.get_by_usage_id(usage_id)
-has_segments = len(segments) > 0
+# Voice handler (standard)
+application.add_handler(MessageHandler(filters.VOICE, voice_handler))
 
-if result.duration_seconds > settings.timestamps_min_duration:
-    # Save segments for long audio
-    await segment_repo.bulk_create_segments(usage_id, result.segments)
+# Audio handler (music files)
+application.add_handler(MessageHandler(filters.AUDIO, audio_handler))
+
+# Document handler (audio files as documents)
+application.add_handler(MessageHandler(filters.DOCUMENT, document_handler))
+# MIME type validation: audio/* only
+
+# Video handler (extract audio)
+application.add_handler(MessageHandler(filters.VIDEO, video_handler))
+# Extract audio track with ffmpeg
 ```
 
-### Pattern 8: State Indicator in Keyboard
-**UX Pattern**: Show current state with "(вы здесь)" marker
+**Key Features:**
+- 4 handlers for different file types
+- MIME type validation for documents
+- Audio extraction from video
+- Unified transcription pipeline
 
-```python
-def create_transcription_keyboard(state, ...):
-    keyboard = []
+**Benefits:**
+- Support any audio-containing file
+- Better UX (no "wrong format" errors)
+- Professional (handles videos)
 
-    # Original mode button
-    label = "Исходный текст (вы здесь)" if state.active_mode == "original" else "Исходный текст"
-    keyboard.append([InlineKeyboardButton(label, callback_data=...)])
+**Added:** 2025-12-25
+**Location:** `src/bot/handlers.py`, `src/transcription/audio_handler.py`
 
-    # Structured mode button (if enabled)
-    if settings.enable_structured_mode:
-        label = "📝 Структурировать (вы здесь)" if state.active_mode == "structured" else "📝 Структурировать"
-        keyboard.append([InlineKeyboardButton(label, callback_data=...)])
-```
+---
 
-**Benefits**:
-- Clear visual feedback of current state
-- Prevents confusion about which mode is active
-- Standard Telegram keyboard UX pattern
+## Historical Patterns Reference
 
-### Database Schema Design
+The following patterns have been implemented throughout the project's evolution.
+For detailed documentation, see the archived version: `systemPatterns-2025-01-09-pre-update.md`
 
-**TranscriptionState**:
-- Tracks UI state per message
-- Fields: usage_id, message_id, chat_id, active_mode, length_level, emoji_level, timestamps_enabled
-- One state per transcription result
+### Architecture & Design Patterns (8 patterns)
+1. **Producer-Consumer Pattern** - Queue-based request processing
+2. **Repository Pattern** - Database access abstraction
+3. **Service Layer Pattern** - Business logic encapsulation
+4. **Thread Pool Pattern** - CPU-bound work isolation
+5. **Middleware Pattern** - Cross-cutting concerns (quota, rate limit)
+6. **Configuration Object Pattern** - Pydantic settings
+7. **Strategy Pattern** - Provider routing (single/fallback/benchmark/hybrid/structure)
+8. **Factory Pattern** - Provider instantiation
 
-**TranscriptionVariant**:
-- Caches generated text variations
-- Composite unique key: (usage_id, mode, length_level, emoji_level, timestamps_enabled)
-- Tracks: generated_by, llm_model, processing_time_seconds, last_accessed_at
-- Max 10 variants per transcription (configurable)
+### Queue & Progress Patterns (4 patterns)
+9. **Queue-Based Request Management** - Bounded FIFO queue
+10. **Progress Tracking** - Live progress bar updates
+11. **Staged Database Writes** - Lifecycle tracking (download → transcribe → refine)
+12. **Graceful Degradation** - Clear error messages
 
-**TranscriptionSegment**:
-- Stores faster-whisper segments with timestamps
-- Fields: usage_id, segment_index, start_time, end_time, text
-- Only for long audio (>300s)
-- Enables timestamp feature (Phase 6)
+### Large File Support (1 pattern)
+13. **Hybrid Download Strategy** - Bot API ≤20MB + Client API >20MB
 
-### Key Implementation Lessons
+### Logging & Observability (11 patterns)
+14. **Version-Enriched Logging** - Add version/container_id to all logs
+15. **Size-Based Log Rotation** - 10MB files, 5 backups
+16. **Deployment Event Tracking** - JSONL deployment log
+17. **Structured JSON Logging** - Machine-readable logs
+18. **Optional Remote Syslog** - Centralized logging
+19. **Automatic Semantic Versioning** - v0.X.Y auto-increment
+20. **Separated Build and Deploy Workflow** - Two-stage CI/CD
+21. **Workflow Dispatch for Manual Deployments** - gh workflow trigger
+22. **Version-Tagged Docker Images** - latest + SHA tags
+23. **GitHub Releases for Changelog** - Auto-generated
+24. **Iterative Workflow Testing** - Multiple CI/CD iterations
 
-1. **allowed_updates is CRITICAL**: Most time spent debugging was this non-obvious requirement
-2. **Two-step keyboard addition**: Avoids race conditions with message_id
-3. **On-demand generation**: Don't generate all variants upfront, wait for user request
-4. **Feature flags first**: Deploy infrastructure before enabling features
-5. **Segment threshold**: Optimize storage by only saving when needed
+### Queue Management (5 patterns)
+25. **Atomic Counter for Queue Position** - Accurate position tracking
+26. **Unique File Naming with UUID** - Prevent concurrent access conflicts
+27. **Callback Pattern for Queue Changes** - Observer pattern
+28. **Dual List Tracking** - Pending + processing lists
+29. **Dynamic Message Update** - Update all pending messages
+
+### Hybrid & LLM Patterns (7 patterns)
+30. **Hybrid Transcription Strategy** - Duration-based routing
+31. **LLM Post-Processing** - Draft + refinement workflow
+32. **Staged UI Updates** - Show draft, then refine
+33. **Audio Preprocessing Pipeline** - Mono conversion, speed adjustment
+34. **Abstract LLM Provider** - Pluggable LLM providers
+35. **Graceful Degradation for LLM** - Always return draft
+36. **Feature Flags for Production Safety** - Disable by default
+
+### Text Processing Patterns (3 patterns)
+37. **Relative LLM Instructions** - Qualitative vs quantitative prompts
+38. **Threshold-Based File Delivery** - Text vs PDF based on length
+39. **Circular Import Resolution** - Function-level imports
+
+### Advanced Features (5 patterns)
+40. **Parent-Child Usage Tracking** - Retranscription history
+41. **Progress Bar with Dynamic Duration** - Method-specific estimation
+42. **Refinement Control via Context** - Skip refinement for retranscription
+43. **Provider-Aware Preprocessing** - Format optimization per provider
+44. **Audio Chunking with Overlap** - Long audio splitting
+45. **Universal File Type Support** - Voice + audio + documents + video
+46. **Audio Extraction from Video** - ffmpeg-based extraction
+47. **ffprobe-Based Duration Detection** - Document/video duration
+
+**Total:** 47 patterns implemented across 4 development months
+
+---
+
+## Development Workflow
+
+### Local Development
+1. Create feature branch from `main`
+2. Make changes with test coverage
+3. Run quality checks: `make check` (mypy, ruff, black, pytest)
+4. Commit with conventional commits format
+5. Push and create PR for code review
+
+### CI/CD Pipeline
+1. **On Pull Request**: Automated tests + quality checks
+2. **On Merge to main**: Build Docker image + push to registry
+3. **Automatic Deployment**: VPS pulls latest image + restarts bot
+4. **Versioning**: Automatic patch increment (v0.0.X)
+
+### Git Workflow
+- **Protected Branch**: `main` (requires PR + review)
+- **Feature Branches**: `feature/`, `fix/`, `docs/` prefixes
+- **Commit Format**: Conventional Commits (feat:, fix:, docs:, etc.)
+- **Pull Request**: Required for all changes
+- **Deployment**: Automatic on merge to main
+
+### Code Quality Standards
+- **Type Hints**: Required for all functions (mypy strict mode)
+- **Testing**: pytest with >80% coverage target
+- **Formatting**: black (line length 100)
+- **Linting**: ruff (fast linter)
+- **Documentation**: Docstrings for public APIs
+
+---
+
+## Key Technical Decisions
+
+**Update:** Mark local-first decisions as "Historical"
+
+| Date | Decision | Status | Rationale |
+|------|----------|--------|-----------|
+| 2025-10-12 | Python 3.11+ | ✅ Active | Best Whisper integration |
+| 2025-10-12 | python-telegram-bot | ✅ Active | Most mature library |
+| 2025-10-12 | faster-whisper | ⚠️ Fallback | Kept for reliability |
+| 2025-10-12 | Hybrid Queue Architecture | ✅ Active | Balanced scalability |
+| 2025-10-12 | SQLAlchemy + SQLite/PostgreSQL | ✅ Active | Good migration path |
+| 2025-12-25 | **OpenAI API Primary** | ✅ **Active** | **Best UX (speed + quality)** |
+| 2025-12-25 | **DeepSeek V3 for LLM** | ✅ **Active** | **Intelligent text processing** |
+| 2025-12-25 | **Local model fallback** | ✅ **Active** | **Reliability** |
+
+**For complete evolution story:** See [architecture-evolution.md](./architecture-evolution.md)
+
+---
+
+## Related Documentation
+
+- [Architecture Evolution](./architecture-evolution.md) - Complete pivot story
+- [Technical Context](./techContext.md) - Current technology stack
+- [Project Brief](./projectbrief.md) - Project goals and status
+- [Product Context](./productContext.md) - User experience and value props

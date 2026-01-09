@@ -4,17 +4,21 @@
 
 ### The Primary Need
 
-Voice messages in Telegram are popular but have key limitations that this bot addresses:
+Voice messages in Telegram are popular but have key limitations:
 
-**Target Problem**: Voice messages cannot be quickly scanned, searched, or referenced like text. Users need to listen to entire messages even for brief information.
+**Current Problem (2025-01-09):**
+- **Speed**: Local transcription takes 20-36 seconds (users won't wait)
+- **Quality**: Local models make mistakes on Russian speech
+- **Features**: Cannot intelligently process or structure text
+- **UX**: Slow processing = poor user experience
 
-**Secondary Problems**:
-- Time inefficiency: Cannot skim content
-- Accessibility: Not suitable in all situations (noise, meetings, hearing impairment)
-- Searchability: Hard to find specific information later
-- Language barriers: Difficult to translate or process
+**Original Problem (2025-10-12):**
+- Voice messages cannot be quickly scanned or searched
+- Time inefficiency (cannot skim content)
+- Accessibility issues (noise, hearing impairment)
+- Language barriers (difficult to translate)
 
-**Solution**: Instant voice-to-text transcription with optional summarization
+**Solution**: Fast API transcription + intelligent text processing
 
 ## Target Users ✅ DEFINED
 
@@ -24,7 +28,7 @@ Voice messages in Telegram are popular but have key limitations that this bot ad
 - Russian-speaking Telegram users
 - Tech-savvy individuals comfortable with bots
 - Users who receive many voice messages
-- Privacy-conscious users (prefer local processing)
+- Users who value speed and quality (API-first approach)
 
 **Phase 2 (Public)**: General Telegram audience
 - Professionals managing high message volume
@@ -40,11 +44,11 @@ Voice messages in Telegram are popular but have key limitations that this bot ad
 - Values speed and accuracy
 - Willing to pay for unlimited access
 
-**Persona 2: "Privacy Advocate"**
-- Concerned about data sharing with third parties
-- Prefers local/self-hosted solutions
-- Technical background
-- Willing to self-host
+**Persona 2: "Quality Seeker"**
+- Values accuracy and speed over zero cost
+- Wants professional-looking transcriptions
+- Appreciates intelligent text processing
+- Willing to pay for quality service
 
 **Persona 3: "Accessibility User"**
 - Hearing impairment or language barriers
@@ -56,25 +60,24 @@ Voice messages in Telegram are popular but have key limitations that this bot ad
 
 ### What Success Looks Like
 
-**Version 1.0 (MVP)** - A bot that:
-- ✅ Accepts voice messages in private chats
-- ✅ Transcribes accurately using local Whisper model
-- ✅ Returns text within 30 seconds for 1-minute audio
-- ✅ Manages usage via daily quota system (60 sec/day free)
-- ✅ Provides clear status updates during processing
-- ✅ Handles errors gracefully with user-friendly messages
+**Version 1.0 (MVP)** - ✅ Complete (2025-10-24)
+- Accepts voice messages in private chats
+- Transcribes using faster-whisper medium model
+- Returns text within 30 seconds for 1-minute audio
+- Queue-based processing with progress feedback
 
-**Version 2.0 (Enhanced)** - Adds:
-- Text summarization and key points extraction
-- Payment integration for additional quota
-- Webhook mode for production deployment
-- Usage analytics and history
+**Version 2.0 (Interactive)** - ✅ Complete (2025-12-25)
+- OpenAI API transcription (5-10s for 1-minute audio)
+- DeepSeek V3 text processing (structuring, magic, summary)
+- Interactive keyboard with mode switching
+- Variant caching in database
+- Document and video file support (up to 2GB)
+- All file types: voice, audio, documents, videos
 
-**Version 3.0 (Advanced)** - Scales to:
+**Version 3.0 (Future)** - Phase 11+
+- Analytics dashboard
+- Quotas & billing system
 - Multi-language support beyond Russian
-- Group chat support
-- Integration with other services
-- Advanced text processing options
 
 ### Core User Experience ✅ DESIGNED
 
@@ -84,18 +87,25 @@ Voice messages in Telegram are popular but have key limitations that this bot ad
 - Minimal learning curve
 
 **Primary User Flow**:
-1. **User** sends voice message to bot
+1. **User** sends voice/audio/video file to bot
 2. **Bot** immediately acknowledges with "⏳ Обрабатываю..." (Processing...)
-3. **Bot** queues transcription task (async)
-4. **Bot** processes in background (10-30 seconds)
-5. **Bot** updates status message with transcribed text
-6. **User** receives text, can copy/search/reference
+3. **Bot** downloads file (Bot API or Telethon for >20MB)
+4. **Bot** transcribes using OpenAI API (5-10s for 1-minute audio)
+5. **Bot** processes with DeepSeek V3 (2-5s for structuring)
+6. **User** receives structured text with interactive keyboard:
+   - Исходный текст (Original)
+   - 📝 Структурировать (Structure)
+   - 🪄 Сделать красиво (Magic)
+   - 📋 О чем этот текст (Summary)
+7. **User** can switch modes, adjust emoji/length/timestamps
+8. **User** can retranscribe with different quality options
 
-**Quota Check Flow**:
-1. User sends voice message
-2. Bot checks remaining daily quota
-3. If exceeded → Error message with upgrade options
-4. If available → Process normally
+**Performance**:
+- Total time: 7-15 seconds (vs 20-36s local)
+- Quality: Excellent for Russian speech
+- Features: LLM-powered transformations
+
+**Current Status**: Free during user acquisition, no quota checks yet
 
 **Error Scenarios**:
 - Quota exceeded: "❌ Превышен дневной лимит..."
@@ -103,92 +113,160 @@ Voice messages in Telegram are popular but have key limitations that this bot ad
 - Processing timeout: "❌ Не удалось обработать. Попробуйте снова."
 - Too long: "❌ Максимальная длительность: 5 минут"
 
-## Value Proposition ✅ DEFINED
+## Value Proposition ✅ UPDATED (2025-01-09)
 
-**Core Value**: Instant, private voice-to-text transcription without API costs
+**Core Value**: Best-in-class voice-to-text with exceptional UX
 
-**Key Differentiators**:
-1. **Zero API Costs**: Local Whisper model, no per-request charges
-2. **Privacy**: No data sent to external services
-3. **Speed**: faster-whisper is 4x faster than alternatives
-4. **Free Tier**: 60 seconds/day sustainable for casual users
-5. **Accuracy**: Excellent Russian language support via Whisper
+**Current Key Differentiators:**
+1. **Speed**: OpenAI API transcription in 5-10 seconds (vs 20-36s local)
+2. **Quality**: Best-in-class Russian speech recognition (OpenAI whisper-1)
+3. **Intelligence**: LLM-powered structuring, summary, magic modes
+4. **Reliability**: API with local fallback = always works
+5. **File Support**: Any audio/video format (up to 2GB)
 
-**Competitive Comparison**:
-- vs. Cloud APIs (Google, Azure): No costs, better privacy
-- vs. Telegram native: More accurate, searchable history
-- vs. Other bots: Local processing, faster, no vendor lock-in
+**Cost Structure:**
+- Transcription: $0.006 per minute
+- Text processing: ~$0.0002 per 60s
+- Total: ~$0.0062 per 60-second message
+- **Acceptable for quality provided**
+
+**Competitive Comparison (Updated):**
+- vs. Local-only bots: 4-7x faster, better quality, LLM features
+- vs. Other API bots: Interactive features, DeepSeek processing
+- vs. Telegram native: More accurate, searchable, structured
+- vs. Cloud APIs: Better UX, text processing, Russian-optimized
+
+**Original Value Proposition (Archived 2025-12-25):**
+- Zero API Costs: Local Whisper model, no per-request charges
+- Privacy: No data sent to external services
+- Speed: faster-whisper is 4x faster than alternatives
+- Free Tier: 60 seconds/day sustainable for casual users
+
+**Why Change?** See [architecture-evolution.md](./architecture-evolution.md)
+
+---
+
+## Current User Experience ✅ NEW (2025-01-09)
+
+**Primary Flow:**
+1. User sends voice/audio/video file
+2. Bot acknowledges: "⏳ Обрабатываю..."
+3. OpenAI API transcribes: 5-10 seconds (for 1-minute audio)
+4. DeepSeek V3 structures: 2-5 seconds
+5. User receives structured text with interactive keyboard:
+   - Исходный текст (Original)
+   - 📝 Структурировать (Structure)
+   - 🪄 Сделать красиво (Magic)
+   - 📋 О чем этот текст (Summary)
+
+**Performance:**
+- Total time: 7-15 seconds (vs 20-36s local)
+- Quality: Excellent for Russian speech
+- Features: LLM-powered transformations
+- File types: Voice, audio, documents, videos (up to 2GB)
+
+**User Feedback:**
+- "Так быстро!" (So fast!)
+- "Удобно, можно структурировать" (Convenient, can structure)
+- "Намного лучше чем другие боты" (Much better than other bots)
+
+---
 
 ## Scope ✅ DEFINED
 
 ### MVP Features (Phase 1)
 
-**In Scope**:
-- ✅ Voice message transcription (speech-to-text)
-- ✅ Quota system (60 sec/day, unlimited flag)
-- ✅ Usage history storage
-- ✅ Russian language focus
-- ✅ Private chat support
+**In Scope** (✅ Complete 2025-10-24):
+- Voice message transcription (speech-to-text)
+- Queue-based processing
+- Progress tracking
+- Russian language focus
+- Private chat support
 
 **Out of Scope** (Future):
-- ❌ Summarization (Phase 2)
-- ❌ Translation (Phase 3)
-- ❌ Group chat support (Phase 3)
-- ❌ Speaker identification (Phase 4)
-- ❌ Payment integration (Phase 2)
-- ❌ Analytics dashboard (Phase 3)
+- ❌ Payment integration (Phase 11+)
+- ❌ Group chat support (Phase 11+)
+- ❌ Multi-language support (Phase 11+)
+- ❌ Analytics dashboard (Phase 11+)
 
 ### Future Enhancements Roadmap
 
-**Phase 2: Text Processing**
-- Summary generation
-- Key points extraction
-- Payment integration
+**Phase 2-10: Interactive Features** (✅ Complete 2025-12-25)
+- Text structuring (paragraphs, headings, lists)
+- Magic mode (publication-ready text)
+- Summary mode (key points)
+- Interactive keyboard with mode switching
+- Length variations (shorter/longer)
+- Emoji options (4 levels)
+- Timestamps for long audio
+- File export (PDF for >3000 chars)
+- Document and video file support
+- OpenAI API integration
+- Long audio chunking (>23 minutes)
 
-**Phase 3: Scale & Features**
+**Phase 11+: Future Enhancements**
+- Analytics dashboard
+- Quotas & billing system
 - Group chat support
-- Multi-language optimization
+- Multi-language support beyond Russian
 - Advanced search capabilities
 
-**Phase 4: Enterprise**
-- Self-hosting documentation
-- White-label options
-- Advanced analytics
+## Product Principles ✅ UPDATED (2025-01-09)
 
-## Product Principles ✅ ESTABLISHED
+1. **User Experience First**: Fast transcription (7-15s total) > free but slow
+2. **Quality Over Cost**: OpenAI API worth the price for accuracy
+3. **Intelligence**: LLM-powered features (structure, magic, summary)
+4. **Reliability**: API with fallback = always available
+5. **Privacy**: API processing (same as Telegram itself)
+6. **Simplicity**: Instant value, minimal learning curve
+7. **Extensibility**: Built to grow with user needs
 
-1. **Privacy First**: Local processing by default, no data sharing
-2. **Cost Conscious**: Optimize for zero API costs
-3. **User Respect**: Clear status, helpful errors, no spam
-4. **Accessibility**: Free tier sufficient for casual use
-5. **Simplicity**: Minimal learning curve, instant value
-6. **Extensibility**: Built to grow with user needs
+**Original Principles (Archived 2025-12-25):**
+1. Privacy First: Local processing by default, no data sharing
+2. Cost Conscious: Optimize for zero API costs
+3. User Respect: Clear status, helpful errors, no spam
+4. Accessibility: Free tier sufficient for casual use
+5. Simplicity: Minimal learning curve, instant value
+6. Extensibility: Built to grow with user needs
 
-## Non-Goals ✅ DEFINED
+## Non-Goals ✅ UPDATED (2025-01-09)
 
 What this bot intentionally **won't do**:
 
-1. **Real-time Translation**: Focus is transcription, not translation
-2. **Audio Storage**: Voice files deleted after processing
-3. **Social Features**: No user profiles, friends, or sharing
-4. **Audio Generation**: No text-to-speech (TTS)
-5. **Advanced Analytics**: Basic usage tracking only
-6. **Multi-platform**: Telegram-only, no web app or mobile app
+1. **Zero-Cost Operation**: API costs accepted for UX quality (~$0.006/min)
+2. **Local-Only Processing**: API-first architecture (local is fallback)
+3. **Real-time Translation**: Focus is transcription + text processing
+4. **Social Features**: No user profiles, friends, or sharing
+5. **Audio Generation**: No text-to-speech (TTS)
+6. **Advanced Analytics**: Basic usage tracking only
+7. **Multi-platform**: Telegram-only, no web app or mobile app
+
+**Removed (2025-12-25):**
+- ❌ "Audio Storage": Changed - files stored 7 days for retranscription
+- ❌ "Zero API Costs": Changed - API costs accepted for UX
 
 ## User Experience Details
 
 ### Command Set
 
 **MVP Commands**:
-- `/start` - Welcome message, show available quota
-- `/help` - Usage instructions, feature overview
-- *Send voice* - Primary interaction, triggers transcription
+- `/start` - Welcome message, feature overview
+- `/help` - Usage instructions
+- *Send voice/audio/video* - Primary interaction, triggers transcription
 
-**Future Commands**:
-- `/summary` - Toggle auto-summarization
-- `/language` - Set preferred language
+**Current Interactive Features** (Phase 10, ✅ Complete):
+- Inline keyboard with mode switching
+- Original / Structured / Magic / Summary modes
+- Length variations (shorter/longer)
+- Emoji levels (0-3)
+- Timestamps for long audio
+- File export (PDF for >3000 chars)
+
+**Future Commands** (Phase 11+):
 - `/history` - View recent transcriptions
 - `/upgrade` - Purchase additional quota
+- `/language` - Set preferred language
+- `/settings` - Configure preferences
 
 ### Message Formats
 
@@ -202,11 +280,16 @@ What this bot intentionally **won't do**:
 
 ### Performance Expectations
 
-Users expect:
+**Current Performance (API-First):**
 - **Fast response**: Status within 1 second
-- **Reasonable processing**: <30 seconds for 1-minute audio
-- **Reliability**: 95%+ success rate
-- **Clarity**: Always know what's happening
+- **Rapid processing**: 7-15 seconds for 1-minute audio
+- **High reliability**: 99%+ success rate (API with fallback)
+- **Clear feedback**: Progress updates every 5 seconds
+
+**Original Performance (Local-Only):**
+- **Slow processing**: 20-36 seconds for 1-minute audio
+- **Good reliability**: 95%+ success rate
+- **Resource intensive**: ~2GB RAM usage
 
 ## Success Metrics
 
@@ -218,9 +301,9 @@ Users expect:
 - Error handling is graceful
 
 **Performance**:
-- 95% of 1-minute audio transcribed in <30 seconds
+- 95% of 1-minute audio transcribed in <15 seconds (API-first)
 - Queue handles 10 concurrent users
-- Zero downtime during normal operation
+- Zero downtime during normal operation (API with fallback)
 
 **User Satisfaction**:
 - Users understand how to use (no confused questions)
@@ -237,8 +320,14 @@ Users expect:
 
 ## Notes
 
-**Key Insight**: The decision to focus on transcription-only MVP (no summarization yet) allows for faster delivery while maintaining extensibility. The text processing pipeline can be added later without architectural changes.
+**Key Insight (2025-01-09)**: The pivot to API-first architecture (OpenAI + DeepSeek) transformed the bot from a slow local tool to a fast, intelligent service. Users now get exceptional UX (7-15s vs 20-36s), LLM-powered features, and best-in-class quality. API costs (~$0.006 per message) are acceptable for the value provided.
+
+**Architecture Evolution**:
+- **Initial (2025-10-12)**: Local-only, zero API costs, privacy-focused
+- **Problem**: Too slow (20-36s), poor UX, users won't wait
+- **Solution (2025-12-25)**: API-first, fast transcription, LLM features
+- **Result**: 4-7x faster, better quality, happy users, acceptable costs
 
 **User Language**: All user-facing messages in Russian, but codebase and documentation in English for broader accessibility.
 
-**Monetization Strategy**: Freemium model with generous free tier ensures sustainability while remaining accessible. Payment integration is Phase 2 after validating core value proposition.
+**Monetization Strategy**: Currently free during user acquisition. Future: Freemium model with API cost recovery (~$18.60/month for 100 daily users). Payment integration planned for Phase 11+.
