@@ -6,7 +6,7 @@
 
 ### ⚠️ ВАЖНО: Отключите корпоративный VPN перед началом!
 
-Poetry не может обновить зависимости через корпоративный VPN. Отключите VPN для выполнения шагов 1-3.
+uv не может скачать зависимости через некоторые корпоративные VPN. Отключите VPN для выполнения шагов 1-3.
 
 ---
 
@@ -15,16 +15,16 @@ Poetry не может обновить зависимости через кор
 ```bash
 cd /Users/k.balakin/MyProjects/telegram-voice2text-bot
 
-# Обновить poetry.lock с новыми зависимостями
-poetry lock
+# Обновить uv.lock с новыми зависимостями
+uv lock
 
 # Установить зависимости с поддержкой faster-whisper
-poetry install --extras "faster-whisper"
+uv sync --extra faster-whisper
 ```
 
 **Что происходит:**
-- `poetry lock` - обновляет `poetry.lock` с новыми зависимостями (psutil, опциональные провайдеры)
-- `poetry install --extras "faster-whisper"` - устанавливает базовые зависимости + faster-whisper
+- `uv lock` - обновляет `uv.lock` с новыми зависимостями (psutil, опциональные провайдеры)
+- `uv sync --extra faster-whisper` - устанавливает базовые зависимости + faster-whisper
 
 **Ожидаемый результат:** Все зависимости установлены, включая `psutil` и `faster-whisper`.
 
@@ -71,12 +71,9 @@ BENCHMARK_MODE=false
 ## 🧪 Шаг 3: Проверка установки
 
 ```bash
-# Проверьте, что Poetry environment активен
-poetry env info
-
 # Проверьте установленные пакеты
-poetry show psutil
-poetry show faster-whisper
+uv pip show psutil
+uv pip show faster-whisper
 
 # Должны увидеть версии:
 # psutil: 6.1.x
@@ -103,7 +100,7 @@ poetry show faster-whisper
 # BENCHMARK_MODE=false
 
 # Запуск бота
-poetry run python -m src.main
+uv run python -m src.main
 ```
 
 **Действия:**
@@ -118,7 +115,7 @@ poetry run python -m src.main
 # FASTER_WHISPER_MODEL_SIZE=small
 
 # Перезапустите бота
-poetry run python -m src.main
+uv run python -m src.main
 ```
 
 **Действия:**
@@ -133,7 +130,7 @@ poetry run python -m src.main
 # FASTER_WHISPER_MODEL_SIZE=medium
 
 # Перезапустите бота
-poetry run python -m src.main
+uv run python -m src.main
 ```
 
 ### Тест 4: OpenAI API (эталонное качество)
@@ -142,7 +139,7 @@ poetry run python -m src.main
 
 ```bash
 # Установите openai провайдер (если еще не установлен)
-poetry install --extras "openai-api"
+uv sync --extra openai-api
 
 # Обновите .env:
 # WHISPER_PROVIDERS=["openai"]
@@ -150,7 +147,7 @@ poetry install --extras "openai-api"
 # OPENAI_API_KEY=sk-your-actual-api-key-here
 
 # Перезапустите бота
-poetry run python -m src.main
+uv run python -m src.main
 ```
 
 **Действия:**
@@ -181,7 +178,7 @@ WHISPER_ROUTING_STRATEGY=benchmark
 OPENAI_API_KEY=sk-your-key-here
 
 # Перезапустите бота
-poetry run python -m src.main
+uv run python -m src.main
 ```
 
 ### Действия в benchmark mode:
@@ -266,7 +263,7 @@ FASTER_WHISPER_MODEL_SIZE=small  # Ваш выбор
 
 ## ⚠️ Возможные проблемы и решения
 
-### Проблема 1: `poetry lock` падает с ошибкой сети
+### Проблема 1: `uv lock` падает с ошибкой сети
 
 **Решение:** Отключите корпоративный VPN и повторите.
 
@@ -280,7 +277,7 @@ FASTER_WHISPER_MODEL_SIZE=small  # Ваш выбор
 
 **Проверьте:**
 - `TELEGRAM_BOT_TOKEN` правильно указан в `.env`
-- Бот запущен (`poetry run python -m src.main`)
+- Бот запущен (`uv run python -m src.main`)
 - В логах нет ошибок
 
 ### Проблема 4: Benchmark занимает слишком много времени
@@ -293,7 +290,7 @@ FASTER_WHISPER_MODEL_SIZE=small  # Ваш выбор
 
 **Решение:**
 ```bash
-poetry install  # Переустановите зависимости
+uv sync --all-extras  # Переустановите зависимости
 ```
 
 ---
@@ -304,7 +301,7 @@ poetry install  # Переустановите зависимости
 
 ```bash
 # Логи выводятся в консоль при запуске
-poetry run python -m src.main
+uv run python -m src.main
 
 # Уровень детализации можно изменить в .env:
 LOG_LEVEL=DEBUG  # Максимальная детализация
@@ -323,11 +320,11 @@ LOG_LEVEL=WARNING # Минимальная
 ## ✅ Checklist быстрого старта
 
 - [ ] Отключил корпоративный VPN
-- [ ] Выполнил `poetry lock`
-- [ ] Выполнил `poetry install --extras "faster-whisper"`
+- [ ] Выполнил `uv lock`
+- [ ] Выполнил `uv sync --extra faster-whisper`
 - [ ] Обновил `.env` с `TELEGRAM_BOT_TOKEN`
 - [ ] Включил обратно VPN (если нужен)
-- [ ] Запустил бота `poetry run python -m src.main`
+- [ ] Запустил бота `uv run python -m src.main`
 - [ ] Протестировал с `base` моделью
 - [ ] Протестировал с `small` моделью
 - [ ] (Опционально) Запустил benchmark mode

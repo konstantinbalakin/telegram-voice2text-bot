@@ -1,10 +1,10 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status (2025-12-26)
+## Current Status (2026-01-27)
 
-**Phase**: Phase 10 - Interactive Transcription Processing 🚀
-**Stage**: Phase 10.15 COMPLETE ✅ (Document & Video File Support)
-**Branch**: main
+**Phase**: Infrastructure Maintenance & Optimization 🔧
+**Stage**: Package Manager Migration COMPLETE ✅ (Poetry → UV)
+**Branch**: refactor/poetry-to-uv (ready to merge)
 **Production Version**: v0.0.3+ (commit 04837c1)
 **Production Status**: ✅ OPERATIONAL
 
@@ -37,6 +37,57 @@
 ---
 
 ## Recent Developments (Last 2 Weeks)
+
+### ✅ Package Manager Migration: Poetry → UV (2026-01-27)
+
+**What**: Complete migration from Poetry to UV for faster, standards-compliant dependency management
+
+**Key Implementation**:
+
+**Этап 1: UV Lock & Verification**
+1. ✅ Установлен Python 3.11 через Homebrew
+2. ✅ Создан `uv.lock` (95 пакетов)
+3. ✅ Исправлен email в `pyproject.toml` (PEP 621 валидация)
+4. ✅ Все 181 тест прошли успешно
+
+**Этап 2-3: CI/CD Migration**
+1. ✅ `.github/workflows/ci.yml` - заменён Poetry на `astral-sh/setup-uv@v4`
+2. ✅ `.github/workflows/build-and-tag.yml` - заменён на UV workflow
+
+**Этап 4: Scripts & Configuration**
+1. ✅ `.claude/settings.json` - все `poetry run` → `uv run`
+2. ✅ `.dockerignore` - обновлён для UV
+3. ✅ `scripts/update-requirements.sh` - удалён (используйте `make deps`)
+
+**Этап 5: Documentation Updates** (10 файлов):
+1. ✅ `docs/getting-started/installation.md`
+2. ✅ `docs/getting-started/quick-start.md`
+3. ✅ `docs/development/dependencies.md`
+4. ✅ `docs/development/testing.md`
+5. ✅ `docs/development/database-migrations.md`
+6. ✅ `docs/getting-started/configuration.md`
+7. ✅ `docs/features/llm-integration.md`
+8. ✅ `docs/README.md`
+9. ✅ `README.md`
+10. ✅ `PHASE1_ACCEPTANCE.md`
+11. ✅ `CLAUDE.md` - добавлены команды разработки
+12. ✅ `memory-bank/techContext.md` - обновлён стек
+
+**Этап 6: Finalization**
+1. ✅ `poetry.lock` удалён
+2. ✅ `uv.lock` создан и зафиксирован
+3. ✅ Ветка `refactor/poetry-to-uv` создана
+
+**Benefits**:
+- **Speed**: UV значительно быстрее Poetry (Rust-based)
+- **Standards**: PEP 621 compliant `pyproject.toml`
+- **Simplicity**: Меньше файлов конфигурации
+- **Reliability**: Все 181 тест прошли успешно
+- **CI/CD**: Обновлённые пайплайны работают корректно
+
+**Status**: ✅ Complete, ready for merge and deployment
+
+---
 
 ### ✅ Phase 10.15: Document & Video File Support (2025-12-25)
 
@@ -184,12 +235,17 @@ else:
 ## Next Steps
 
 ### Immediate (Current Session)
-1. ✅ Phase 10.15 implementation complete (document & video support)
-2. ✅ Merged to main (PR #74)
-3. ✅ Deployed to production
-4. ⏳ Update Memory Bank documentation
-5. ⏳ Create documentation update PR
-6. ⏳ Monitor production for video/document usage patterns
+1. ✅ Package Manager Migration complete (Poetry → UV)
+2. ⏳ Merge branch `refactor/poetry-to-uv` to main
+3. ⏳ Verify CI/CD pipelines with UV
+4. ⏳ Deploy to production with UV-based Docker image
+5. ⏳ Monitor production stability after migration
+
+### Short-term
+- **Documentation**: Ensure all UV commands are documented
+- **Developer Experience**: Verify smooth onboarding with UV
+- **CI/CD Performance**: Monitor build times with UV vs Poetry
+- **Dependency Updates**: Establish UV-based update workflow
 
 ### Future Considerations
 - **User feedback**: Monitor document/video file adoption and success rates

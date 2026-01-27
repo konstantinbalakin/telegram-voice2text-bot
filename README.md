@@ -56,15 +56,18 @@ docker-compose up -d
 ### Локальная разработка
 
 ```bash
+# Установить uv (если не установлен)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
 # Установить зависимости
-poetry install
+uv sync --all-extras
 
 # Настроить .env
 cp .env.example .env
 nano .env  # Указать BOT_TOKEN
 
 # Запустить
-poetry run python -m src.main
+uv run python -m src.main
 ```
 
 **Подробнее:** [📖 Installation Guide](docs/getting-started/installation.md)
@@ -166,13 +169,13 @@ pytest tests/unit/
 
 ```bash
 # Добавить зависимость
-poetry add <package>
+uv add <package>
 
 # Обновить requirements.txt для Docker
-./scripts/update-requirements.sh
+make deps
 
 # Закоммитить изменения
-git add pyproject.toml poetry.lock requirements.txt
+git add pyproject.toml uv.lock requirements.txt
 git commit -m "feat: add <package> dependency"
 ```
 

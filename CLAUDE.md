@@ -89,6 +89,32 @@ gh pr create --title "feat: description" --body "..."
 - Use `/commit` for automatic commit message generation
 - Push manually after commit: `git push origin <branch-name>`
 
+## Development Commands
+
+This project uses **uv** for Python package management:
+
+```bash
+# Install dependencies
+uv sync --all-extras --all-groups
+
+# Run bot
+uv run python -m src.main
+
+# Run tests
+uv run pytest tests/unit/ -v
+
+# Run linting/formatting
+uv run ruff check src/
+uv run black src/
+uv run mypy src/
+
+# Database migrations
+uv run alembic upgrade head
+
+# Export requirements for Docker
+make deps
+```
+
 ## Development Status
 
 ✅ **Current Status**: Production-ready, Phase 10.14 complete

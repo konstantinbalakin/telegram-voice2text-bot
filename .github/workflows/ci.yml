@@ -28,55 +28,36 @@ jobs:
             .claude/**
             CLAUDE.md
 
+      - name: Install uv
+        if: steps.changed-files.outputs.any_changed == 'true'
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
       - name: Set up Python
         if: steps.changed-files.outputs.any_changed == 'true'
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install Poetry
-        if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Configure Poetry
-        if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          poetry config virtualenvs.create true
-          poetry config virtualenvs.in-project true
-
-      - name: Cache Poetry dependencies
-        if: steps.changed-files.outputs.any_changed == 'true'
-        uses: actions/cache@v3
-        with:
-          path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+        run: uv python install 3.11
 
       - name: Install dependencies
         if: steps.changed-files.outputs.any_changed == 'true'
-        run: poetry install --no-interaction --no-ansi --extras "faster-whisper openai-api"
+        run: uv sync --all-extras --all-groups
 
       - name: Run tests with coverage
         if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          poetry run pytest --cov=src --cov-report=term --cov-report=xml
+        run: uv run pytest --cov=src --cov-report=term --cov-report=xml
 
       - name: Type check with mypy
         if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          poetry run mypy src/
+        run: uv run mypy src/
 
       - name: Lint with ruff
         if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          poetry run ruff check src/
+        run: uv run ruff check src/
 
       - name: Format check with black
         if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          poetry run black --check src/
+        run: uv run black --check src/
 
       - name: Upload coverage reports
         if: steps.changed-files.outputs.any_changed == 'true' && success()

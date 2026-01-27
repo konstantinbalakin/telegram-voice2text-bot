@@ -244,7 +244,7 @@ See [Costs Guide](../deployment/costs.md) for detailed breakdown.
 Verify configuration loads correctly:
 
 ```bash
-poetry run python -c "from src.config import settings; print(f'Bot configured: {settings.telegram_bot_token[:10]}...')"
+uv run python -c "from src.config import settings; print(f'Bot configured: {settings.telegram_bot_token[:10]}...')"
 ```
 
 ## Troubleshooting

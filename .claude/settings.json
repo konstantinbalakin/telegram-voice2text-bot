@@ -6,7 +6,7 @@
 
     "Bash(ssh:*)",
 
-    "Bash(poetry:*)",
+    "Bash(uv:*)",
     "Bash(python:*)",
     "Bash(python3:*)",
     "Bash(pip:*)",
@@ -19,7 +19,7 @@
     "Bash(awk:*)",
     "Bash(sqlite3:*)",
 
-    "Read(//Users/computer/Library/Caches/pypoetry/virtualenvs/**)",
+    "Read(//Users/computer/.cache/uv/**)",
 
     "WebFetch(domain:pypi.org)",
 
@@ -49,23 +49,23 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo \"→ Running security checks...\"; if command -v semgrep >/dev/null 2>&1; then echo \"  - semgrep (static analysis)\"; semgrep --config=auto \"$CLAUDE_TOOL_FILE_PATH\" || true; fi; if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]] && command -v bandit >/dev/null 2>&1; then echo \"  - bandit (Python security)\"; poetry run bandit -q \"$CLAUDE_TOOL_FILE_PATH\" || true; fi; if command -v gitleaks >/dev/null 2>&1; then echo \"  - gitleaks (secrets detection)\"; gitleaks detect --source=\"$CLAUDE_TOOL_FILE_PATH\" --no-git || true; fi"
+            "command": "echo \"→ Running security checks...\"; if command -v semgrep >/dev/null 2>&1; then echo \"  - semgrep (static analysis)\"; semgrep --config=auto \"$CLAUDE_TOOL_FILE_PATH\" || true; fi; if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]] && command -v bandit >/dev/null 2>&1; then echo \"  - bandit (Python security)\"; uv run bandit -q \"$CLAUDE_TOOL_FILE_PATH\" || true; fi; if command -v gitleaks >/dev/null 2>&1; then echo \"  - gitleaks (secrets detection)\"; gitleaks detect --source=\"$CLAUDE_TOOL_FILE_PATH\" --no-git || true; fi"
           },
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Formatting with black...\"; poetry run black \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Formatting with black...\"; uv run black \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
           },
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Type checking with mypy...\"; poetry run mypy \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Type checking with mypy...\"; uv run mypy \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
           },
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Linting with ruff...\"; poetry run ruff check --fix \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *.py ]]; then echo \"→ Linting with ruff...\"; uv run ruff check --fix \"$CLAUDE_TOOL_FILE_PATH\" || true; fi"
           },
           {
             "type": "command",
-            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *pyproject.toml || \"$CLAUDE_TOOL_FILE_PATH\" == *poetry.lock ]]; then echo \"✓ Poetry dependency file modified: $CLAUDE_TOOL_FILE_PATH\"; if command -v poetry >/dev/null 2>&1; then echo \"\\n→ Checking for outdated packages...\"; poetry show --outdated 2>/dev/null || true; echo \"\\n→ Running security audit...\"; poetry export -f requirements.txt --without-hashes | poetry run safety check --stdin 2>/dev/null || echo \"Note: Install safety with 'poetry add --group dev safety' for security scanning\"; fi; fi"
+            "command": "if [[ \"$CLAUDE_TOOL_FILE_PATH\" == *pyproject.toml || \"$CLAUDE_TOOL_FILE_PATH\" == *uv.lock ]]; then echo \"✓ UV dependency file modified: $CLAUDE_TOOL_FILE_PATH\"; if command -v uv >/dev/null 2>&1; then echo \"\\n→ Syncing dependencies...\"; uv sync 2>/dev/null || true; fi; fi"
           }
         ]
       }

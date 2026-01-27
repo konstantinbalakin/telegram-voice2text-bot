@@ -19,12 +19,12 @@
 
 2. **Применить миграцию базы данных**
    ```bash
-   poetry run alembic upgrade head
+   uv run alembic upgrade head
    ```
 
 3. **Запустить бота**
    ```bash
-   poetry run python -m src.main
+   uv run python -m src.main
    ```
 
 ## Сценарии Приёмки
@@ -170,7 +170,7 @@ GROUP BY usage_id;
 
 **Решение:**
 - Перезапустите бота после изменения .env
-- Проверьте применение миграции: `poetry run alembic current`
+- Проверьте применение миграции: `uv run alembic current`
 
 ---
 
@@ -194,7 +194,7 @@ GROUP BY usage_id;
 
 **Решение:**
 - Добавьте больше логирования (уже добавлено в последней версии)
-- Проверьте версию python-telegram-bot: `poetry show python-telegram-bot`
+- Проверьте версию python-telegram-bot: `uv pip show python-telegram-bot`
 - Проверьте структуру объекта Update в логах
 
 ---
@@ -212,25 +212,25 @@ GROUP BY usage_id;
 
 ### Запустить Все Тесты
 ```bash
-poetry run pytest -v
+uv run pytest -v
 # Ожидается: Все 108 тестов проходят
 ```
 
 ### Проверка Типов
 ```bash
-poetry run mypy src/
+uv run mypy src/
 # Ожидается: Success: no issues found
 ```
 
 ### Линтинг
 ```bash
-poetry run ruff check src/
+uv run ruff check src/
 # Ожидается: No errors
 ```
 
 ### Форматирование
 ```bash
-poetry run black src/ --check
+uv run black src/ --check
 # Ожидается: All done! ✨ 🍰 ✨
 ```
 

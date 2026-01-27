@@ -1,6 +1,6 @@
 # System Patterns: Telegram Voice2Text Bot
 
-**Last Updated**: 2025-01-09
+**Last Updated**: 2026-01-27
 **Architecture**: API-First (OpenAI + DeepSeek + Local Fallback)
 
 ---

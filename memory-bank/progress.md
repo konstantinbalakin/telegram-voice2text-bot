@@ -6,6 +6,20 @@
 **Current Version**: v0.0.3+
 **Production Status**: ✅ OPERATIONAL - All systems deployed and stable
 
+## Recent Infrastructure Updates
+
+### Package Manager Migration (2026-01-27)
+- **Migration**: Poetry → UV ✅ Complete
+- **Duration**: 1 day (6 stages)
+- **Impact**:
+  - 95 packages in `uv.lock`
+  - All 181 tests passing
+  - CI/CD pipelines updated
+  - 12 documentation files updated
+  - Faster dependency resolution and builds
+- **Branch**: `refactor/poetry-to-uv`
+- **Status**: Ready for merge to main
+
 ## Completed Phases
 
 ### Infrastructure & Core (Phases 1-7.4)
@@ -90,6 +104,12 @@
 - ✅ DEBUG mode with comprehensive logging
 
 ## Technical Architecture
+
+### Package Management
+- **Package Manager**: uv (migrated from Poetry 2026-01-27)
+- **Lock File**: `uv.lock` (95 packages)
+- **Standard**: PEP 621 compliant `pyproject.toml`
+- **Benefits**: Faster resolution, Rust-based, standards-compliant
 
 ### Transcription Providers
 - **faster-whisper**: Local transcription (default: medium/int8)
@@ -208,6 +228,7 @@ OPENAI_CHUNKING=false  # Enable manual chunking if needed
 10. **Universal File Type Support**: Handle voice, audio, documents, and video through unified transcription pipeline
 11. **MIME Type Filtering**: Validate document MIME types before processing to avoid non-audio files
 12. **Audio Stream Detection**: Check for audio streams in video files before attempting extraction
+13. **Standards-Compliant Packaging**: PEP 621 with UV for fast, reliable dependency management
 
 ---
 
