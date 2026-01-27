@@ -163,7 +163,8 @@ jobs:
       - name: Export requirements.txt
         if: steps.changed-files.outputs.any_changed == 'true'
         run: |
-          uv export --no-dev --extra faster-whisper --extra openai-api -o requirements.txt
+          uv export --no-hashes --no-editable --no-dev --extra faster-whisper --extra openai-api -o requirements.txt
+          sed -i '/^\.$/d' requirements.txt
 
       - name: Set up Docker Buildx
         if: steps.changed-files.outputs.any_changed == 'true'

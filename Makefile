@@ -14,7 +14,8 @@ UV := uv
 # 🧩 1. Обновить requirements.txt из uv.lock
 deps:
 	@echo "📦 Экспорт зависимостей через uv..."
-	$(UV) export --no-dev --extra faster-whisper --extra openai-api --locked -o requirements.txt
+	$(UV) export --no-hashes --no-editable --no-dev --extra faster-whisper --extra openai-api --locked -o requirements.txt
+	@grep -v '^\.$$' requirements.txt > requirements.txt.tmp && mv requirements.txt.tmp requirements.txt
 	@echo "✅ requirements.txt обновлён."
 
 # ⚙️ 2. Собрать Docker-образ
