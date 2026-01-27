@@ -16,6 +16,8 @@ Think through the task requirements and current project context to establish com
 
 $ARGUMENTS
 
+Answer in Russian.
+
 ## Process
 
 ### 1. Task Decomposition

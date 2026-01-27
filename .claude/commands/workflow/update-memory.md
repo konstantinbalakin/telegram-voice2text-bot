@@ -4,7 +4,7 @@ description: Update Memory Bank with significant learnings
 # Memory Bank Documentation Update
 
 ## Task
-Think longer about project evolution and comprehensively review all Memory Bank files to preserve important learnings, decisions, and project state for future Claude Code sessions. Ensure they accurately reflect the current project state and recent developments.
+Think longer about project evolution and comprehensively review all Memory Bank files to preserve important learnings, decisions, and project state for future Claude Code sessions. Ensure they accurately reflect the current project state and recent developments. Answer in Russian.
 
 ## Process
 
