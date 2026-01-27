@@ -1,49 +1,51 @@
 # Dependency Management
 
-This project uses **Poetry** for Python dependency management, but also maintains `requirements.txt` files for Docker builds.
+This project uses **uv** for Python dependency management and maintains `requirements.txt` files for Docker builds.
 
-## Poetry Workflow (Development)
+## uv Workflow (Development)
 
 ### Adding Dependencies
 
 ```bash
 # Add a regular dependency
-poetry add <package>
+uv add <package>
 
 # Add a development dependency
-poetry add --group dev <package>
+uv add --group dev <package>
 
-# Add an optional dependency
-poetry add --optional <package>
+# Add an optional dependency (to an extra)
+uv add --optional faster-whisper <package>
 ```
 
 ### Installing Dependencies
 
 ```bash
-# Install all dependencies
-poetry install
+# Install all dependencies (creates .venv automatically)
+uv sync
 
 # Install with specific extras (providers)
-poetry install --extras "faster-whisper"
-poetry install --extras "all-providers"
+uv sync --extra faster-whisper
+uv sync --all-extras
+
+# Install with dev dependencies
+uv sync --all-extras --all-groups
 ```
 
 ## Docker Workflow (Production)
 
 ### Updating requirements.txt
 
-After modifying `pyproject.toml`, update the requirements files:
+After modifying `pyproject.toml`, update the requirements file:
 
 ```bash
-./scripts/update-requirements.sh
+make deps
+# or manually:
+uv export --no-dev --extra faster-whisper --extra openai-api -o requirements.txt
 ```
-
-This generates:
-- `requirements.txt` - Base + faster-whisper (for Docker)
 
 ### Dockerfile Configuration
 
-Update `Dockerfile` to use requirements.txt:
+The `Dockerfile` uses requirements.txt:
 
 ```dockerfile
 COPY requirements.txt requirements.txt
@@ -56,7 +58,7 @@ The project supports two transcription providers as optional extras:
 
 ### faster-whisper (Recommended - Production Default)
 ```bash
-poetry install --extras "faster-whisper"
+uv sync --extra faster-whisper
 ```
 - Fast local transcription using CTranslate2
 - Low memory usage with quantization support (int8)
@@ -66,7 +68,7 @@ poetry install --extras "faster-whisper"
 
 ### openai-api
 ```bash
-poetry install --extras "openai-api"
+uv sync --extra openai-api
 ```
 - Uses OpenAI's Whisper API
 - Requires API key and internet connection
@@ -76,59 +78,69 @@ poetry install --extras "openai-api"
 ## Package Versions
 
 ### Core Dependencies
-- Python: ^3.11
-- python-telegram-bot: ^22.5
-- SQLAlchemy: ^2.0.44
-- pydantic: ^2.10
+- Python: >=3.11,<4.0
+- python-telegram-bot: >=22.5,<23.0
+- SQLAlchemy: >=2.0.44,<3.0.0
+- pydantic: >=2.10,<3.0
 
 ### Transcription Providers
-- faster-whisper: ^1.2.0 (production default)
-- openai: ^1.50.0 (optional)
+- faster-whisper: >=1.2.1,<2.0.0 (production default)
+- openai: >=1.50.0,<2.0.0 (optional)
 
 ## Common Tasks
 
 ### Update all dependencies
 ```bash
-poetry update
-./scripts/update-requirements.sh
+uv lock --upgrade
+uv sync --all-extras --all-groups
+make deps  # Export requirements.txt
 ```
 
-### Check for outdated packages
+### Check lock file
 ```bash
-poetry show --outdated
+# Verify lock file is up to date
+uv lock --check
 ```
 
 ### Add a new provider
-1. Add to `pyproject.toml` as optional dependency
-2. Add to `[tool.poetry.extras]` section
-3. Run `poetry lock`
-4. Run `./scripts/update-requirements.sh`
-5. Update this documentation
+1. Add to `pyproject.toml` as optional dependency in `[project.optional-dependencies]`
+2. Run `uv lock`
+3. Run `make deps`
+4. Update this documentation
 
 ## Troubleshooting
 
 ### "Module not found" errors
 ```bash
 # Ensure you've installed the right extras
-poetry install --extras "faster-whisper"
+uv sync --extra faster-whisper
 
 # Or reinstall all dependencies
-poetry install --sync
+uv sync --all-extras --all-groups
 ```
 
 ### Docker build failures
 ```bash
 # Regenerate requirements.txt
-./scripts/update-requirements.sh
+make deps
 
 # Rebuild Docker image
 docker build --no-cache -t telegram-voice2text-bot .
+```
+
+### Lock file out of date
+```bash
+# Regenerate lock file
+uv lock
+
+# Then sync
+uv sync --all-extras
 ```
 
 ### Wrong whisper package installed
 The package name is `openai-whisper`, not `whisper` (which is a different package).
 
 If you see errors like `module 'whisper' has no attribute 'load_model'`:
-1. Uninstall wrong package: `poetry remove whisper`
-2. Add correct package: `poetry add --optional openai-whisper`
-3. Update requirements: `./scripts/update-requirements.sh`
+1. Check pyproject.toml has correct package
+2. Run `uv lock` to regenerate lock
+3. Run `uv sync --all-extras` to reinstall

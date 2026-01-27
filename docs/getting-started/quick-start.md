@@ -9,24 +9,20 @@ Get your bot running in 5 minutes!
 - Completed [Installation](installation.md)
 - [Configured](configuration.md) `.env` with `BOT_TOKEN`
 
-## Option 1: Local Start (Poetry)
+## Option 1: Local Start (uv)
 
 ```bash
 # Navigate to project directory
 cd telegram-voice2text-bot
 
-# Activate environment
-poetry shell
+# Install/update dependencies
+uv sync --all-extras
 
-#Обновить зависимости
-poetry install
-poetry install --extras "faster-whisper openai-api telethon-speedup"
-
-# Обновить миграции БД
-alembic upgrade head
+# Run database migrations
+uv run alembic upgrade head
 
 # Run bot
-poetry run python -m src.main
+uv run python -m src.main
 ```
 
 **Expected output:**
@@ -102,8 +98,8 @@ Bot: 📊 Ваша статистика:
 
 **Check logs:**
 ```bash
-# Poetry
-poetry run python -m src.main
+# Local (uv)
+uv run python -m src.main
 
 # Docker
 docker-compose logs bot
@@ -139,7 +135,7 @@ WHISPER_MODEL_SIZE=base  # Instead of medium
 
 ```bash
 # Reinstall dependencies
-poetry install
+uv sync --all-extras
 
 # Or with pip
 pip install -e .

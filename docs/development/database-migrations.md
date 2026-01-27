@@ -34,7 +34,7 @@ Before working with migrations:
 
 1. Install dependencies:
    ```bash
-   poetry install --with dev
+   uv sync --all-groups
    ```
 
 2. Ensure database URL is configured:
@@ -45,7 +45,7 @@ Before working with migrations:
 
 3. Verify Alembic setup:
    ```bash
-   poetry run alembic current
+   uv run alembic current
    ```
 
 ## Creating Migrations
@@ -56,12 +56,12 @@ When you modify `src/storage/models.py`, generate a migration automatically:
 
 ```bash
 # Generate migration based on model changes
-poetry run alembic revision --autogenerate -m "description of changes"
+uv run alembic revision --autogenerate -m "description of changes"
 ```
 
 **Example**:
 ```bash
-poetry run alembic revision --autogenerate -m "add user_preferences table"
+uv run alembic revision --autogenerate -m "add user_preferences table"
 ```
 
 This creates a new migration file in `alembic/versions/` with:
@@ -74,7 +74,7 @@ This creates a new migration file in `alembic/versions/` with:
 For complex changes, create an empty migration and edit manually:
 
 ```bash
-poetry run alembic revision -m "custom migration description"
+uv run alembic revision -m "custom migration description"
 ```
 
 Edit the generated file in `alembic/versions/`:
@@ -111,17 +111,17 @@ def downgrade() -> None:
 Apply all pending migrations:
 
 ```bash
-poetry run alembic upgrade head
+uv run alembic upgrade head
 ```
 
 Apply specific number of migrations:
 
 ```bash
 # Apply one migration
-poetry run alembic upgrade +1
+uv run alembic upgrade +1
 
 # Apply to specific revision
-poetry run alembic upgrade <revision_id>
+uv run alembic upgrade <revision_id>
 ```
 
 ### Production (VPS)
@@ -157,19 +157,19 @@ docker run --rm \
 ### Rollback One Migration
 
 ```bash
-poetry run alembic downgrade -1
+uv run alembic downgrade -1
 ```
 
 ### Rollback to Specific Revision
 
 ```bash
-poetry run alembic downgrade <revision_id>
+uv run alembic downgrade <revision_id>
 ```
 
 ### Rollback All Migrations
 
 ```bash
-poetry run alembic downgrade base
+uv run alembic downgrade base
 ```
 
 ### Production Rollback
@@ -208,13 +208,13 @@ Test migration locally:
 cp data/bot.db data/bot.db.backup
 
 # 2. Apply migration
-poetry run alembic upgrade head
+uv run alembic upgrade head
 
 # 3. Test application
-poetry run python -m src.main
+uv run python -m src.main
 
 # 4. If problems occur, rollback
-poetry run alembic downgrade -1
+uv run alembic downgrade -1
 cp data/bot.db.backup data/bot.db
 ```
 
@@ -222,16 +222,16 @@ cp data/bot.db.backup data/bot.db
 
 ```bash
 # Apply migration
-poetry run alembic upgrade head
+uv run alembic upgrade head
 
 # Get current revision
-poetry run alembic current
+uv run alembic current
 
 # Rollback
-poetry run alembic downgrade -1
+uv run alembic downgrade -1
 
 # Upgrade again
-poetry run alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ## Best Practices
@@ -287,8 +287,8 @@ ERROR [alembic.runtime.migration] Can't locate revision identified by 'abc123'
 
 **Solution**: Check current revision and history:
 ```bash
-poetry run alembic current
-poetry run alembic history
+uv run alembic current
+uv run alembic history
 ```
 
 ### Database Out of Date
@@ -299,7 +299,7 @@ RuntimeError: Database schema mismatch. Current: abc123, HEAD: def456
 
 **Solution**: Apply pending migrations:
 ```bash
-poetry run alembic upgrade head
+uv run alembic upgrade head
 ```
 
 ### Migration Conflict
@@ -311,10 +311,10 @@ If two developers create migrations simultaneously:
 git pull origin main
 
 # Check history
-poetry run alembic history
+uv run alembic history
 
 # If conflicting branches, merge revisions
-poetry run alembic merge -m "merge migrations" <rev1> <rev2>
+uv run alembic merge -m "merge migrations" <rev1> <rev2>
 ```
 
 ### Can't Find Database File
@@ -336,23 +336,23 @@ ModuleNotFoundError: No module named 'src'
 
 **Solution**: Run alembic through Poetry:
 ```bash
-poetry run alembic <command>
+uv run alembic <command>
 ```
 
 ### Check Migration Status
 
 ```bash
 # Show current revision
-poetry run alembic current
+uv run alembic current
 
 # Show migration history
-poetry run alembic history
+uv run alembic history
 
 # Show pending migrations
-poetry run alembic heads
+uv run alembic heads
 
 # Detailed migration info
-poetry run alembic show <revision_id>
+uv run alembic show <revision_id>
 ```
 
 ## Related Documentation

@@ -371,7 +371,7 @@ LLM_DEBUG_MODE=true
 LLM_API_KEY=sk-your-deepseek-key-here
 
 # Verify it loads
-poetry run python -c "from src.config import settings; print(settings.llm_api_key[:10])"
+uv run python -c "from src.config import settings; print(settings.llm_api_key[:10])"
 ```
 
 ### "LLM refinement failed: timeout"

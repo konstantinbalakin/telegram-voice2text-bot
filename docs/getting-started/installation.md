@@ -10,7 +10,7 @@
 - **2GB+ RAM** (for Whisper medium model)
 - **10GB+ disk space** (for models and dependencies)
 
-## Method 1: Local Development (Poetry)
+## Method 1: Local Development (uv)
 
 ### 1. Install System Dependencies
 
@@ -50,33 +50,31 @@ git clone https://github.com/konstantinbalakin/telegram-voice2text-bot.git
 cd telegram-voice2text-bot
 ```
 
-### 4. Install Poetry
+### 4. Install uv
 
 ```bash
-# Install Poetry
-curl -sSL https://install.python-poetry.org | python3 -
+# Install uv (fast Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Add to PATH (if not auto-added)
 # Add to ~/.zshrc:
 export PATH="$HOME/.local/bin:$PATH"
 
 # Verify
-poetry --version
+uv --version
 ```
 
 ### 5. Setup Python Environment
 
 ```bash
-# Configure Poetry to use Python 3.11
-poetry env use /opt/homebrew/bin/python3.11
-# or
-poetry env use /opt/homebrew/bin/python3
+# Install Python 3.11 via uv (optional, if not installed)
+uv python install 3.11
 
-# Install dependencies
-poetry install
+# Install dependencies (creates .venv automatically)
+uv sync --all-extras
 
-# Activate virtual environment
-poetry shell
+# Run commands via uv run
+uv run python -m src.main
 ```
 
 ## Method 2: Local Development (pip)
@@ -124,13 +122,11 @@ See [Docker Guide](../deployment/docker.md) for details.
 ### Local Installation
 
 ```bash
-# Activate environment
-poetry shell  # or source venv/bin/activate
+# Run a quick check
+uv run python -c "import sqlalchemy, httpx; print('Dependencies OK')"
 
-# Check Python version
-python --version
-
-# Check main dependencies
+# Or if using venv directly
+source venv/bin/activate
 python -c "import sqlalchemy, httpx; print('Dependencies OK')"
 ```
 
@@ -151,35 +147,32 @@ docker-compose ps
 
 ## Troubleshooting
 
-### Poetry not found
+### uv not found
 
 ```bash
-# Add Poetry to PATH
+# Add uv to PATH
 export PATH="$HOME/.local/bin:$PATH"
 
 # Or reinstall
-curl -sSL https://install.python-poetry.org | python3 -
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ### Python version mismatch
 
 ```bash
-# Specify exact Python version for Poetry
-poetry env use python3.11
+# Install specific Python version via uv
+uv python install 3.11
 
-# Or use full path
-poetry env use /usr/local/bin/python3.11
+# Use specific Python for sync
+uv sync --python 3.11
 ```
 
 ### Dependency installation fails
 
 ```bash
-# Update Poetry
-poetry self update
-
 # Clear cache and retry
-poetry cache clear pypi --all
-poetry install
+uv cache clean
+uv sync --all-extras
 ```
 
 ### ffmpeg not found

@@ -69,49 +69,61 @@
 
 ## Complete Dependency Stack
 
+**Package Manager**: **uv** (migrated from Poetry - 2026-01-27)
+- Fast Rust-based Python package manager
+- PEP 621 standard pyproject.toml format
+- Lock file: `uv.lock` (95 packages)
+- **Migration Complete**: All 181 tests passing, CI/CD updated
+
 ```toml
-[tool.poetry.dependencies]
-python = "^3.11"
+[project]
+requires-python = ">=3.11,<4.0"
 
-# Core
-python-telegram-bot = "^22.5"       # Telegram Bot API
-faster-whisper = "^1.2.0"            # Speech transcription
+dependencies = [
+    # Core
+    "python-telegram-bot>=22.5,<23.0",  # Telegram Bot API
+    
+    # Database
+    "sqlalchemy[asyncio]>=2.0.44,<3.0.0",
+    "aiosqlite>=0.20.0,<0.21.0",        # SQLite async driver
+    "alembic>=1.13,<2.0",               # Database migrations
+    
+    # Configuration & Utilities
+    "python-dotenv>=1.0.0,<2.0.0",      # Environment variables
+    "pydantic>=2.10,<3.0",              # Data validation
+    "pydantic-settings>=2.6,<3.0",      # Settings management
+    
+    # Logging
+    "python-json-logger>=4.0.0,<5.0.0", # JSON log formatting
+    
+    # Async HTTP & LLM Integration
+    "httpx>=0.28,<0.29",                # Async HTTP client
+    "tenacity>=9.0.0,<10.0.0",          # Retry logic
+    
+    # PDF Generation
+    "weasyprint>=62.3,<63.0",           # HTML to PDF conversion
+    "pydyf>=0.11.0,<0.12.0",            # PDF library
+    
+    # Audio Manipulation
+    "pydub>=0.25.1,<0.26.0",            # Audio splitting
+    
+    # System Monitoring
+    "psutil>=6.1,<7.0",
+]
 
-# Database
-sqlalchemy = {extras = ["asyncio"], version = "^2.0.44"}
-aiosqlite = "^0.20.0"                # SQLite async driver (MVP)
-asyncpg = "^0.30"                    # PostgreSQL async driver (production)
-alembic = "^1.13"                    # Database migrations
+[project.optional-dependencies]
+faster-whisper = ["faster-whisper>=1.2.1,<2.0.0"]
+openai-api = ["openai>=1.50.0,<2.0.0"]
 
-# Configuration & Utilities
-python-dotenv = "^1.0.0"             # Environment variables
-pydantic = "^2.10"                   # Data validation
-pydantic-settings = "^2.6"           # Settings management
-
-# Logging
-python-json-logger = "^4.0.0"        # JSON log formatting
-
-# Async HTTP & LLM Integration (NEW - 2025-11-20)
-httpx = "^0.28"                      # Async HTTP client (for LLM APIs)
-tenacity = "^9.0.0"                  # Retry logic for LLM API calls
-
-# PDF Generation (NEW - 2025-12-09)
-weasyprint = "^62.3"                 # HTML to PDF conversion
-pydyf = "^0.11.0"                    # PDF library (WeasyPrint dependency, pinned for compatibility)
-
-# Audio Manipulation (NEW - 2025-12-17)
-pydub = "^0.25.1"                    # Audio splitting and manipulation for OpenAI long audio chunking
-
-# System Monitoring
-psutil = "^6.1"                      # System monitoring
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3"                      # Testing framework
-pytest-asyncio = "^0.24"             # Async test support
-pytest-cov = "^6.0"                  # Coverage reports
-black = "^24.10"                     # Code formatter
-ruff = "^0.8"                        # Linter/formatter
-mypy = "^1.13"                       # Type checking
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<0.25",
+    "pytest-cov>=6.0,<7.0",
+    "black>=24.10,<25.0",
+    "ruff>=0.8,<0.9",
+    "mypy>=1.13,<2.0",
+]
 ```
 
 **Dependency Update Notes**:
@@ -600,9 +612,9 @@ pyenv install 3.11.9
 pyenv local 3.11.9
 ```
 
-✅ **Poetry** (dependency management)
+✅ **uv** (dependency management)
 ```bash
-curl -sSL https://install.python-poetry.org | python3 -
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ✅ **Git**
@@ -622,6 +634,11 @@ cp .env.example .env
 
 **IDE/Editor**: VS Code recommended
 - Extensions: Python, Pylance, Ruff, GitLens
+
+**Package Manager**: uv
+- Installation: `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- Commands: `uv sync`, `uv run`, `uv add`, `uv remove`
+- Lock file: `uv.lock` (committed to repository)
 
 **Code Quality**:
 - `black` - auto-formatting
@@ -674,7 +691,7 @@ cp .env.example .env
   - PostgreSQL service ready (commented out)
 
 - **Makefile**: Workflow automation
-  - `make deps` - Export Poetry dependencies
+  - `make deps` - Export uv dependencies to requirements.txt
   - `make build` - Build Docker image
   - `make up` - Start container
   - `make down` - Stop container
@@ -809,13 +826,13 @@ tests/
      - mypy type checking (strict mode)
      - ruff linting
      - black formatting verification
-   - **Caching**: Poetry dependencies cached by poetry.lock hash
+   - **Caching**: uv dependencies cached by uv.lock hash
    - **Coverage**: Reports uploaded to Codecov
 
 2. **Build & Deploy Workflow** (`.github/workflows/build-and-deploy.yml`) ✅
    - **Trigger**: Push to main branch (after PR merge)
    - **Build Stage**:
-     - Export Poetry dependencies
+     - Export uv dependencies to requirements.txt
      - Build Docker image with Docker Buildx
      - Push to Docker Hub with dual tags (latest + SHA)
      - GitHub Actions cache for Docker layers
@@ -858,10 +875,11 @@ Key APIs to use:
 
 ## Technical Decisions Log
 
-**Recent Updates (2025-01-09): API-First Architecture**
+**Recent Updates (2026-01-27): Package Manager Migration**
 
 | Date | Area | Decision | Status | Rationale |
 |------|------|----------|--------|-----------|
+| 2026-01-27 | Package Manager | **uv (from Poetry)** | ✅ Active | Faster builds, PEP 621 standard, Rust-based |
 | 2025-12-25 | Transcription | **OpenAI API primary** | ✅ Active | 4-7x faster, better quality |
 | 2025-12-25 | Text Processing | **DeepSeek V3** | ✅ Active | Cost-effective LLM |
 | 2025-12-25 | Fallback | **Local model** | ✅ Active | Reliability |

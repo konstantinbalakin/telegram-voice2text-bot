@@ -1,57 +1,57 @@
-[tool.poetry]
+[project]
 name = "telegram-voice2text-bot"
 version = "0.1.0"
 description = "Telegram bot for voice message transcription using local Whisper"
-authors = ["Your Name <[email protected]>"]
 readme = "README.md"
-packages = [{include = "src"}]
+requires-python = ">=3.11,<4.0"
+authors = [
+    {name = "Konstantin Balakin"},
+]
+dependencies = [
+    "python-telegram-bot>=22.5,<23.0",
+    "sqlalchemy[asyncio]>=2.0.44,<3.0.0",
+    "aiosqlite>=0.20.0,<0.21.0",
+    "alembic>=1.13,<2.0",
+    "python-dotenv>=1.0.0,<2.0.0",
+    "pydantic>=2.10,<3.0",
+    "pydantic-settings>=2.6,<3.0",
+    "httpx>=0.28,<0.29",
+    "psutil>=6.1,<7.0",
+    "python-json-logger>=4.0.0,<5.0.0",
+    "tenacity>=9.0.0,<10.0.0",
+    "weasyprint>=62.3,<63.0",
+    "pydyf>=0.11.0,<0.12.0",
+    "pydub>=0.25.1,<0.26.0",
+    "telethon>=1.42.0,<2.0.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-python-telegram-bot = "^22.5"
-sqlalchemy = {extras = ["asyncio"], version = "^2.0.44"}
-aiosqlite = "^0.20.0"
-alembic = "^1.13"
-python-dotenv = "^1.0.0"
-pydantic = "^2.10"
-pydantic-settings = "^2.6"
-httpx = "^0.28"
-psutil = "^6.1"
-python-json-logger = "^4.0.0"
-tenacity = "^9.0.0"
-weasyprint = "^62.3"
-pydyf = "^0.11.0"
-pydub = "^0.25.1"
+[project.optional-dependencies]
+faster-whisper = ["faster-whisper>=1.2.1,<2.0.0"]
+openai-api = ["openai>=1.50.0,<2.0.0"]
+telethon-speedup = ["cryptg>=0.4.0,<0.5.0"]
 
-# Telegram Client API for large files (>20 MB)
-telethon = "^1.42.0"
-
-# Optional transcription providers
-faster-whisper = {version = "^1.2.1", optional = true}
-openai = {version = "^1.50.0", optional = true}
-
-# Optional performance boost for Telethon
-cryptg = {version = "^0.4.0", optional = true}
-
-[tool.poetry.extras]
-faster-whisper = ["faster-whisper"]
-openai-api = ["openai"]
-telethon-speedup = ["cryptg"]
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.3"
-pytest-asyncio = "^0.24"
-pytest-cov = "^6.0"
-black = "^24.10"
-ruff = "^0.8"
-mypy = "^1.13"
-alembic = "^1.17.0"
-types-psutil = "^6.1"
-bandit = "^1.9.2"
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.24,<0.25",
+    "pytest-cov>=6.0,<7.0",
+    "black>=24.10,<25.0",
+    "ruff>=0.8,<0.9",
+    "mypy>=1.13,<2.0",
+    "alembic>=1.17.0,<2.0.0",
+    "types-psutil>=6.1,<7.0",
+    "bandit>=1.9.2,<2.0.0",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.black]
 line-length = 100

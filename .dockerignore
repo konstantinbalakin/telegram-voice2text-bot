@@ -27,8 +27,8 @@ ENV/
 env/
 .venv
 
-# Poetry
-poetry.lock
+# UV (uv.lock is needed for reproducible builds, but not copied to container)
+uv.lock
 
 # Testing
 .pytest_cache/

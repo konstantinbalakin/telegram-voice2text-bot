@@ -17,19 +17,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: '3.11'
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
-      - name: Install Poetry
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+      - name: Set up Python
+        run: uv python install 3.11
 
       - name: Install dependencies
-        run: |
-          poetry install --with dev --extras "faster-whisper"
+        run: uv sync --all-extras --all-groups
 
       - name: Test migrations on fresh database
         env:
@@ -40,10 +38,10 @@ jobs:
           export DATABASE_URL="sqlite+aiosqlite:///./data/test_fresh.db"
 
           # Apply all migrations from scratch
-          poetry run alembic upgrade head
+          uv run alembic upgrade head
 
           # Verify we're at HEAD
-          CURRENT=$(poetry run alembic current)
+          CURRENT=$(uv run alembic current)
           echo "Current revision: $CURRENT"
 
           # Check that migration succeeded
@@ -62,18 +60,18 @@ jobs:
           export DATABASE_URL="sqlite+aiosqlite:///./data/test_cycle.db"
 
           # Apply all migrations
-          poetry run alembic upgrade head
-          HEAD_REV=$(poetry run alembic current | awk '{print $1}')
+          uv run alembic upgrade head
+          HEAD_REV=$(uv run alembic current | awk '{print $1}')
           echo "HEAD revision: $HEAD_REV"
 
           # Downgrade one step
-          poetry run alembic downgrade -1
-          PREV_REV=$(poetry run alembic current | awk '{print $1}')
+          uv run alembic downgrade -1
+          PREV_REV=$(uv run alembic current | awk '{print $1}')
           echo "After downgrade: $PREV_REV"
 
           # Upgrade back to head
-          poetry run alembic upgrade head
-          FINAL_REV=$(poetry run alembic current | awk '{print $1}')
+          uv run alembic upgrade head
+          FINAL_REV=$(uv run alembic current | awk '{print $1}')
           echo "After upgrade: $FINAL_REV"
 
           # Verify we're back at HEAD
@@ -91,7 +89,7 @@ jobs:
           export TELEGRAM_BOT_TOKEN="test:token"
 
           # Try to import main module (this will init db)
-          poetry run python -c "
+          uv run python -c "
           import asyncio
           from src.storage.database import get_engine
           from sqlalchemy import text
@@ -155,27 +153,17 @@ jobs:
           echo "New version: $NEW_VERSION"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Set up Python
+      - name: Install uv
         if: steps.changed-files.outputs.any_changed == 'true'
-        uses: actions/setup-python@v5
+        uses: astral-sh/setup-uv@v4
         with:
-          python-version: '3.11'
-
-      - name: Install Poetry
-        if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          curl -sSL https://install.python-poetry.org | python3 -
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-
-      - name: Install Poetry Export Plugin
-        if: steps.changed-files.outputs.any_changed == 'true'
-        run: |
-          poetry self add poetry-plugin-export
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Export requirements.txt
         if: steps.changed-files.outputs.any_changed == 'true'
         run: |
-          poetry export --without dev -f requirements.txt -o requirements.txt --extras "faster-whisper"
+          uv export --no-dev --extra faster-whisper --extra openai-api -o requirements.txt
 
       - name: Set up Docker Buildx
         if: steps.changed-files.outputs.any_changed == 'true'

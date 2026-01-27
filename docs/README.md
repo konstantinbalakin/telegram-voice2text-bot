@@ -60,7 +60,7 @@ Performance and benchmarking:
 
 **Want to contribute or modify?**
 
-1. [Install locally](getting-started/installation.md#method-1-local-development-poetry)
+1. [Install locally](getting-started/installation.md#method-1-local-development-uv)
 2. Read [Architecture](development/architecture.md) - Understand the system
 3. Follow [Git Workflow](development/git-workflow.md) - Make changes
 4. Run [Tests](development/testing.md) - Validate your changes
@@ -132,7 +132,7 @@ docs/
 
 ### Run bot locally
 ```bash
-poetry run python -m src.main
+uv run python -m src.main
 ```
 See: [Quick Start](getting-started/quick-start.md)
 
@@ -150,7 +150,7 @@ See: [Docker Guide](deployment/docker.md)
 
 ### Add a dependency
 ```bash
-poetry add <package>
+uv add <package>
 ./scripts/update-requirements.sh
 ```
 See: [Dependencies](development/dependencies.md)

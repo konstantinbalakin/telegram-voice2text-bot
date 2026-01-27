@@ -6,15 +6,15 @@
 SERVICE_NAME := bot
 IMAGE_NAME := telegram-voice2text-bot
 
-# Путь к Python env (если нужно Poetry)
-POETRY := poetry
+# Путь к менеджеру зависимостей
+UV := uv
 
 # ===== Commands =====
 
-# 🧩 1. Обновить requirements.txt из Poetry
+# 🧩 1. Обновить requirements.txt из uv.lock
 deps:
-	@echo "📦 Экспорт зависимостей из Poetry..."
-	$(POETRY) export --without dev -f requirements.txt -o requirements.txt
+	@echo "📦 Экспорт зависимостей через uv..."
+	$(UV) export --no-dev --extra faster-whisper --extra openai-api --locked -o requirements.txt
 	@echo "✅ requirements.txt обновлён."
 
 # ⚙️ 2. Собрать Docker-образ
