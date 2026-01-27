@@ -8,6 +8,8 @@ Think deeply about implementation strategy and develop comprehensive options.
 
 $ARGUMENTS
 
+Answer in Russian.
+
 ## Process
 
 ### 1. Technical Deep Dive
