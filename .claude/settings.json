@@ -1,24 +1,30 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git:*)",
-      "Bash(gh:*)",
-      "Bash(ssh:*)",
-      "Bash(uv:*)",
-      "Bash(python:*)",
-      "Bash(python3:*)",
-      "Bash(pip:*)",
-      "Bash(alembic:*)",
-      "Bash(black:*)",
-      "Bash(brew:*)",
-      "Bash(tree:*)",
-      "Bash(cat:*)",
-      "Bash(awk:*)",
-      "Bash(sqlite3:*)",
-      "Read(//Users/computer/.cache/uv/**)",
-      "WebFetch(domain:pypi.org)",
-      "SlashCommand(/workflow:*)"
-    ],
+    "Bash(git:*)",
+    "Bash(gh:*)",
+
+    "Bash(ssh:*)",
+
+    "Bash(uv:*)",
+    "Bash(python:*)",
+    "Bash(python3:*)",
+    "Bash(pip:*)",
+    "Bash(alembic:*)",
+    "Bash(black:*)",
+
+    "Bash(brew:*)",
+    "Bash(tree:*)",
+    "Bash(cat:*)",
+    "Bash(awk:*)",
+    "Bash(sqlite3:*)",
+
+    "Read(//Users/computer/.cache/uv/**)",
+
+    "WebFetch(domain:pypi.org)",
+
+    "SlashCommand(/workflow:*)"
+],
     "deny": [],
     "ask": []
   },
@@ -64,10 +70,5 @@
         ]
       }
     ]
-  },
-  "enabledPlugins": {
-    "pyright-lsp@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": true
   }
 }

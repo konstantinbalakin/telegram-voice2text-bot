@@ -10,21 +10,6 @@ Telegram Voice2Text Bot - Production-ready Telegram bot for voice transcription 
 
 **GitHub Repository**: `konstantinbalakin/telegram-voice2text-bot`
 
-## Project Structure
-
-```
-src/
-├── bot/              # Telegram bot handlers and middleware
-├── services/         # Business logic (queue, file download, etc.)
-├── transcription/    # Transcription engines (Whisper, OpenAI)
-├── storage/          # Database models and repositories (SQLAlchemy)
-├── processing/       # Text processing with AI (DeepSeek)
-├── utils/            # Utilities (logging, metrics, file ops)
-├── quota/            # Usage tracking and limits
-├── config.py         # Configuration (Pydantic Settings)
-└── main.py           # Application entry point
-```
-
 ## Memory Bank System
 
 This project uses the Claude Code Memory Bank system located in `/memory-bank/`. The Memory Bank maintains project context across sessions through structured documentation files.
@@ -130,34 +115,6 @@ uv run alembic upgrade head
 make deps
 ```
 
-**Makefile shortcuts** for Docker operations:
-```bash
-make deps     # Export requirements.txt from uv.lock
-make build    # Build Docker image (runs deps first)
-make up/down  # Start/stop containers
-make logs     # View container logs
-make clean    # Clean Docker cache
-```
-
-## Automated Code Quality
-
-**PostToolUse hooks** automatically run on every file edit:
-- `black` - Code formatting (line-length: 100)
-- `mypy` - Type checking (strict mode, disallow-untyped-defs)
-- `ruff` - Linting with auto-fix
-- Security: `bandit` (Python), `semgrep`, `gitleaks` (secrets)
-- `uv sync` - Auto-sync when pyproject.toml/uv.lock changes
-
-**No need to run these tools manually** - they execute automatically after edits.
-
-## Code Style
-
-- **Line length**: 100 characters (black, ruff)
-- **Python version**: 3.11+
-- **Type hints**: Required for all functions (`mypy --disallow-untyped-defs`)
-- **Async/await**: Use for I/O operations (Telegram API, DB, file ops)
-- **Testing**: `pytest` with `pytest-asyncio` for async tests
-
 ## Development Status
 
 ✅ **Current Status**: Production-ready, Phase 10.14 complete
@@ -181,7 +138,3 @@ make clean    # Clean Docker cache
 
 ## Additional Instructions
 - @memory-bank/!memory-bank.md
-
-## Claude Code Configuration
-
-Always use Context7 MCP when I need library/API documentation, code generation, setup or configuration steps without me having to explicitly ask.
