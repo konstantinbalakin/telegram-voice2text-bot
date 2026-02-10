@@ -15,6 +15,10 @@ from src.transcription.providers.base import TranscriptionProvider
 
 logger = logging.getLogger(__name__)
 
+# OpenAI API limits
+OPENAI_MAX_FILE_SIZE_MB = 25
+OPENAI_CONTEXT_WINDOW_CHARS = 224
+
 
 class OpenAIProvider(TranscriptionProvider):
     """Transcription provider using OpenAI Whisper API."""
@@ -122,8 +126,10 @@ class OpenAIProvider(TranscriptionProvider):
 
         # Check file size (OpenAI limit is 25 MB)
         file_size_mb = audio_path.stat().st_size / 1024 / 1024
-        if file_size_mb > 25:
-            raise ValueError(f"Audio file too large: {file_size_mb:.1f}MB (max 25MB)")
+        if file_size_mb > OPENAI_MAX_FILE_SIZE_MB:
+            raise ValueError(
+                f"Audio file too large: {file_size_mb:.1f}MB (max {OPENAI_MAX_FILE_SIZE_MB}MB)"
+            )
 
         # Check duration limit for gpt-4o models
         if context.duration_seconds > settings.openai_gpt4o_max_duration:
@@ -508,8 +514,8 @@ class OpenAIProvider(TranscriptionProvider):
                     priority=context.priority,
                 )
 
-                # Transcribe with context (last 224 tokens)
-                prompt = previous_text[-224:] if previous_text else None
+                # Transcribe with context (last OPENAI_CONTEXT_WINDOW_CHARS tokens)
+                prompt = previous_text[-OPENAI_CONTEXT_WINDOW_CHARS:] if previous_text else None
 
                 result = await self._transcribe_single_file(
                     chunk_path, chunk_context, model, prompt=prompt

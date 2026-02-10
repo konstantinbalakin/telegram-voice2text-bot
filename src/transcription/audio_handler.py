@@ -31,6 +31,8 @@ class AudioHandler:
         self.temp_dir = temp_dir or Path(tempfile.gettempdir()) / "telegram_voice2text"
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
+        self._http_client = httpx.AsyncClient(timeout=30.0)
+
         # Supported audio formats
         self.supported_formats = {
             # Standard audio formats
@@ -145,11 +147,10 @@ class AudioHandler:
         logger.info(f"Downloading from URL: {url}")
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(url)
-                response.raise_for_status()
+            response = await self._http_client.get(url)
+            response.raise_for_status()
 
-                audio_file.write_bytes(response.content)
+            audio_file.write_bytes(response.content)
 
             logger.info(f"Download complete: {audio_file}")
             return audio_file
@@ -173,6 +174,10 @@ class AudioHandler:
                 logger.debug(f"Cleaned up audio file: {audio_file}")
         except Exception as e:
             logger.warning(f"Failed to cleanup audio file {audio_file}: {e}")
+
+    async def cleanup_http(self) -> None:
+        """Close the shared HTTP client."""
+        await self._http_client.aclose()
 
     def cleanup_old_files(self, max_age_hours: int = 24) -> int:
         """
@@ -273,6 +278,7 @@ class AudioHandler:
             check=True,
             capture_output=True,
             text=True,
+            timeout=300,
         )
         return result.stdout.strip()
 
@@ -305,6 +311,7 @@ class AudioHandler:
             check=True,
             capture_output=True,
             text=True,
+            timeout=300,
         )
         return int(result.stdout.strip())
 
@@ -337,6 +344,7 @@ class AudioHandler:
             check=True,
             capture_output=True,
             text=True,
+            timeout=300,
         )
         return int(result.stdout.strip())
 
@@ -478,6 +486,7 @@ class AudioHandler:
             check=True,
             capture_output=True,
             text=True,
+            timeout=300,
         )
 
         # Get converted file size
@@ -535,6 +544,7 @@ class AudioHandler:
             check=True,
             capture_output=True,
             text=True,
+            timeout=300,
         )
 
         return output_path
@@ -640,6 +650,7 @@ class AudioHandler:
             check=True,
             capture_output=True,
             text=True,
+            timeout=300,
         )
 
         converted_size = output_path.stat().st_size
@@ -712,6 +723,7 @@ class AudioHandler:
             check=True,
             capture_output=True,
             text=True,
+            timeout=300,
         )
 
         converted_size = output_path.stat().st_size
@@ -750,9 +762,10 @@ class AudioHandler:
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=300,
             )
             return "audio" in result.stdout
-        except subprocess.CalledProcessError:
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return False
 
     def get_audio_duration_ffprobe(self, file_path: Path) -> Optional[float]:
@@ -780,9 +793,10 @@ class AudioHandler:
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=300,
             )
             return float(result.stdout.strip())
-        except (subprocess.CalledProcessError, ValueError):
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
             return None
 
     def _convert_to_wav(self, input_path: Path) -> Path:
@@ -821,6 +835,7 @@ class AudioHandler:
             check=True,
             capture_output=True,
             text=True,
+            timeout=300,
         )
 
         converted_size_mb = output_path.stat().st_size / (1024 * 1024)

@@ -70,6 +70,7 @@ class DeepSeekProvider(LLMProvider):
         model: str = "deepseek-chat",
         base_url: str = "https://api.deepseek.com",
         timeout: int = 30,
+        max_tokens: int = 4000,
     ):
         """
         Initialize DeepSeek provider.
@@ -79,11 +80,13 @@ class DeepSeekProvider(LLMProvider):
             model: Model name (e.g., deepseek-chat)
             base_url: API base URL
             timeout: Request timeout in seconds
+            max_tokens: Maximum tokens for response
         """
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.max_tokens = max_tokens
 
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
@@ -119,7 +122,7 @@ class DeepSeekProvider(LLMProvider):
             logger.debug("refine_text: empty text, returning as-is")
             return text
 
-        api_key_masked = self.api_key[:8] + "..." if self.api_key else "None"
+        api_key_masked = self.api_key[:4] + "..." if self.api_key else "None"
         logger.debug(
             f"refine_text: model={self.model}, text_length={len(text)}, "
             f"prompt_length={len(prompt)}, api_key={api_key_masked}"
@@ -136,7 +139,7 @@ class DeepSeekProvider(LLMProvider):
                         {"role": "user", "content": text},
                     ],
                     "temperature": 0.3,  # Low temperature for corrections
-                    "max_tokens": 4000,
+                    "max_tokens": self.max_tokens,
                 },
             )
 
@@ -213,6 +216,7 @@ class LLMFactory:
                 model=settings.llm_model,
                 base_url=settings.llm_base_url,
                 timeout=settings.llm_timeout,
+                max_tokens=settings.llm_max_tokens,
             )
 
         # Future providers: openai, gigachat

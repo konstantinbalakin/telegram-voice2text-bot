@@ -179,6 +179,7 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="deepseek-chat", description="LLM model name")
     llm_base_url: str = Field(default="https://api.deepseek.com", description="LLM API base URL")
     llm_timeout: int = Field(default=30, description="LLM request timeout in seconds")
+    llm_max_tokens: int = Field(default=4000, description="LLM max tokens for response")
     llm_debug_mode: bool = Field(
         default=False,
         description="Send draft and refined text comparison in separate message for debugging",

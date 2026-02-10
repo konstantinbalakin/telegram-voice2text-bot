@@ -72,11 +72,7 @@ class TestFormatWithTimestamps:
 
         result = processor.format_with_timestamps(segments, "base_text", mode="original")
 
-        expected = (
-            "[00:00] Первый сегмент.\n"
-            "[00:05] Второй сегмент.\n"
-            "[00:10] Третий сегмент."
-        )
+        expected = "[00:00] Первый сегмент.\n" "[00:05] Второй сегмент.\n" "[00:10] Третий сегмент."
         assert result == expected
 
     def test_format_structured_mode(self):
@@ -163,7 +159,6 @@ class TestFormatTimestampsSummary:
         result = processor._format_timestamps_summary(segments, summary)
 
         expected = (
-            "[00:10] О чем текст: краткое описание\n\n"
-            "Ключевые моменты:\n• Пункт 1\n• Пункт 2"
+            "[00:10] О чем текст: краткое описание\n\n" "Ключевые моменты:\n• Пункт 1\n• Пункт 2"
         )
         assert result == expected

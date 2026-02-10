@@ -2,6 +2,7 @@
 Database connection and session management
 """
 
+import asyncio
 from typing import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -137,15 +138,17 @@ async def init_db() -> None:
         head_revision = script.get_current_head()
 
         # Get current database revision (using sync engine for alembic)
-        db_url_sync = db_url.replace("+aiosqlite", "")
-        engine = create_engine(db_url_sync)
+        def _check_migration_sync():
+            db_url_sync = db_url.replace("+aiosqlite", "")
+            engine = create_engine(db_url_sync)
+            try:
+                with engine.connect() as conn:
+                    context = MigrationContext.configure(conn)
+                    return context.get_current_revision()
+            finally:
+                engine.dispose()
 
-        try:
-            with engine.connect() as conn:
-                context = MigrationContext.configure(conn)
-                current_revision = context.get_current_revision()
-        finally:
-            engine.dispose()
+        current_revision = await asyncio.to_thread(_check_migration_sync)
 
         # Log migration status
         if current_revision is None:

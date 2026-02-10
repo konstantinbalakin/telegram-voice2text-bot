@@ -9,6 +9,7 @@ import asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from src.storage.models import Base
+from src.transcription.audio_handler import AudioHandler
 
 
 @pytest.fixture(scope="session")
@@ -65,3 +66,9 @@ async def async_session(async_engine):
     async with session_factory() as session:
         yield session
         await session.rollback()
+
+
+@pytest.fixture
+def audio_handler(tmp_path):
+    """Create AudioHandler instance with temp directory."""
+    return AudioHandler(temp_dir=tmp_path)

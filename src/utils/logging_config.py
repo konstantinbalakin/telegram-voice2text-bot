@@ -14,7 +14,7 @@ import logging.handlers
 import socket
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pythonjsonlogger import jsonlogger
 
@@ -22,7 +22,7 @@ from pythonjsonlogger import jsonlogger
 class VersionEnrichmentFilter(logging.Filter):
     """Add version and container info to all log records."""
 
-    def __init__(self, version: str, container_id: Optional[str] = None):
+    def __init__(self, version: str, container_id: str | None = None):
         super().__init__()
         self.version = version
         self.version_short = version[:7] if version else "unknown"
@@ -39,9 +39,9 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
 
     def add_fields(
         self,
-        log_record: Dict[str, Any],
+        log_record: dict[str, Any],
         record: logging.LogRecord,
-        message_dict: Dict[str, Any],
+        message_dict: dict[str, Any],
     ) -> None:
         super().add_fields(log_record, record, message_dict)
 
@@ -71,7 +71,7 @@ def setup_logging(
     version: str = "unknown",
     log_level: str = "INFO",
     enable_syslog: bool = False,
-    syslog_host: Optional[str] = None,
+    syslog_host: str | None = None,
     syslog_port: int = 514,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,  # Keep 5 backup files
@@ -182,7 +182,7 @@ def log_deployment_event(
     log_dir: Path,
     event: str,
     version: str,
-    config: Optional[Dict[str, Any]] = None,
+    config: dict[str, Any] | None = None,
     **extra_fields: Any,
 ) -> None:
     """
@@ -217,7 +217,7 @@ def log_deployment_event(
         logging.error(f"Failed to write deployment event: {e}")
 
 
-def get_config_summary() -> Dict[str, Any]:
+def get_config_summary() -> dict[str, Any]:
     """
     Get a summary of current configuration for deployment logging.
 

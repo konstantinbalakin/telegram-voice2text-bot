@@ -1,7 +1,9 @@
 """PDF generation service using WeasyPrint."""
 
+import io
 import logging
 import re
+from typing import Optional
 
 from weasyprint import HTML  # type: ignore[import-untyped]
 from weasyprint.text.fonts import FontConfiguration  # type: ignore[import-untyped]
@@ -220,3 +222,31 @@ class PDFGenerator:
         except Exception as e:
             logger.error(f"Failed to generate PDF from text: {e}", exc_info=True)
             raise
+
+
+def create_file_object(
+    text: str,
+    filename_prefix: str,
+    pdf_generator: Optional[PDFGenerator] = None,
+) -> tuple[io.BytesIO, str]:
+    """Create a file object (PDF with TXT fallback) for sending via Telegram.
+
+    Args:
+        text: Text content for the file
+        filename_prefix: Prefix for the filename (e.g. "1_original")
+        pdf_generator: Optional PDFGenerator instance (created if not provided)
+
+    Returns:
+        Tuple of (file BytesIO object with .name set, file extension string "PDF" or "TXT")
+    """
+    try:
+        gen = pdf_generator or PDFGenerator()
+        pdf_bytes = gen.generate_pdf(text)
+        file_obj = io.BytesIO(pdf_bytes)
+        file_obj.name = f"{filename_prefix}.pdf"
+        return file_obj, "PDF"
+    except Exception as e:
+        logger.warning(f"PDF generation failed, falling back to TXT: {e}")
+        file_obj = io.BytesIO(text.encode("utf-8"))
+        file_obj.name = f"{filename_prefix}.txt"
+        return file_obj, "TXT"

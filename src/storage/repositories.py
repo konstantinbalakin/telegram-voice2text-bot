@@ -6,7 +6,7 @@ import logging
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import select, and_, delete
+from sqlalchemy import select, and_, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import CursorResult
 
@@ -228,9 +228,10 @@ class UsageRepository:
 
     async def get_user_total_duration(self, user_id: int) -> int:
         """Get total duration of all usage for a user (only completed records)."""
-        result = await self.session.execute(select(Usage).where(Usage.user_id == user_id))
-        usages = result.scalars().all()
-        return sum(u.voice_duration_seconds or 0 for u in usages)
+        result = await self.session.execute(
+            select(func.sum(Usage.voice_duration_seconds)).where(Usage.user_id == user_id)
+        )
+        return result.scalar() or 0
 
     async def count_by_user_id(self, user_id: int) -> int:
         """Count total number of transcriptions for a user.
@@ -243,8 +244,6 @@ class UsageRepository:
         Returns:
             Total count of usage records for this user
         """
-        from sqlalchemy import func
-
         result = await self.session.execute(
             select(func.count(Usage.id)).where(Usage.user_id == user_id)
         )
@@ -490,11 +489,6 @@ class TranscriptionVariantRepository:
         )
         variant = result.scalar_one_or_none()
 
-        # Update last_accessed_at if found
-        if variant:
-            variant.last_accessed_at = datetime.utcnow()
-            await self.session.flush()
-
         return variant
 
     async def get_by_usage_id(self, usage_id: int) -> list[TranscriptionVariant]:
@@ -516,15 +510,14 @@ class TranscriptionVariantRepository:
             Number of variants deleted
         """
         logger.debug(f"Deleting all variants for usage_id={usage_id}")
-        variants = await self.get_by_usage_id(usage_id)
-        count = len(variants)
 
-        for variant in variants:
-            await self.session.delete(variant)
+        result: CursorResult = await self.session.execute(  # type: ignore[assignment]
+            delete(TranscriptionVariant).where(TranscriptionVariant.usage_id == usage_id)
+        )
 
-        await self.session.flush()
-        logger.info(f"Deleted {count} variants for usage_id={usage_id}")
-        return count
+        deleted_count = result.rowcount or 0
+        logger.info(f"Deleted {deleted_count} variants for usage_id={usage_id}")
+        return deleted_count
 
 
 class TranscriptionSegmentRepository:

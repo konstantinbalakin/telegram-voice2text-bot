@@ -2,12 +2,11 @@
 
 import logging
 from pathlib import Path
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 
 # Cache for loaded prompts
-_prompt_cache: Dict[str, str] = {}
+_prompt_cache: dict[str, str] = {}
 
 
 def load_prompt(prompt_name: str, project_root: Path | None = None) -> str:

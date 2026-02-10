@@ -7,12 +7,6 @@ from src.transcription.audio_handler import AudioHandler
 
 
 @pytest.fixture
-def audio_handler(tmp_path):
-    """Create AudioHandler with temporary directory."""
-    return AudioHandler(temp_dir=tmp_path)
-
-
-@pytest.fixture
 def mock_telegram_file():
     """Create mock Telegram File object."""
     mock_file = Mock()
@@ -141,21 +135,17 @@ class TestAudioHandlerDownloadFromURL:
         file_id = "url_file_123"
         audio_data = b"audio data from url"
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_response = Mock()
-            mock_response.content = audio_data
-            mock_response.raise_for_status = Mock()
-            mock_client.get.return_value = mock_response
-            mock_client.__aenter__.return_value = mock_client
-            mock_client.__aexit__.return_value = None
-            mock_client_class.return_value = mock_client
+        mock_response = Mock()
+        mock_response.content = audio_data
+        mock_response.raise_for_status = Mock()
+        audio_handler._http_client = AsyncMock()
+        audio_handler._http_client.get.return_value = mock_response
 
-            audio_path = await audio_handler.download_from_url(url, file_id, ".mp3")
+        audio_path = await audio_handler.download_from_url(url, file_id, ".mp3")
 
-            assert audio_path.exists()
-            assert audio_path.suffix == ".mp3"
-            assert audio_path.read_bytes() == audio_data
+        assert audio_path.exists()
+        assert audio_path.suffix == ".mp3"
+        assert audio_path.read_bytes() == audio_data
 
     @pytest.mark.asyncio
     async def test_download_from_url_failure(self, audio_handler):
@@ -163,15 +153,11 @@ class TestAudioHandlerDownloadFromURL:
         url = "https://example.com/audio.mp3"
         file_id = "url_file_456"
 
-        with patch("httpx.AsyncClient") as mock_client_class:
-            mock_client = AsyncMock()
-            mock_client.get.side_effect = RuntimeError("Network error")
-            mock_client.__aenter__.return_value = mock_client
-            mock_client.__aexit__.return_value = None
-            mock_client_class.return_value = mock_client
+        audio_handler._http_client = AsyncMock()
+        audio_handler._http_client.get.side_effect = RuntimeError("Network error")
 
-            with pytest.raises(RuntimeError, match="Download failed"):
-                await audio_handler.download_from_url(url, file_id)
+        with pytest.raises(RuntimeError, match="Download failed"):
+            await audio_handler.download_from_url(url, file_id)
 
 
 class TestAudioHandlerCleanup:

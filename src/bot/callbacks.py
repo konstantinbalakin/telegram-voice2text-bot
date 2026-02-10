@@ -1,12 +1,11 @@
 """Callback query handlers for interactive transcription."""
 
-import io
 import logging
 import time
 from typing import Optional, cast, TYPE_CHECKING
 from telegram import Update, Message, InlineKeyboardMarkup, CallbackQuery
 from telegram.ext import ContextTypes
-from src.services.pdf_generator import PDFGenerator
+from src.services.pdf_generator import create_file_object
 
 from src.bot.keyboards import decode_callback_data, create_transcription_keyboard
 from src.storage.models import TranscriptionState
@@ -131,17 +130,9 @@ class CallbackHandlers:
                     logger.warning(f"Could not delete old file: {e}")
 
             # Send new file (PDF if possible, fallback to TXT)
-            try:
-                pdf_generator = PDFGenerator()
-                pdf_bytes = pdf_generator.generate_pdf(new_text)
-                file_obj = io.BytesIO(pdf_bytes)
-                file_obj.name = f"{file_number}_{state.active_mode}.pdf"
-                file_extension = "PDF"
-            except Exception as e:
-                logger.warning(f"PDF generation failed, falling back to TXT: {e}")
-                file_obj = io.BytesIO(new_text.encode("utf-8"))
-                file_obj.name = f"{file_number}_{state.active_mode}.txt"
-                file_extension = "TXT"
+            file_obj, file_extension = create_file_object(
+                new_text, f"{file_number}_{state.active_mode}"
+            )
 
             new_file_msg = await context.bot.send_document(
                 chat_id=chat_id,
@@ -181,17 +172,9 @@ class CallbackHandlers:
             )
 
             # Send file (PDF if possible, fallback to TXT)
-            try:
-                pdf_generator = PDFGenerator()
-                pdf_bytes = pdf_generator.generate_pdf(new_text)
-                file_obj = io.BytesIO(pdf_bytes)
-                file_obj.name = f"{file_number}_{state.active_mode}.pdf"
-                file_extension = "PDF"
-            except Exception as e:
-                logger.warning(f"PDF generation failed, falling back to TXT: {e}")
-                file_obj = io.BytesIO(new_text.encode("utf-8"))
-                file_obj.name = f"{file_number}_{state.active_mode}.txt"
-                file_extension = "TXT"
+            file_obj, file_extension = create_file_object(
+                new_text, f"{file_number}_{state.active_mode}"
+            )
 
             file_msg = await context.bot.send_document(
                 chat_id=chat_id,

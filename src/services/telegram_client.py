@@ -1,6 +1,7 @@
 """Telegram Client API service for downloading large files."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -50,6 +51,12 @@ class TelegramClientService:
         if not self._started:
             await self.client.start(bot_token=settings.telegram_bot_token)
             self._started = True
+
+            # Restrict session file permissions
+            session_file = f"{settings.telethon_session_name}.session"
+            if os.path.exists(session_file):
+                os.chmod(session_file, 0o600)
+
             logger.info("Telethon client started successfully")
 
     async def stop(self) -> None:
