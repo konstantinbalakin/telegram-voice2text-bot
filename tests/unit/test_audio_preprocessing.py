@@ -4,14 +4,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 import subprocess
 
-from src.transcription.audio_handler import AudioHandler
-
-
-@pytest.fixture
-def audio_handler(tmp_path):
-    """Create AudioHandler instance with temp directory."""
-    return AudioHandler(temp_dir=tmp_path)
-
 
 @pytest.fixture
 def sample_audio_file(tmp_path):
@@ -168,7 +160,9 @@ class TestConvertToMono:
                 with patch.object(audio_handler, "_get_audio_codec", return_value="mp3"):
                     with patch("subprocess.run") as mock_run:
                         # Create the output file so stat() works
-                        output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.ogg"
+                        output_path = (
+                            sample_audio_file.parent / f"{sample_audio_file.stem}_mono.ogg"
+                        )
                         output_path.write_bytes(b"fake audio data")
 
                         result = audio_handler._convert_to_mono(sample_audio_file)
@@ -206,7 +200,9 @@ class TestConvertToMono:
                 with patch.object(audio_handler, "_get_audio_codec", return_value="pcm_s16le"):
                     with patch("subprocess.run") as mock_run:
                         # Create the output file so stat() works
-                        output_path = sample_audio_file.parent / f"{sample_audio_file.stem}_mono.ogg"
+                        output_path = (
+                            sample_audio_file.parent / f"{sample_audio_file.stem}_mono.ogg"
+                        )
                         output_path.write_bytes(b"fake audio data")
 
                         result = audio_handler._convert_to_mono(sample_audio_file)

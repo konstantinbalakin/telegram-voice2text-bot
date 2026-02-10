@@ -1,7 +1,6 @@
 """Telegram bot handlers for voice message processing."""
 
 import asyncio
-import io
 import logging
 import shutil
 import time
@@ -28,7 +27,7 @@ from src.transcription.audio_handler import AudioHandler
 from src.transcription.models import TranscriptionContext, TranscriptionResult
 from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.progress_tracker import ProgressTracker
-from src.services.pdf_generator import PDFGenerator
+from src.services.pdf_generator import create_file_object
 from src.services.llm_service import LLMService
 from src.services.telegram_client import TelegramClientService
 from src.services.text_processor import TextProcessor
@@ -38,6 +37,12 @@ logger = logging.getLogger(__name__)
 
 # Telegram message length limit
 TELEGRAM_MAX_MESSAGE_LENGTH = 4096
+
+# Telegram Client API file size limit (2 GB)
+TELEGRAM_CLIENT_API_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
+
+# Debug text preview truncation length
+DEBUG_TEXT_PREVIEW_LENGTH = 1500
 
 
 def split_text(
@@ -107,6 +112,17 @@ def split_text(
     return chunks
 
 
+def format_wait_time(seconds: float) -> str:
+    """Format wait time for user display."""
+    if seconds < 60:
+        return f"~{int(seconds)}с"
+    minutes = int(seconds) // 60
+    secs = int(seconds) % 60
+    if secs > 0:
+        return f"~{minutes}м {secs}с"
+    return f"~{minutes}м"
+
+
 def save_audio_file_for_retranscription(
     temp_file_path: Path, usage_id: int, file_identifier: str
 ) -> Optional[Path]:
@@ -131,7 +147,7 @@ def save_audio_file_for_retranscription(
 
         # Create unique filename
         file_extension = temp_file_path.suffix or ".ogg"  # Default to .ogg for preprocessed
-        permanent_path = persistent_dir / f"{usage_id}_{file_identifier}{file_extension}"
+        permanent_path = persistent_dir / f"{uuid.uuid4().hex}{file_extension}"
 
         # Copy file to permanent storage
         shutil.copy2(temp_file_path, permanent_path)
@@ -149,7 +165,7 @@ class BotHandlers:
 
     def __init__(
         self,
-        whisper_service: TranscriptionRouter,
+        transcription_router: TranscriptionRouter,
         audio_handler: AudioHandler,
         queue_manager: QueueManager,
         llm_service: Optional[LLMService] = None,
@@ -159,14 +175,14 @@ class BotHandlers:
         """Initialize bot handlers.
 
         Args:
-            whisper_service: Transcription router for transcription
+            transcription_router: Transcription router for transcription
             audio_handler: Audio handler for file operations
             queue_manager: Queue manager for request handling
             llm_service: Optional LLM service for text refinement
             telegram_client: Optional Telegram Client API service for large files
             text_processor: Optional text processor for structured text formatting
         """
-        self.transcription_router = whisper_service
+        self.transcription_router = transcription_router
         self.audio_handler = audio_handler
         self.queue_manager = queue_manager
         self.llm_service = llm_service
@@ -194,19 +210,8 @@ class BotHandlers:
 
             try:
                 # Format wait time nicely
-                if wait_time < 60:
-                    wait_str = f"~{int(wait_time)}с"
-                else:
-                    minutes = int(wait_time // 60)
-                    seconds = int(wait_time % 60)
-                    wait_str = f"~{minutes}м {seconds}с"
-
-                if processing_time < 60:
-                    proc_str = f"~{int(processing_time)}с"
-                else:
-                    minutes = int(processing_time // 60)
-                    seconds = int(processing_time % 60)
-                    proc_str = f"~{minutes}м {seconds}с"
+                wait_str = format_wait_time(wait_time)
+                proc_str = format_wait_time(processing_time)
 
                 message_text = (
                     f"📋 В очереди: позиция {position}\n"
@@ -413,7 +418,7 @@ class BotHandlers:
         if voice.file_size:
             if settings.telethon_enabled and self.telegram_client:
                 # Client API available: allow files up to 2 GB
-                max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+                max_size = TELEGRAM_CLIENT_API_MAX_FILE_SIZE
                 if voice.file_size > max_size:
                     file_size_mb = voice.file_size / 1024 / 1024
                     await update.message.reply_text(
@@ -550,8 +555,8 @@ class BotHandlers:
                 # Generate and send benchmark report
                 report_text = report.to_markdown()
 
-                # Telegram has 4096 character limit, split if needed
-                if len(report_text) <= 4096:
+                # Telegram has TELEGRAM_MAX_MESSAGE_LENGTH character limit, split if needed
+                if len(report_text) <= TELEGRAM_MAX_MESSAGE_LENGTH:
                     await status_msg.edit_text(report_text, parse_mode="Markdown")
                 else:
                     # Send message about successful results first
@@ -567,7 +572,10 @@ class BotHandlers:
                         await status_msg.edit_text("❌ Все модели не смогли обработать аудио")
 
                     # Send report in chunks
-                    chunks = [report_text[i : i + 4096] for i in range(0, len(report_text), 4096)]
+                    chunks = [
+                        report_text[i : i + TELEGRAM_MAX_MESSAGE_LENGTH]
+                        for i in range(0, len(report_text), TELEGRAM_MAX_MESSAGE_LENGTH)
+                    ]
                     for chunk in chunks:
                         await update.message.reply_text(chunk, parse_mode="HTML")
 
@@ -613,19 +621,8 @@ class BotHandlers:
                         )
 
                         # Format wait time nicely
-                        if wait_time < 60:
-                            wait_str = f"~{int(wait_time)}с"
-                        else:
-                            minutes = int(wait_time // 60)
-                            seconds = int(wait_time % 60)
-                            wait_str = f"~{minutes}м {seconds}с"
-
-                        if processing_time < 60:
-                            proc_str = f"~{int(processing_time)}с"
-                        else:
-                            minutes = int(processing_time // 60)
-                            seconds = int(processing_time % 60)
-                            proc_str = f"~{minutes}м {seconds}с"
+                        wait_str = format_wait_time(wait_time)
+                        proc_str = format_wait_time(processing_time)
 
                         await status_msg.edit_text(
                             f"📋 В очереди: позиция {actual_position}\n"
@@ -736,7 +733,7 @@ class BotHandlers:
         if audio.file_size:
             if settings.telethon_enabled and self.telegram_client:
                 # Client API available: allow files up to 2 GB
-                max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+                max_size = TELEGRAM_CLIENT_API_MAX_FILE_SIZE
                 if audio.file_size > max_size:
                     file_size_mb = audio.file_size / 1024 / 1024
                     await update.message.reply_text(
@@ -875,8 +872,8 @@ class BotHandlers:
                 # Generate and send benchmark report
                 report_text = report.to_markdown()
 
-                # Telegram has 4096 character limit, split if needed
-                if len(report_text) <= 4096:
+                # Telegram has TELEGRAM_MAX_MESSAGE_LENGTH character limit, split if needed
+                if len(report_text) <= TELEGRAM_MAX_MESSAGE_LENGTH:
                     await status_msg.edit_text(report_text, parse_mode="Markdown")
                 else:
                     # Send message about successful results first
@@ -892,7 +889,10 @@ class BotHandlers:
                         await status_msg.edit_text("❌ Все модели не смогли обработать аудио")
 
                     # Send report in chunks
-                    chunks = [report_text[i : i + 4096] for i in range(0, len(report_text), 4096)]
+                    chunks = [
+                        report_text[i : i + TELEGRAM_MAX_MESSAGE_LENGTH]
+                        for i in range(0, len(report_text), TELEGRAM_MAX_MESSAGE_LENGTH)
+                    ]
                     for chunk in chunks:
                         await update.message.reply_text(chunk, parse_mode="HTML")
 
@@ -938,19 +938,8 @@ class BotHandlers:
                         )
 
                         # Format wait time nicely
-                        if wait_time < 60:
-                            wait_str = f"~{int(wait_time)}с"
-                        else:
-                            minutes = int(wait_time // 60)
-                            seconds = int(wait_time % 60)
-                            wait_str = f"~{minutes}м {seconds}с"
-
-                        if processing_time < 60:
-                            proc_str = f"~{int(processing_time)}с"
-                        else:
-                            minutes = int(processing_time // 60)
-                            seconds = int(processing_time % 60)
-                            proc_str = f"~{minutes}м {seconds}с"
+                        wait_str = format_wait_time(wait_time)
+                        proc_str = format_wait_time(processing_time)
 
                         await status_msg.edit_text(
                             f"📋 В очереди: позиция {actual_position}\n"
@@ -1041,7 +1030,7 @@ class BotHandlers:
         # Validate file size
         if document.file_size:
             if settings.telethon_enabled and self.telegram_client:
-                max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+                max_size = TELEGRAM_CLIENT_API_MAX_FILE_SIZE
             else:
                 max_size = settings.max_file_size_bytes  # 20 MB
 
@@ -1163,19 +1152,8 @@ class BotHandlers:
                         request.id, settings.progress_rtf
                     )
 
-                    if wait_time < 60:
-                        wait_str = f"~{int(wait_time)}с"
-                    else:
-                        minutes = int(wait_time // 60)
-                        seconds = int(wait_time % 60)
-                        wait_str = f"~{minutes}м {seconds}с"
-
-                    if processing_time < 60:
-                        proc_str = f"~{int(processing_time)}с"
-                    else:
-                        minutes = int(processing_time // 60)
-                        seconds = int(processing_time % 60)
-                        proc_str = f"~{minutes}м {seconds}с"
+                    wait_str = format_wait_time(wait_time)
+                    proc_str = format_wait_time(processing_time)
 
                     await status_msg.edit_text(
                         f"📋 В очереди: позиция {actual_position}\n"
@@ -1242,7 +1220,7 @@ class BotHandlers:
         # Validate file size
         if video.file_size:
             if settings.telethon_enabled and self.telegram_client:
-                max_size = 2 * 1024 * 1024 * 1024  # 2 GB
+                max_size = TELEGRAM_CLIENT_API_MAX_FILE_SIZE
             else:
                 max_size = settings.max_file_size_bytes
 
@@ -1361,19 +1339,8 @@ class BotHandlers:
                         request.id, settings.progress_rtf
                     )
 
-                    if wait_time < 60:
-                        wait_str = f"~{int(wait_time)}с"
-                    else:
-                        minutes = int(wait_time // 60)
-                        seconds = int(wait_time % 60)
-                        wait_str = f"~{minutes}м {seconds}с"
-
-                    if processing_time < 60:
-                        proc_str = f"~{int(processing_time)}с"
-                    else:
-                        minutes = int(processing_time // 60)
-                        seconds = int(processing_time % 60)
-                        proc_str = f"~{minutes}м {seconds}с"
+                    wait_str = format_wait_time(wait_time)
+                    proc_str = format_wait_time(processing_time)
 
                     await status_msg.edit_text(
                         f"📋 В очереди: позиция {actual_position}\n"
@@ -1567,17 +1534,7 @@ class BotHandlers:
             )
 
             # Message 2: File (PDF if possible, fallback to TXT)
-            try:
-                pdf_generator = PDFGenerator()
-                pdf_bytes = pdf_generator.generate_pdf(text)
-                file_obj = io.BytesIO(pdf_bytes)
-                file_obj.name = f"{file_number}_original.pdf"
-                file_extension = "PDF"
-            except Exception as e:
-                logger.warning(f"PDF generation failed, falling back to TXT: {e}")
-                file_obj = io.BytesIO(text.encode("utf-8"))
-                file_obj.name = f"{file_number}_original.txt"
-                file_extension = "TXT"
+            file_obj, file_extension = create_file_object(text, f"{file_number}_original")
 
             file_msg = await request.user_message.reply_document(
                 document=file_obj,
@@ -1642,17 +1599,7 @@ class BotHandlers:
             request.draft_messages.append(info_msg)
 
             # Message 2: File (PDF if possible, fallback to TXT)
-            try:
-                pdf_generator = PDFGenerator()
-                pdf_bytes = pdf_generator.generate_pdf(draft_text)
-                file_obj = io.BytesIO(pdf_bytes)
-                file_obj.name = f"{file_number}_draft.pdf"
-                file_extension = "PDF"
-            except Exception as e:
-                logger.warning(f"PDF generation failed for draft, falling back to TXT: {e}")
-                file_obj = io.BytesIO(draft_text.encode("utf-8"))
-                file_obj.name = f"{file_number}_draft.txt"
-                file_extension = "TXT"
+            file_obj, file_extension = create_file_object(draft_text, f"{file_number}_draft")
 
             file_msg = await request.user_message.reply_document(
                 document=file_obj,
@@ -2052,10 +1999,10 @@ class BotHandlers:
                                 debug_message = (
                                     "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
                                     f"📝 <b>Черновик:</b> {len(draft_text)} символов\n"
-                                    f"<code>{draft_text[:1500]}...</code>\n\n"
+                                    f"<code>{draft_text[:DEBUG_TEXT_PREVIEW_LENGTH]}...</code>\n\n"
                                     f"✨ <b>После LLM:</b> {len(refined_text)} символов\n"
-                                    f"<code>{refined_text[:1500]}...</code>\n\n"
-                                    f"ℹ️ Тексты слишком длинные, показаны первые 1500 символов"
+                                    f"<code>{refined_text[:DEBUG_TEXT_PREVIEW_LENGTH]}...</code>\n\n"
+                                    f"ℹ️ Тексты слишком длинные, показаны первые {DEBUG_TEXT_PREVIEW_LENGTH} символов"
                                 )
                             await request.user_message.reply_text(debug_message, parse_mode="HTML")
                         except Exception as e:

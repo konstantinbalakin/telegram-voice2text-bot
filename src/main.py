@@ -71,7 +71,11 @@ async def main() -> None:
     logger.info(f"Bot mode: {settings.bot_mode}")
     logger.info(f"Enabled providers: {settings.whisper_providers}")
     logger.info(f"Routing strategy: {settings.whisper_routing_strategy}")
-    logger.info(f"Database: {settings.database_url}")
+    from urllib.parse import urlparse
+
+    parsed_db_url = urlparse(settings.database_url)
+    masked_db_url = f"{parsed_db_url.scheme}://***/{parsed_db_url.path.split('/')[-1]}"
+    logger.info(f"Database: {masked_db_url}")
 
     # Initialize database
     logger.info("Initializing database...")
@@ -162,7 +166,7 @@ async def main() -> None:
 
     # Create bot handlers
     bot_handlers = BotHandlers(
-        whisper_service=transcription_router,
+        transcription_router=transcription_router,
         audio_handler=audio_handler,
         queue_manager=queue_manager,
         llm_service=llm_service,
@@ -185,7 +189,8 @@ async def main() -> None:
             )
 
     # Register debug handler FIRST (lowest priority, runs for all updates)
-    application.add_handler(TypeHandler(Update, debug_all_updates), group=999)
+    if settings.log_level.upper() == "DEBUG":
+        application.add_handler(TypeHandler(Update, debug_all_updates), group=999)
 
     # Register handlers
     application.add_handler(CommandHandler("start", bot_handlers.start_command))
@@ -303,6 +308,7 @@ async def main() -> None:
             logger.info("Telethon client stopped")
 
         await shutdown_transcription_router()
+        await audio_handler.cleanup_http()
         await close_db()
 
         logger.info("Cleanup complete")

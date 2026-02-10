@@ -2,6 +2,7 @@
 
 import asyncio
 import pytest
+import pytest_asyncio
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -21,8 +22,8 @@ def provider():
     )
 
 
-@pytest.fixture
-def initialized_provider():
+@pytest_asyncio.fixture
+async def initialized_provider():
     """Create and initialize FastWhisperProvider with mocked model."""
     provider = FastWhisperProvider(
         model_size="base",
@@ -42,7 +43,7 @@ def initialized_provider():
 
     yield provider
 
-    asyncio.run(provider.shutdown())
+    await provider.shutdown()
 
 
 class TestFasterWhisperProviderInit:

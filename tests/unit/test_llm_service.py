@@ -166,6 +166,7 @@ class TestLLMFactory:
         settings.llm_model = "deepseek-chat"
         settings.llm_base_url = "https://api.deepseek.com"
         settings.llm_timeout = 30
+        settings.llm_max_tokens = 4000
 
         provider = LLMFactory.create_provider(settings)
 

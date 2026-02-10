@@ -42,9 +42,7 @@ class TextProcessor:
             ValueError: If length_level is not 'default' (Phase 3 feature)
         """
         if length_level != "default":
-            raise NotImplementedError(
-                f"Length variations will be available in Phase 3. Got: {length_level}"
-            )
+            raise NotImplementedError(f"Length variations not yet implemented. Got: {length_level}")
 
         # Load prompt from file
         try:

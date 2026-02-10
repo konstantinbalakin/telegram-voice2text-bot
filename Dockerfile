@@ -35,6 +35,6 @@ USER appuser
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import sys; sys.exit(0)"
+    CMD ["python", "-m", "src.health_check"]
 
 CMD ["python", "-m", "src.main"]
