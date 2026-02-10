@@ -138,7 +138,7 @@ async def init_db() -> None:
         head_revision = script.get_current_head()
 
         # Get current database revision (using sync engine for alembic)
-        def _check_migration_sync():
+        def _check_migration_sync() -> str | None:
             db_url_sync = db_url.replace("+aiosqlite", "")
             engine = create_engine(db_url_sync)
             try:
