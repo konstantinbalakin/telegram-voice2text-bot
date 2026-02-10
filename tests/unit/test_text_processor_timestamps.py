@@ -1,7 +1,5 @@
 """Tests for TextProcessor timestamp formatting (Phase 6)."""
 
-import pytest
-
 from src.services.text_processor import TextProcessor
 
 

@@ -1,7 +1,5 @@
 """Tests for HTML utilities."""
 
-import pytest
-
 from src.utils.html_utils import sanitize_html, escape_html
 
 
