@@ -1,0 +1,42 @@
+default_install_hook_types: [pre-commit, pre-push]
+
+repos:
+  # ── Pre-commit: branch protection ──
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: no-commit-to-branch
+        args: [--branch, main, --branch, master]
+
+  # ── Pre-commit: fast checks (ruff + black) ──
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+
+  # ── Pre-push: full project checks (mypy + pytest) ──
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy type checking
+        entry: uv run --native-tls mypy src/
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: pytest
+        name: pytest unit tests
+        entry: env TELEGRAM_BOT_TOKEN=test_token_for_hooks uv run --native-tls pytest tests/unit/ -x -q
+        language: system
+        types: [python]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

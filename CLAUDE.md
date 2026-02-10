@@ -54,7 +54,13 @@ Use the `/workflow:update-memory` slash command to update the Memory Bank.
 
 ## Git Workflow
 
-This project uses **Feature Branch Workflow** with protected main branch. See `docs/development/git-workflow.md` for complete details.
+This project uses **Trunk Based Development** with protected main branch. See `docs/development/git-workflow.md` for complete details.
+
+### CRITICAL RULES
+
+- **NEVER commit or push directly to `main` or `master`**. Always create a feature branch first.
+- All changes go through PRs: feature branch → PR → merge to main.
+- Pre-commit hooks enforce this rule (see `.pre-commit-config.yaml`).
 
 ### Quick Reference
 
@@ -88,6 +94,25 @@ gh pr create --title "feat: description" --body "..."
 **Slash Command Integration**:
 - Use `/commit` for automatic commit message generation
 - Push manually after commit: `git push origin <branch-name>`
+
+### Pre-commit / Pre-push Hooks
+
+This project uses `pre-commit` framework. Hooks are installed automatically:
+
+```bash
+uv run pre-commit install   # installs both pre-commit and pre-push hooks
+```
+
+**Pre-commit** (every `git commit`): no-commit-to-branch, ruff, black
+**Pre-push** (every `git push`): mypy, pytest
+
+Before pushing, ensure ALL CI checks pass locally:
+```bash
+uv run ruff check src/
+uv run black --check src/ tests/
+uv run mypy src/
+TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v
+```
 
 ## Development Commands
 

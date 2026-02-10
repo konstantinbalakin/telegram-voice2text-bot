@@ -1,6 +1,5 @@
 """Unit tests for FastWhisperProvider."""
 
-import asyncio
 import pytest
 import pytest_asyncio
 from pathlib import Path
