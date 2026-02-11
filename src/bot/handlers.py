@@ -33,6 +33,7 @@ from src.services.llm_service import LLMService
 from src.services.telegram_client import TelegramClientService
 from src.services.text_processor import TextProcessor
 from src.bot.keyboards import create_transcription_keyboard
+from src.utils.html_utils import sanitize_html, escape_html
 
 logger = logging.getLogger(__name__)
 
@@ -1169,7 +1170,7 @@ class BotHandlers:
             logger.info(f"Document downloaded: {file_path}")
 
             # Get duration via ffprobe (documents don't have duration metadata)
-            duration_seconds = self.audio_handler.get_audio_duration_ffprobe(file_path)
+            duration_seconds = await self.audio_handler.get_audio_duration_ffprobe(file_path)
             if duration_seconds is None:
                 duration_seconds = 0  # Will be determined during transcription
 
@@ -1390,7 +1391,7 @@ class BotHandlers:
             await status_msg.edit_text("🎵 Извлекаю аудиодорожку...")
 
             try:
-                file_path = self.audio_handler.extract_audio_track(video_path)
+                file_path = await self.audio_handler.extract_audio_track(video_path)
             except ValueError as e:
                 await status_msg.edit_text("❌ Видео не содержит аудиодорожки.")
                 self.audio_handler.cleanup_file(video_path)
@@ -1615,6 +1616,9 @@ class BotHandlers:
                 file_number = usage_id
                 logger.warning(f"Usage {usage_id} not found, using usage_id as file_number")
 
+        # Sanitize HTML before sending to Telegram
+        text = sanitize_html(text)
+
         if len(text) <= settings.file_threshold_chars:
             # Short text: send as single message
             msg = await request.user_message.reply_text(
@@ -1675,6 +1679,9 @@ class BotHandlers:
             await request.status_message.delete()
         except Exception as e:
             logger.warning(f"Failed to delete status message: {e}")
+
+        # Escape HTML for raw Whisper text before sending
+        draft_text = escape_html(draft_text)
 
         if len(draft_text) <= settings.file_threshold_chars:
             # Short draft: send as text message
@@ -1757,7 +1764,7 @@ class BotHandlers:
                         f"Target provider for preprocessing: {target_provider}, model: {target_model}"
                     )
 
-                processed_path = self.audio_handler.preprocess_audio(
+                processed_path = await self.audio_handler.preprocess_audio(
                     request.file_path, target_provider=target_provider, target_model=target_model
                 )
 
@@ -1850,7 +1857,7 @@ class BotHandlers:
                         await variant_repo.create(
                             usage_id=request.usage_id,
                             mode="original",
-                            text_content=result.text,
+                            text_content=escape_html(result.text),
                             length_level="default",
                             emoji_level=0,
                             timestamps_enabled=False,
@@ -1981,17 +1988,18 @@ class BotHandlers:
                         pass
 
                     # Send original with error notice
+                    escaped_text = escape_html(result.text)
                     keyboard = await self._create_interactive_state_and_keyboard(
                         usage_id=request.usage_id,
                         message_id=0,
                         chat_id=request.user_message.chat_id,
                         result=result,
-                        final_text=result.text,
+                        final_text=escaped_text,
                     )
 
                     main_msg, file_msg = await self._send_transcription_result(
                         request=request,
-                        text=result.text + "\n\nℹ️ (структурирование недоступно)",
+                        text=escaped_text + "\n\nℹ️ (структурирование недоступно)",
                         keyboard=keyboard,
                         usage_id=request.usage_id,
                         prefix="",
@@ -2086,21 +2094,23 @@ class BotHandlers:
                     # === DEBUG MODE: Send comparison ===
                     if settings.llm_debug_mode:
                         try:
+                            escaped_draft = escape_html(draft_text)
+                            escaped_refined = escape_html(refined_text)
                             debug_message = (
                                 "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
                                 f"📝 <b>Черновик ({result.model_name}):</b>\n"
-                                f"<code>{draft_text}</code>\n\n"
+                                f"<code>{escaped_draft}</code>\n\n"
                                 f"✨ <b>После LLM ({settings.llm_model}):</b>\n"
-                                f"<code>{refined_text}</code>"
+                                f"<code>{escaped_refined}</code>"
                             )
                             # Split if too long (Telegram limit is 4096 chars)
                             if len(debug_message) > 4000:
                                 debug_message = (
                                     "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
                                     f"📝 <b>Черновик:</b> {len(draft_text)} символов\n"
-                                    f"<code>{draft_text[:DEBUG_TEXT_PREVIEW_LENGTH]}...</code>\n\n"
+                                    f"<code>{escaped_draft[:DEBUG_TEXT_PREVIEW_LENGTH]}...</code>\n\n"
                                     f"✨ <b>После LLM:</b> {len(refined_text)} символов\n"
-                                    f"<code>{refined_text[:DEBUG_TEXT_PREVIEW_LENGTH]}...</code>\n\n"
+                                    f"<code>{escaped_refined[:DEBUG_TEXT_PREVIEW_LENGTH]}...</code>\n\n"
                                     f"ℹ️ Тексты слишком длинные, показаны первые {DEBUG_TEXT_PREVIEW_LENGTH} символов"
                                 )
                             await request.user_message.reply_text(debug_message, parse_mode="HTML")
@@ -2134,18 +2144,19 @@ class BotHandlers:
                     logger.warning(f"Failed to delete status message: {e}")
 
                 # Create keyboard
+                escaped_text = escape_html(result.text)
                 keyboard = await self._create_interactive_state_and_keyboard(
                     usage_id=request.usage_id,
                     message_id=0,  # Will be updated after sending
                     chat_id=request.user_message.chat_id,
                     result=result,
-                    final_text=result.text,
+                    final_text=escaped_text,
                 )
 
                 # Send result (as text or file based on length)
                 main_msg, file_msg = await self._send_transcription_result(
                     request=request,
-                    text=result.text,
+                    text=escaped_text,
                     keyboard=keyboard,
                     usage_id=request.usage_id,
                     prefix="",

@@ -326,11 +326,79 @@ class OpenAIProvider(TranscriptionProvider):
                 f"Enable OPENAI_CHUNKING or OPENAI_CHANGE_MODEL to handle long files."
             )
 
+    async def _get_duration_seconds(self, audio_path: Path) -> float:
+        """
+        Get audio duration via ffprobe without loading into RAM.
+
+        Args:
+            audio_path: Path to audio file
+
+        Returns:
+            Duration in seconds
+
+        Raises:
+            RuntimeError: If ffprobe fails
+        """
+        process = await asyncio.create_subprocess_exec(
+            "ffprobe",
+            "-v",
+            "quiet",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(audio_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise RuntimeError(f"ffprobe failed for {audio_path}: {stderr.decode().strip()}")
+        return float(stdout.decode().strip())
+
+    async def _extract_chunk(
+        self, audio_path: Path, chunk_path: Path, start_sec: float, duration_sec: float
+    ) -> None:
+        """
+        Extract a single audio chunk via ffmpeg without loading into RAM.
+
+        Args:
+            audio_path: Source audio file
+            chunk_path: Output chunk file path
+            start_sec: Start time in seconds
+            duration_sec: Chunk duration in seconds
+
+        Raises:
+            RuntimeError: If ffmpeg fails
+        """
+        process = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(audio_path),
+            "-ss",
+            str(start_sec),
+            "-t",
+            str(duration_sec),
+            "-c:a",
+            "libmp3lame",
+            "-q:a",
+            "2",
+            str(chunk_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await process.communicate()
+        if process.returncode != 0:
+            raise RuntimeError(
+                f"ffmpeg chunk extraction failed for {chunk_path}: {stderr.decode().strip()}"
+            )
+
     async def _split_audio_into_chunks(
         self, audio_path: Path, context: TranscriptionContext
     ) -> list[Path]:
         """
-        Split audio file into chunks using pydub.
+        Split audio file into chunks using ffmpeg (streaming, no RAM loading).
 
         Args:
             audio_path: Path to original audio file
@@ -342,56 +410,52 @@ class OpenAIProvider(TranscriptionProvider):
         Raises:
             RuntimeError: If splitting fails
         """
-        from pydub import AudioSegment  # type: ignore[import-untyped]
         import uuid
 
-        chunk_size_ms = settings.openai_chunk_size_seconds * 1000
-        overlap_ms = settings.openai_chunk_overlap_seconds * 1000
+        chunk_size_sec = settings.openai_chunk_size_seconds
+        overlap_sec = settings.openai_chunk_overlap_seconds
+        step_sec = chunk_size_sec - overlap_sec
 
         logger.info(
             f"Splitting {audio_path.name} into chunks: "
-            f"size={settings.openai_chunk_size_seconds}s, "
-            f"overlap={settings.openai_chunk_overlap_seconds}s"
+            f"size={chunk_size_sec}s, "
+            f"overlap={overlap_sec}s"
         )
 
         try:
-            # Load audio
-            audio = AudioSegment.from_file(str(audio_path))
+            duration_sec = await self._get_duration_seconds(audio_path)
+            duration_ms = int(duration_sec * 1000)
 
-            total_duration_ms = len(audio)
-            chunk_paths = []
+            chunk_size_ms = chunk_size_sec * 1000
+            step_ms = step_sec * 1000
 
-            # Create chunks with overlap
+            chunk_paths: list[Path] = []
             start_ms = 0
             chunk_index = 0
 
-            while start_ms < total_duration_ms:
-                end_ms = min(start_ms + chunk_size_ms, total_duration_ms)
+            while start_ms < duration_ms:
+                end_ms = min(start_ms + chunk_size_ms, duration_ms)
 
-                # Export chunk
-                chunk_audio = audio[start_ms:end_ms]
-
-                # Generate unique filename
                 chunk_filename = f"{audio_path.stem}_chunk_{chunk_index}_{uuid.uuid4().hex[:8]}.mp3"
                 chunk_path = audio_path.parent / chunk_filename
 
-                chunk_audio.export(str(chunk_path), format="mp3")
+                start_s = start_ms / 1000.0
+                duration_chunk_s = (end_ms - start_ms) / 1000.0
+
+                await self._extract_chunk(audio_path, chunk_path, start_s, duration_chunk_s)
                 chunk_paths.append(chunk_path)
 
                 logger.debug(
                     f"Created chunk {chunk_index}: {chunk_path.name}, "
-                    f"duration={len(chunk_audio)/1000:.1f}s"
+                    f"duration={duration_chunk_s:.1f}s"
                 )
 
                 chunk_index += 1
 
-                # Move to next chunk position (with overlap)
-                # If we've reached the end, break to avoid infinite loop
-                if end_ms >= total_duration_ms:
+                if end_ms >= duration_ms:
                     break
 
-                # Next chunk starts before the end of current chunk (overlap)
-                start_ms += chunk_size_ms - overlap_ms
+                start_ms += step_ms
 
             logger.info(f"Split audio into {len(chunk_paths)} chunks")
             return chunk_paths

@@ -1,5 +1,8 @@
 """Unit tests for OpenAIProvider."""
 
+from unittest.mock import AsyncMock, patch
+
+import httpx
 import pytest
 from pathlib import Path
 
@@ -73,10 +76,32 @@ class TestOpenAIProviderTranscribe:
 
     @pytest.mark.asyncio
     async def test_transcribe_success(self, initialized_provider, tmp_path):
-        """Test successful transcription (simplified - skips API mocking)."""
-        # This test would require complex OpenAI client mocking
-        # In practice, integration tests would cover this
-        pass
+        """Test successful transcription with mocked httpx client."""
+        test_file = tmp_path / "test.mp3"
+        test_file.write_bytes(b"fake audio data")
+
+        context = TranscriptionContext(user_id=123, duration_seconds=5.0, file_size_bytes=1024)
+
+        mock_response = httpx.Response(
+            status_code=200,
+            json={"text": "Hello, this is a test transcription", "language": "en"},
+            request=httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions"),
+        )
+
+        with patch.object(
+            initialized_provider._client,
+            "post",
+            new_callable=AsyncMock,
+            return_value=mock_response,
+        ):
+            result = await initialized_provider.transcribe(test_file, context)
+
+        assert result is not None
+        assert result.text == "Hello, this is a test transcription"
+        assert result.language == "en"
+        assert result.provider_used == "openai"
+        assert result.model_name == "whisper-1"
+        assert result.processing_time > 0
 
 
 class TestOpenAIProviderShutdown:

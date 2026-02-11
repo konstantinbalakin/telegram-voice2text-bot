@@ -8,6 +8,8 @@ from typing import Optional
 from telegram import Message
 from telegram.error import TelegramError, RetryAfter, TimedOut
 
+from src.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,7 +46,24 @@ class ProgressTracker:
     - Estimated time remaining based on RTF
     - Visual progress bar with emoji
     - Handles Telegram rate limits gracefully
+    - Global rate limiter shared across all instances
     """
+
+    # Global rate limiter shared across all instances
+    _global_last_update: float = 0.0
+    _global_lock: asyncio.Lock | None = None
+
+    @classmethod
+    def _get_global_lock(cls) -> asyncio.Lock:
+        if cls._global_lock is None:
+            cls._global_lock = asyncio.Lock()
+        return cls._global_lock
+
+    @classmethod
+    def _reset_global_state(cls) -> None:
+        """Reset global state (for testing only)."""
+        cls._global_last_update = 0.0
+        cls._global_lock = None
 
     def __init__(
         self,
@@ -139,26 +158,36 @@ class ProgressTracker:
                 # Continue updating despite errors
 
     async def _safe_update(self, text: str) -> None:
-        """Safely update message with error handling.
+        """Safely update message with error handling and global rate limiting.
 
         Args:
             text: New message text
         """
+        settings = get_settings()
+
         try:
+            # Global rate limiting across all ProgressTracker instances
+            async with self._get_global_lock():
+                now = asyncio.get_event_loop().time()
+                elapsed = now - ProgressTracker._global_last_update
+                min_interval = settings.progress_global_rate_limit
+                if elapsed < min_interval:
+                    await asyncio.sleep(min_interval - elapsed)
+                ProgressTracker._global_last_update = asyncio.get_event_loop().time()
+
             await self.message.edit_text(text)
             logger.debug(f"Progress updated: {text[:50]}...")
 
         except RetryAfter as e:
-            # Telegram rate limit hit
+            # Telegram rate limit hit — skip this update, notify other trackers
             retry_after = e.retry_after
-            logger.warning(f"Rate limited, retry after {retry_after}s")
-            # Convert to float (retry_after can be int or timedelta)
             sleep_duration = float(
                 retry_after.total_seconds()
                 if hasattr(retry_after, "total_seconds")
                 else retry_after
             )
-            await asyncio.sleep(sleep_duration)
+            ProgressTracker._global_last_update = asyncio.get_event_loop().time() + sleep_duration
+            logger.warning(f"Rate limited, skipping update for {sleep_duration}s")
 
         except TimedOut:
             # Network timeout

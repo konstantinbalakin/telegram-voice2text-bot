@@ -151,7 +151,11 @@ class Settings(BaseSettings):
 
     # Progress Tracking
     progress_update_interval: int = Field(
-        default=5, description="Progress bar update interval (seconds)"
+        default=10, description="Progress bar update interval (seconds)"
+    )
+    progress_global_rate_limit: float = Field(
+        default=0.5,
+        description="Minimum interval between progress bar edit_message_text calls globally (seconds)",
     )
     progress_rtf: float = Field(default=0.3, description="Estimated RTF for progress calculation")
     llm_processing_duration: int = Field(
