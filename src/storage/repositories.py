@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, and_, delete, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import CursorResult
 
@@ -490,6 +491,55 @@ class TranscriptionVariantRepository:
         variant = result.scalar_one_or_none()
 
         return variant
+
+    async def get_or_create_variant(
+        self,
+        usage_id: int,
+        mode: str,
+        text_content: str,
+        length_level: str = "default",
+        emoji_level: int = 0,
+        timestamps_enabled: bool = False,
+        generated_by: Optional[str] = None,
+        llm_model: Optional[str] = None,
+        processing_time_seconds: Optional[float] = None,
+    ) -> tuple[TranscriptionVariant, bool]:
+        """Get existing variant or create new one. Returns (variant, created)."""
+        existing = await self.get_variant(
+            usage_id=usage_id,
+            mode=mode,
+            length_level=length_level,
+            emoji_level=emoji_level,
+            timestamps_enabled=timestamps_enabled,
+        )
+        if existing:
+            return existing, False
+
+        try:
+            variant = await self.create(
+                usage_id=usage_id,
+                mode=mode,
+                text_content=text_content,
+                length_level=length_level,
+                emoji_level=emoji_level,
+                timestamps_enabled=timestamps_enabled,
+                generated_by=generated_by,
+                llm_model=llm_model,
+                processing_time_seconds=processing_time_seconds,
+            )
+            return variant, True
+        except IntegrityError:
+            await self.session.rollback()
+            existing = await self.get_variant(
+                usage_id=usage_id,
+                mode=mode,
+                length_level=length_level,
+                emoji_level=emoji_level,
+                timestamps_enabled=timestamps_enabled,
+            )
+            if existing:
+                return existing, False
+            raise
 
     async def get_by_usage_id(self, usage_id: int) -> list[TranscriptionVariant]:
         """Get all variants for a usage record."""

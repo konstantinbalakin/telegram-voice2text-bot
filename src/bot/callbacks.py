@@ -20,6 +20,7 @@ from src.services.text_processor import TextProcessor
 from src.services.progress_tracker import ProgressTracker
 from src.config import settings
 from src.bot.retranscribe_handlers import handle_retranscribe_menu, handle_retranscribe
+from src.utils.html_utils import sanitize_html
 
 if TYPE_CHECKING:
     from src.bot.handlers import BotHandlers
@@ -113,6 +114,9 @@ class CallbackHandlers:
             # Fallback to usage_id if usage not found (shouldn't happen)
             file_number = state.usage_id
             logger.warning(f"Usage {state.usage_id} not found, using usage_id as file_number")
+
+        # Sanitize HTML before sending to Telegram (LLM may produce unsupported tags)
+        new_text = sanitize_html(new_text)
 
         if not state.is_file_message and len(new_text) <= settings.file_threshold_chars:
             # Simple case: text message, stays text message
@@ -424,45 +428,31 @@ class CallbackHandlers:
                     # Stop progress tracker
                     await progress.stop()
 
-                    # Save variant with target emoji level
-                    # Check if variant already exists first to avoid UNIQUE constraint error
-                    existing_variant = await self.variant_repo.get_variant(
+                    # Save variant (UPSERT: handles race conditions)
+                    # Check variant limit before creating
+                    if await self._check_variant_limit(usage_id):
+                        await query.answer("Достигнут лимит вариантов", show_alert=True)
+                        return
+                    variant, created = await self.variant_repo.get_or_create_variant(
                         usage_id=usage_id,
                         mode="structured",
+                        text_content=structured_text,
                         length_level=target_length_level,
                         emoji_level=target_emoji_level,
                         timestamps_enabled=target_timestamps_enabled,
+                        generated_by="llm",
+                        llm_model=settings.llm_model,
+                        processing_time_seconds=processing_time,
                     )
-
-                    if existing_variant:
-                        # Variant already exists (race condition or retry), use it
-                        logger.info(
-                            f"Structured variant already exists: usage_id={usage_id}, "
-                            "using cached version"
-                        )
-                        variant = existing_variant
-                    else:
-                        # Check variant limit before creating
-                        if await self._check_variant_limit(usage_id):
-                            await query.answer("Достигнут лимит вариантов", show_alert=True)
-                            return
-                        # Create new variant
-                        # For emoji_level=1, structured prompt already generates minimal emojis
-                        # For emoji_level=0, would need to remove emojis (handled by emoji toggle)
-                        variant = await self.variant_repo.create(
-                            usage_id=usage_id,
-                            mode="structured",
-                            text_content=structured_text,
-                            length_level=target_length_level,
-                            emoji_level=target_emoji_level,
-                            timestamps_enabled=target_timestamps_enabled,
-                            generated_by="llm",
-                            llm_model=settings.llm_model,
-                            processing_time_seconds=processing_time,
-                        )
+                    if created:
                         logger.info(
                             f"Generated structured text: usage_id={usage_id}, "
                             f"time={processing_time:.2f}s"
+                        )
+                    else:
+                        logger.info(
+                            f"Structured variant already exists: usage_id={usage_id}, "
+                            "using cached version"
                         )
 
                 except Exception as e:
@@ -476,7 +466,7 @@ class CallbackHandlers:
                         segments = await self.segment_repo.get_by_usage_id(usage_id)
                         has_segments = len(segments) > 0
                         await query.edit_message_text(
-                            original_variant.text_content,
+                            sanitize_html(original_variant.text_content),
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),
@@ -541,42 +531,31 @@ class CallbackHandlers:
                     # Stop progress tracker
                     await progress.stop()
 
-                    # Save variant (check if already exists first to avoid UNIQUE constraint error)
-                    existing_variant = await self.variant_repo.get_variant(
+                    # Save variant (UPSERT: handles race conditions)
+                    # Check variant limit before creating
+                    if await self._check_variant_limit(usage_id):
+                        await query.answer("Достигнут лимит вариантов", show_alert=True)
+                        return
+                    variant, created = await self.variant_repo.get_or_create_variant(
                         usage_id=usage_id,
                         mode="summary",
+                        text_content=summary_text,
                         length_level=target_length_level,
                         emoji_level=target_emoji_level,
                         timestamps_enabled=target_timestamps_enabled,
+                        generated_by="llm",
+                        llm_model=settings.llm_model,
+                        processing_time_seconds=processing_time,
                     )
-
-                    if existing_variant:
-                        # Variant already exists (race condition or retry), use it
-                        logger.info(
-                            f"Summary variant already exists: usage_id={usage_id}, "
-                            "using cached version"
-                        )
-                        variant = existing_variant
-                    else:
-                        # Check variant limit before creating
-                        if await self._check_variant_limit(usage_id):
-                            await query.answer("Достигнут лимит вариантов", show_alert=True)
-                            return
-                        # Create new variant
-                        variant = await self.variant_repo.create(
-                            usage_id=usage_id,
-                            mode="summary",
-                            text_content=summary_text,
-                            length_level=target_length_level,
-                            emoji_level=target_emoji_level,
-                            timestamps_enabled=target_timestamps_enabled,
-                            generated_by="llm",
-                            llm_model=settings.llm_model,
-                            processing_time_seconds=processing_time,
-                        )
+                    if created:
                         logger.info(
                             f"Generated summary text: usage_id={usage_id}, "
                             f"time={processing_time:.2f}s"
+                        )
+                    else:
+                        logger.info(
+                            f"Summary variant already exists: usage_id={usage_id}, "
+                            "using cached version"
                         )
 
                 except Exception as e:
@@ -590,7 +569,7 @@ class CallbackHandlers:
                         segments = await self.segment_repo.get_by_usage_id(usage_id)
                         has_segments = len(segments) > 0
                         await query.edit_message_text(
-                            original_variant.text_content,
+                            sanitize_html(original_variant.text_content),
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),
@@ -654,42 +633,31 @@ class CallbackHandlers:
                     # Stop progress tracker
                     await progress.stop()
 
-                    # Save variant (check if already exists first to avoid UNIQUE constraint error)
-                    existing_variant = await self.variant_repo.get_variant(
+                    # Save variant (UPSERT: handles race conditions)
+                    # Check variant limit before creating
+                    if await self._check_variant_limit(usage_id):
+                        await query.answer("Достигнут лимит вариантов", show_alert=True)
+                        return
+                    variant, created = await self.variant_repo.get_or_create_variant(
                         usage_id=usage_id,
                         mode="magic",
+                        text_content=magic_text,
                         length_level=target_length_level,
                         emoji_level=target_emoji_level,
                         timestamps_enabled=target_timestamps_enabled,
+                        generated_by="llm",
+                        llm_model=settings.llm_model,
+                        processing_time_seconds=processing_time,
                     )
-
-                    if existing_variant:
-                        # Variant already exists (race condition or retry), use it
-                        logger.info(
-                            f"Magic variant already exists: usage_id={usage_id}, "
-                            "using cached version"
-                        )
-                        variant = existing_variant
-                    else:
-                        # Check variant limit before creating
-                        if await self._check_variant_limit(usage_id):
-                            await query.answer("Достигнут лимит вариантов", show_alert=True)
-                            return
-                        # Create new variant
-                        variant = await self.variant_repo.create(
-                            usage_id=usage_id,
-                            mode="magic",
-                            text_content=magic_text,
-                            length_level=target_length_level,
-                            emoji_level=target_emoji_level,
-                            timestamps_enabled=target_timestamps_enabled,
-                            generated_by="llm",
-                            llm_model=settings.llm_model,
-                            processing_time_seconds=processing_time,
-                        )
+                    if created:
                         logger.info(
                             f"Generated magic text: usage_id={usage_id}, "
                             f"time={processing_time:.2f}s"
+                        )
+                    else:
+                        logger.info(
+                            f"Magic variant already exists: usage_id={usage_id}, "
+                            "using cached version"
                         )
 
                 except Exception as e:
@@ -701,7 +669,7 @@ class CallbackHandlers:
                         segments = await self.segment_repo.get_by_usage_id(usage_id)
                         has_segments = len(segments) > 0
                         await query.edit_message_text(
-                            original_variant.text_content,
+                            sanitize_html(original_variant.text_content),
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),
@@ -899,7 +867,7 @@ class CallbackHandlers:
                     segments = await self.segment_repo.get_by_usage_id(usage_id)
                     has_segments = len(segments) > 0
                     await query.edit_message_text(
-                        current_variant.text_content,
+                        sanitize_html(current_variant.text_content),
                         reply_markup=create_transcription_keyboard(state, has_segments, settings),
                         parse_mode="HTML",
                     )
@@ -1109,7 +1077,7 @@ class CallbackHandlers:
                         segments = await self.segment_repo.get_by_usage_id(usage_id)
                         has_segments = len(segments) > 0
                         await query.edit_message_text(
-                            current_variant.text_content,
+                            sanitize_html(current_variant.text_content),
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),

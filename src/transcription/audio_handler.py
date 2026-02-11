@@ -2,6 +2,7 @@
 Audio file handler for downloading and processing Telegram voice messages
 """
 
+import asyncio
 import logging
 import subprocess
 import tempfile
@@ -249,7 +250,35 @@ class AudioHandler:
 
         return True
 
-    def _get_audio_codec(self, file_path: Path) -> str:
+    async def _run_subprocess(
+        self,
+        args: list[str],
+        timeout: int = 300,
+        error_msg: str = "Subprocess failed",
+    ) -> tuple[str, str]:
+        """Run subprocess asynchronously and return (stdout, stderr)."""
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            process.kill()
+            await process.communicate()
+            raise subprocess.TimeoutExpired(args, timeout)
+
+        if process.returncode != 0:
+            raise subprocess.CalledProcessError(
+                process.returncode or 1,
+                args,
+                stdout.decode() if stdout else "",
+                stderr.decode() if stderr else "",
+            )
+        return stdout.decode() if stdout else "", stderr.decode() if stderr else ""
+
+    async def _get_audio_codec(self, file_path: Path) -> str:
         """
         Get audio codec of a file.
 
@@ -262,7 +291,7 @@ class AudioHandler:
         Raises:
             subprocess.CalledProcessError: If ffprobe fails
         """
-        result = subprocess.run(
+        stdout, stderr = await self._run_subprocess(
             [
                 "ffprobe",
                 "-v",
@@ -275,14 +304,12 @@ class AudioHandler:
                 "default=noprint_wrappers=1:nokey=1",
                 str(file_path),
             ],
-            check=True,
-            capture_output=True,
-            text=True,
             timeout=300,
+            error_msg="Failed to get audio codec",
         )
-        return result.stdout.strip()
+        return stdout.strip()
 
-    def _get_audio_channels(self, file_path: Path) -> int:
+    async def _get_audio_channels(self, file_path: Path) -> int:
         """
         Get number of audio channels.
 
@@ -295,7 +322,7 @@ class AudioHandler:
         Raises:
             subprocess.CalledProcessError: If ffprobe fails
         """
-        result = subprocess.run(
+        stdout, stderr = await self._run_subprocess(
             [
                 "ffprobe",
                 "-v",
@@ -308,14 +335,12 @@ class AudioHandler:
                 "default=noprint_wrappers=1:nokey=1",
                 str(file_path),
             ],
-            check=True,
-            capture_output=True,
-            text=True,
             timeout=300,
+            error_msg="Failed to get audio channels",
         )
-        return int(result.stdout.strip())
+        return int(stdout.strip())
 
-    def _get_audio_sample_rate(self, file_path: Path) -> int:
+    async def _get_audio_sample_rate(self, file_path: Path) -> int:
         """
         Get audio sample rate.
 
@@ -328,7 +353,7 @@ class AudioHandler:
         Raises:
             subprocess.CalledProcessError: If ffprobe fails
         """
-        result = subprocess.run(
+        stdout, stderr = await self._run_subprocess(
             [
                 "ffprobe",
                 "-v",
@@ -341,14 +366,12 @@ class AudioHandler:
                 "default=noprint_wrappers=1:nokey=1",
                 str(file_path),
             ],
-            check=True,
-            capture_output=True,
-            text=True,
             timeout=300,
+            error_msg="Failed to get audio sample rate",
         )
-        return int(result.stdout.strip())
+        return int(stdout.strip())
 
-    def preprocess_audio(
+    async def preprocess_audio(
         self,
         audio_path: Path,
         target_provider: Optional[str] = None,
@@ -392,7 +415,7 @@ class AudioHandler:
         # Format optimization based on provider
         if target_provider:
             try:
-                path = self._optimize_for_provider(path, target_provider, target_model)
+                path = await self._optimize_for_provider(path, target_provider, target_model)
                 if path != audio_path:
                     logger.info(f"Optimized for {target_provider}: {path.name}")
             except Exception as e:
@@ -402,7 +425,7 @@ class AudioHandler:
         # Mono conversion (if not already done by optimization)
         if settings.audio_convert_to_mono and path == audio_path:
             try:
-                path = self._convert_to_mono(path)
+                path = await self._convert_to_mono(path)
                 if path != audio_path:
                     logger.info(f"Converted to mono: {path.name}")
             except Exception as e:
@@ -412,7 +435,7 @@ class AudioHandler:
         # Speed adjustment
         if settings.audio_speed_multiplier != 1.0:
             try:
-                path = self._adjust_speed(path)
+                path = await self._adjust_speed(path)
                 logger.info(f"Adjusted speed {settings.audio_speed_multiplier}x: " f"{path.name}")
             except Exception as e:
                 logger.warning(f"Speed adjustment failed: {e}, using original")
@@ -424,7 +447,7 @@ class AudioHandler:
 
         return path
 
-    def _convert_to_mono(self, input_path: Path) -> Path:
+    async def _convert_to_mono(self, input_path: Path) -> Path:
         """
         Convert audio to mono with optimal settings for Whisper.
 
@@ -442,8 +465,8 @@ class AudioHandler:
             subprocess.CalledProcessError: If ffmpeg fails
         """
         # Check if file is already optimal (mono + opus)
-        channels = self._get_audio_channels(input_path)
-        codec = self._get_audio_codec(input_path)
+        channels = await self._get_audio_channels(input_path)
+        codec = await self._get_audio_codec(input_path)
 
         if channels == 1 and codec == "opus":
             logger.info(f"File already mono Opus, skipping conversion: {input_path.name}")
@@ -463,7 +486,7 @@ class AudioHandler:
 
         # Convert to mono with Whisper-optimal settings
         # Use .ogg container for OpenAI compatibility (doesn't support .opus extension)
-        subprocess.run(
+        await self._run_subprocess(
             [
                 "ffmpeg",
                 "-y",  # Overwrite
@@ -483,10 +506,8 @@ class AudioHandler:
                 "ogg",  # OGG container format (OpenAI compatible)
                 str(output_path),
             ],
-            check=True,
-            capture_output=True,
-            text=True,
             timeout=300,
+            error_msg="Failed to convert to mono",
         )
 
         # Get converted file size
@@ -501,7 +522,7 @@ class AudioHandler:
 
         return output_path
 
-    def _adjust_speed(self, input_path: Path) -> Path:
+    async def _adjust_speed(self, input_path: Path) -> Path:
         """
         Adjust audio playback speed with optimal output format.
 
@@ -523,7 +544,7 @@ class AudioHandler:
         if not (0.5 <= multiplier <= 2.0):
             raise ValueError(f"Speed multiplier must be 0.5-2.0, got {multiplier}")
 
-        subprocess.run(
+        await self._run_subprocess(
             [
                 "ffmpeg",
                 "-y",
@@ -541,15 +562,13 @@ class AudioHandler:
                 "ogg",  # OGG container format (OpenAI compatible)
                 str(output_path),
             ],
-            check=True,
-            capture_output=True,
-            text=True,
             timeout=300,
+            error_msg="Failed to adjust speed",
         )
 
         return output_path
 
-    def _optimize_for_provider(
+    async def _optimize_for_provider(
         self,
         input_path: Path,
         provider_name: str,
@@ -583,12 +602,12 @@ class AudioHandler:
                     target_format = settings.openai_4o_transcribe_preferred_format
 
                     if target_format == "mp3":
-                        return self._convert_to_mp3(input_path)
+                        return await self._convert_to_mp3(input_path)
                     elif target_format == "wav":
-                        return self._convert_to_wav(input_path)
+                        return await self._convert_to_wav(input_path)
                     else:
                         logger.warning(f"Unknown format {target_format}, using mp3")
-                        return self._convert_to_mp3(input_path)
+                        return await self._convert_to_mp3(input_path)
                 else:
                     logger.debug(f"Format {current_ext} already supported by {model}")
                     return input_path
@@ -608,7 +627,7 @@ class AudioHandler:
             logger.debug(f"No optimization for provider: {provider_name}")
             return input_path
 
-    def _convert_to_mp3(self, input_path: Path) -> Path:
+    async def _convert_to_mp3(self, input_path: Path) -> Path:
         """
         Convert audio to MP3 format optimized for speech recognition.
 
@@ -629,7 +648,7 @@ class AudioHandler:
         logger.info(f"Converting to MP3: {input_path.name} " f"({original_size_mb:.2f}MB)")
 
         # Convert to MP3 with speech-optimized settings
-        subprocess.run(
+        await self._run_subprocess(
             [
                 "ffmpeg",
                 "-y",  # Overwrite
@@ -647,10 +666,8 @@ class AudioHandler:
                 "2",  # Quality level (2 = high quality)
                 str(output_path),
             ],
-            check=True,
-            capture_output=True,
-            text=True,
             timeout=300,
+            error_msg="Failed to convert to MP3",
         )
 
         converted_size = output_path.stat().st_size
@@ -672,7 +689,7 @@ class AudioHandler:
 
         return output_path
 
-    def extract_audio_track(self, input_path: Path) -> Path:
+    async def extract_audio_track(self, input_path: Path) -> Path:
         """
         Extract audio track from video/media file.
 
@@ -689,7 +706,7 @@ class AudioHandler:
             ValueError: If file has no audio stream
         """
         # Check if file has audio stream
-        if not self._has_audio_stream(input_path):
+        if not await self._has_audio_stream(input_path):
             raise ValueError(f"File has no audio stream: {input_path.name}")
 
         original_size = input_path.stat().st_size
@@ -699,7 +716,7 @@ class AudioHandler:
 
         logger.info(f"Extracting audio from {input_path.name} ({original_size_mb:.2f}MB)")
 
-        subprocess.run(
+        await self._run_subprocess(
             [
                 "ffmpeg",
                 "-y",  # Overwrite
@@ -720,10 +737,8 @@ class AudioHandler:
                 "ogg",
                 str(output_path),
             ],
-            check=True,
-            capture_output=True,
-            text=True,
             timeout=300,
+            error_msg="Failed to extract audio track",
         )
 
         converted_size = output_path.stat().st_size
@@ -735,7 +750,7 @@ class AudioHandler:
 
         return output_path
 
-    def _has_audio_stream(self, file_path: Path) -> bool:
+    async def _has_audio_stream(self, file_path: Path) -> bool:
         """
         Check if file contains an audio stream.
 
@@ -746,7 +761,7 @@ class AudioHandler:
             True if file has audio stream, False otherwise
         """
         try:
-            result = subprocess.run(
+            stdout, stderr = await self._run_subprocess(
                 [
                     "ffprobe",
                     "-v",
@@ -759,16 +774,14 @@ class AudioHandler:
                     "csv=p=0",
                     str(file_path),
                 ],
-                capture_output=True,
-                text=True,
-                check=True,
                 timeout=300,
+                error_msg="Failed to check audio stream",
             )
-            return "audio" in result.stdout
+            return "audio" in stdout
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             return False
 
-    def get_audio_duration_ffprobe(self, file_path: Path) -> Optional[float]:
+    async def get_audio_duration_ffprobe(self, file_path: Path) -> Optional[float]:
         """
         Get audio duration using ffprobe.
 
@@ -779,7 +792,7 @@ class AudioHandler:
             Duration in seconds or None if unavailable
         """
         try:
-            result = subprocess.run(
+            stdout, stderr = await self._run_subprocess(
                 [
                     "ffprobe",
                     "-v",
@@ -790,16 +803,14 @@ class AudioHandler:
                     "default=noprint_wrappers=1:nokey=1",
                     str(file_path),
                 ],
-                capture_output=True,
-                text=True,
-                check=True,
                 timeout=300,
+                error_msg="Failed to get audio duration",
             )
-            return float(result.stdout.strip())
+            return float(stdout.strip())
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
             return None
 
-    def _convert_to_wav(self, input_path: Path) -> Path:
+    async def _convert_to_wav(self, input_path: Path) -> Path:
         """
         Convert audio to WAV format (PCM 16-bit).
 
@@ -818,7 +829,7 @@ class AudioHandler:
 
         logger.info(f"Converting to WAV: {input_path.name}")
 
-        subprocess.run(
+        await self._run_subprocess(
             [
                 "ffmpeg",
                 "-y",
@@ -832,10 +843,8 @@ class AudioHandler:
                 "pcm_s16le",  # PCM 16-bit
                 str(output_path),
             ],
-            check=True,
-            capture_output=True,
-            text=True,
             timeout=300,
+            error_msg="Failed to convert to WAV",
         )
 
         converted_size_mb = output_path.stat().st_size / (1024 * 1024)
