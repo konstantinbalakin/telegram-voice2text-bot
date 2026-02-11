@@ -27,6 +27,7 @@ from src.storage.repositories import (
     TranscriptionVariantRepository,
     TranscriptionSegmentRepository,
     UsageRepository,
+    UserRepository,
 )
 from src.transcription import get_transcription_router, shutdown_transcription_router, AudioHandler
 from src.services.prompt_loader import load_prompt
@@ -52,6 +53,7 @@ setup_logging(
     enable_syslog=SYSLOG_ENABLED,
     syslog_host=SYSLOG_HOST,
     syslog_port=SYSLOG_PORT,
+    sensitive_patterns=[settings.telegram_bot_token],
 )
 
 logger = logging.getLogger(__name__)
@@ -230,8 +232,15 @@ async def main() -> None:
                 variant_repo = TranscriptionVariantRepository(session)
                 segment_repo = TranscriptionSegmentRepository(session)
                 usage_repo = UsageRepository(session)
+                user_repo = UserRepository(session)
                 callback_handlers = CallbackHandlers(
-                    state_repo, variant_repo, segment_repo, usage_repo, text_processor, bot_handlers
+                    state_repo,
+                    variant_repo,
+                    segment_repo,
+                    usage_repo,
+                    text_processor,
+                    bot_handlers,
+                    user_repo=user_repo,
                 )
                 await callback_handlers.handle_callback_query(update, context)  # type: ignore[arg-type]
 

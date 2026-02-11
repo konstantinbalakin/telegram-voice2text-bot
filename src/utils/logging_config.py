@@ -19,6 +19,37 @@ from typing import Any
 from pythonjsonlogger import jsonlogger
 
 
+class SensitiveDataFilter(logging.Filter):
+    """Mask sensitive patterns (tokens, API keys) in log messages."""
+
+    def __init__(self, patterns: list[str] | None = None):
+        super().__init__()
+        self._patterns: list[str] = []
+        if patterns:
+            self._patterns = [p for p in patterns if p]
+
+    def add_pattern(self, pattern: str) -> None:
+        if pattern and pattern not in self._patterns:
+            self._patterns.append(pattern)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if self._patterns:
+            msg = str(record.msg)
+            for pattern in self._patterns:
+                redacted = pattern[:4] + "***REDACTED***"
+                msg = msg.replace(pattern, redacted)
+            record.msg = msg
+            if record.args and isinstance(record.args, tuple):
+                new_args = []
+                for a in record.args:
+                    if isinstance(a, str):
+                        for pattern in self._patterns:
+                            a = a.replace(pattern, pattern[:4] + "***REDACTED***")
+                    new_args.append(a)
+                record.args = tuple(new_args)
+        return True
+
+
 class VersionEnrichmentFilter(logging.Filter):
     """Add version and container info to all log records."""
 
@@ -75,6 +106,7 @@ def setup_logging(
     syslog_port: int = 514,
     max_bytes: int = 10 * 1024 * 1024,  # 10MB
     backup_count: int = 5,  # Keep 5 backup files
+    sensitive_patterns: list[str] | None = None,
 ) -> None:
     """
     Configure application logging with file rotation and optional remote syslog.
@@ -93,6 +125,7 @@ def setup_logging(
         syslog_port: Syslog server port
         max_bytes: Maximum size per log file before rotation (default: 10MB)
         backup_count: Number of backup files to keep (default: 5)
+        sensitive_patterns: List of sensitive strings to mask in log output
     """
     # Ensure log directory exists
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -112,6 +145,9 @@ def setup_logging(
     # Add version enrichment filter
     version_filter = VersionEnrichmentFilter(version=version)
 
+    # Create sensitive data filter
+    sensitive_filter = SensitiveDataFilter(patterns=sensitive_patterns)
+
     # File handler for all logs (JSON format, rotating by size)
     app_log_file = log_dir / "app.log"
     app_handler = logging.handlers.RotatingFileHandler(
@@ -123,6 +159,7 @@ def setup_logging(
     app_handler.setLevel(getattr(logging, log_level.upper()))  # Respect configured log level
     app_handler.setFormatter(json_formatter)
     app_handler.addFilter(version_filter)
+    app_handler.addFilter(sensitive_filter)
     root_logger.addHandler(app_handler)
 
     # File handler for errors only (JSON format, rotating by size)
@@ -136,6 +173,7 @@ def setup_logging(
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(json_formatter)
     error_handler.addFilter(version_filter)
+    error_handler.addFilter(sensitive_filter)
     root_logger.addHandler(error_handler)
 
     # Console handler for development (human-readable)
@@ -143,6 +181,7 @@ def setup_logging(
     console_handler.setLevel(getattr(logging, log_level.upper()))  # Respect configured log level
     console_formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(console_formatter)
+    console_handler.addFilter(sensitive_filter)
     root_logger.addHandler(console_handler)
 
     # Debug handler for detailed logging (only in DEBUG mode)
@@ -157,6 +196,7 @@ def setup_logging(
         debug_handler.setLevel(logging.DEBUG)
         debug_handler.setFormatter(json_formatter)
         debug_handler.addFilter(version_filter)
+        debug_handler.addFilter(sensitive_filter)
         root_logger.addHandler(debug_handler)
 
     # Optional: Remote syslog handler
@@ -169,6 +209,7 @@ def setup_logging(
             syslog_handler.setLevel(logging.INFO)
             syslog_handler.setFormatter(json_formatter)
             syslog_handler.addFilter(version_filter)
+            syslog_handler.addFilter(sensitive_filter)
             root_logger.addHandler(syslog_handler)
 
             logging.info(f"Remote syslog enabled: {syslog_host}:{syslog_port}")

@@ -3,7 +3,7 @@ Repository pattern for database access
 """
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, and_, delete, func
@@ -63,8 +63,8 @@ class UserRepository:
             today_usage_seconds=0,
             last_reset_date=date.today(),
             total_usage_seconds=0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         self.session.add(user)
         await self.session.flush()
@@ -78,7 +78,7 @@ class UserRepository:
         )
         user.today_usage_seconds += duration_seconds
         user.total_usage_seconds += duration_seconds
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
         logger.debug(
             f"Usage updated: today={user.today_usage_seconds}s, total={user.total_usage_seconds}s"
@@ -89,21 +89,21 @@ class UserRepository:
         """Reset user's daily quota."""
         user.today_usage_seconds = 0
         user.last_reset_date = date.today()
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
         return user
 
     async def set_unlimited(self, user: User, is_unlimited: bool) -> User:
         """Set user's unlimited status."""
         user.is_unlimited = is_unlimited
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
         return user
 
     async def update_quota(self, user: User, new_quota_seconds: int) -> User:
         """Update user's daily quota limit."""
         user.daily_quota_seconds = new_quota_seconds
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
         return user
 
@@ -153,8 +153,8 @@ class UsageRepository:
             llm_processing_time_seconds=llm_processing_time_seconds,
             original_file_path=original_file_path,
             parent_usage_id=parent_usage_id,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         self.session.add(usage)
         await self.session.flush()
@@ -210,7 +210,7 @@ class UsageRepository:
         if original_file_path is not None:
             usage.original_file_path = original_file_path
 
-        usage.updated_at = datetime.utcnow()
+        usage.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
         await self.session.refresh(usage)
         logger.debug(f"Usage updated: id={usage_id}")
@@ -262,7 +262,7 @@ class UsageRepository:
         from pathlib import Path
         from datetime import timedelta
 
-        cutoff_date = datetime.utcnow() - timedelta(days=ttl_days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=ttl_days)
         logger.info(f"Cleaning up audio files older than {ttl_days} days (before {cutoff_date})")
 
         # Get all usage records with files older than TTL
@@ -315,7 +315,7 @@ class TransactionRepository:
             status="pending",
             provider=provider,
             provider_transaction_id=provider_transaction_id,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
         self.session.add(transaction)
         await self.session.flush()
@@ -331,14 +331,14 @@ class TransactionRepository:
     async def mark_completed(self, transaction: Transaction) -> Transaction:
         """Mark transaction as completed."""
         transaction.status = "completed"
-        transaction.completed_at = datetime.utcnow()
+        transaction.completed_at = datetime.now(timezone.utc)
         await self.session.flush()
         return transaction
 
     async def mark_failed(self, transaction: Transaction) -> Transaction:
         """Mark transaction as failed."""
         transaction.status = "failed"
-        transaction.completed_at = datetime.utcnow()
+        transaction.completed_at = datetime.now(timezone.utc)
         await self.session.flush()
         return transaction
 
@@ -382,8 +382,8 @@ class TranscriptionStateRepository:
             timestamps_enabled=False,
             is_file_message=is_file_message,
             file_message_id=file_message_id,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         self.session.add(state)
         await self.session.flush()
@@ -419,7 +419,7 @@ class TranscriptionStateRepository:
 
     async def update(self, state: TranscriptionState) -> TranscriptionState:
         """Update transcription state."""
-        state.updated_at = datetime.utcnow()
+        state.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
         await self.session.refresh(state)
         return state
@@ -458,8 +458,8 @@ class TranscriptionVariantRepository:
             generated_by=generated_by,
             llm_model=llm_model,
             processing_time_seconds=processing_time_seconds,
-            created_at=datetime.utcnow(),
-            last_accessed_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            last_accessed_at=datetime.now(timezone.utc),
         )
         self.session.add(variant)
         await self.session.flush()
@@ -499,6 +499,15 @@ class TranscriptionVariantRepository:
             .order_by(TranscriptionVariant.created_at.desc())
         )
         return list(result.scalars().all())
+
+    async def count_by_usage_id(self, usage_id: int) -> int:
+        """Count variants for a usage record."""
+        result = await self.session.execute(
+            select(func.count(TranscriptionVariant.id)).where(
+                TranscriptionVariant.usage_id == usage_id
+            )
+        )
+        return result.scalar_one()
 
     async def delete_by_usage_id(self, usage_id: int) -> int:
         """Delete all variants for a usage record (Phase 8).
@@ -551,7 +560,7 @@ class TranscriptionSegmentRepository:
                 start_time=start_time,
                 end_time=end_time,
                 text=text,
-                created_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
             )
             segment_objects.append(segment)
             self.session.add(segment)

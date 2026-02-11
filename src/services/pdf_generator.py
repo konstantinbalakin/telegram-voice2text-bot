@@ -1,5 +1,7 @@
 """PDF generation service using WeasyPrint."""
 
+from __future__ import annotations
+
 import io
 import logging
 import re
@@ -9,6 +11,16 @@ from weasyprint import HTML  # type: ignore[import-untyped]
 from weasyprint.text.fonts import FontConfiguration  # type: ignore[import-untyped]
 
 logger = logging.getLogger(__name__)
+
+_pdf_generator: PDFGenerator | None = None
+
+
+def _get_pdf_generator() -> PDFGenerator:
+    """Get or create the singleton PDFGenerator instance."""
+    global _pdf_generator
+    if _pdf_generator is None:
+        _pdf_generator = PDFGenerator()
+    return _pdf_generator
 
 
 class PDFGenerator:
@@ -240,7 +252,7 @@ def create_file_object(
         Tuple of (file BytesIO object with .name set, file extension string "PDF" or "TXT")
     """
     try:
-        gen = pdf_generator or PDFGenerator()
+        gen = pdf_generator or _get_pdf_generator()
         pdf_bytes = gen.generate_pdf(text)
         file_obj = io.BytesIO(pdf_bytes)
         file_obj.name = f"{filename_prefix}.pdf"

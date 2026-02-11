@@ -325,6 +325,18 @@ class QueueManager:
                     self._processing_requests.remove(request)
                 self._total_pending -= 1  # Decrement counter when request completes
                 self._queue.task_done()
+                # Schedule cleanup of result to prevent memory leak
+                asyncio.create_task(self._schedule_cleanup(request_id))
+
+    async def _schedule_cleanup(self, request_id: str, delay: float = 300.0) -> None:
+        """Schedule cleanup of a result after a delay to prevent memory leaks.
+
+        Args:
+            request_id: Request ID whose result should be cleaned up
+            delay: Delay in seconds before cleaning up (default: 300)
+        """
+        await asyncio.sleep(delay)
+        self._results.pop(request_id, None)
 
     def get_stats(self) -> dict:
         """Get queue statistics.
@@ -338,6 +350,7 @@ class QueueManager:
             "max_queue_size": self._max_queue_size,
             "max_concurrent": self._max_concurrent,
             "results_cached": len(self._results),
+            "results_pending": len(self._results),
         }
 
     def set_on_queue_changed(self, callback: Callable[[], Awaitable[None]]) -> None:
