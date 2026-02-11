@@ -38,6 +38,15 @@ def encode_callback_data(action: str, usage_id: int, **params: Any) -> str:
     return result
 
 
+_VALID_ACTIONS = frozenset(
+    ["mode", "length", "emoji", "timestamps", "retranscribe_menu", "retranscribe", "back", "noop"]
+)
+
+_VALID_MODES = frozenset(["original", "structured", "summary", "magic"])
+_VALID_LENGTH_DIRECTIONS = frozenset(["shorter", "longer"])
+_VALID_EMOJI_DIRECTIONS = frozenset(["increase", "decrease", "few", "moderate"])
+
+
 def decode_callback_data(data: str) -> dict:
     """
     Decode callback data from compact format.
@@ -47,14 +56,55 @@ def decode_callback_data(data: str) -> dict:
 
     Returns:
         Dictionary with action, usage_id, and additional parameters
+
+    Raises:
+        ValueError: If data is empty, malformed, or contains invalid values
     """
+    if not data or not isinstance(data, str):
+        raise ValueError("Callback data must be a non-empty string")
+
     parts = data.split(":")
-    result = {"action": parts[0], "usage_id": int(parts[1])}
+    if len(parts) < 2:
+        raise ValueError(
+            f"Callback data must have at least 2 parts (action:usage_id), got: {data!r}"
+        )
+
+    action = parts[0]
+    if action not in _VALID_ACTIONS:
+        raise ValueError(f"Invalid action {action!r}, expected one of {sorted(_VALID_ACTIONS)}")
+
+    try:
+        usage_id = int(parts[1])
+    except ValueError:
+        raise ValueError(f"usage_id must be an integer, got: {parts[1]!r}")
+
+    result: dict[str, Any] = {"action": action, "usage_id": usage_id}
 
     if len(parts) > 2:
         for param in parts[2].split(","):
-            key, value = param.split("=")
+            if "=" not in param:
+                raise ValueError(f"Invalid parameter format {param!r}, expected key=value")
+            key, value = param.split("=", 1)
             result[key] = value
+
+    # Validate action-specific parameters
+    if action == "mode" and "mode" in result:
+        if result["mode"] not in _VALID_MODES:
+            raise ValueError(
+                f"Invalid mode {result['mode']!r}, expected one of {sorted(_VALID_MODES)}"
+            )
+    if action == "length" and "direction" in result:
+        if result["direction"] not in _VALID_LENGTH_DIRECTIONS:
+            raise ValueError(
+                f"Invalid length direction {result['direction']!r}, "
+                f"expected one of {sorted(_VALID_LENGTH_DIRECTIONS)}"
+            )
+    if action == "emoji" and "direction" in result:
+        if result["direction"] not in _VALID_EMOJI_DIRECTIONS:
+            raise ValueError(
+                f"Invalid emoji direction {result['direction']!r}, "
+                f"expected one of {sorted(_VALID_EMOJI_DIRECTIONS)}"
+            )
 
     return result
 

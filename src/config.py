@@ -159,6 +159,9 @@ class Settings(BaseSettings):
     )
 
     # Quotas
+    enable_quota_check: bool = Field(
+        default=False, description="Enable per-user daily quota check before transcription"
+    )
     default_daily_quota_seconds: int = Field(
         default=60, description="Default daily quota in seconds"
     )

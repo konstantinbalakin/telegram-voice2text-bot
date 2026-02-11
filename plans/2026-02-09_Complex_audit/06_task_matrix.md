@@ -1,7 +1,7 @@
 # Матрица задач аудита: цикл разработки и зависимости
 
 **Дата:** 2026-02-09
-**Обновлено:** 2026-02-10 (ревизия 3 — Волна 1 QF: 22 из 23 задач выполнены)
+**Обновлено:** 2026-02-11 (ревизия 4 — Волна 2 D+T: 13 из 13 задач выполнены, PR #98)
 
 ## Легенда: типы цикла разработки
 
@@ -49,14 +49,14 @@
 
 | ID | Задача | Тип | Приоритет | Статус | Файлы | Блокирует | Зависит от | Комментарий |
 |----|--------|-----|-----------|--------|-------|-----------|------------|-------------|
-| S1 | IDOR: добавить проверку владельца в callback queries | D+T | P0 | NEW | `callbacks.py`, тест | T3 | — | Добавить `user_id` check в `handle_callback_query`. Нужен тест на авторизацию. Независимая задача |
+| S1 | IDOR: добавить проверку владельца в callback queries | D+T | P0 | DONE | `callbacks.py`, тест | T3 | — | Проверка `user_id` в `handle_callback_query` через `UserRepository`. Тест: `test_idor_check.py` (3 теста). PR #98 |
 | S2 | Добавить timeout ко всем subprocess.run() | QF | P0 | DONE | `audio_handler.py` | — | — | Механическая правка: `timeout=300` к ~10 вызовам. **Внимание:** если P1 делается первым, S2 поглощается P1 (ставить SKIP) |
-| S3 | Per-user rate limiting | A+D+T | P0 | NEW | `handlers.py`, `config.py`, `repositories.py`, тесты | — | — | Нужен анализ: где ставить лимит (handler vs queue). `default_daily_quota_seconds` уже есть, но не используется. Нужна логика проверки + тесты |
-| S4 | Фильтрация bot token из DEBUG логов | D+T | P1 | NEW | `logging_config.py`, тест | — | — | Написать кастомный logging.Filter + тест |
+| S3 | Per-user rate limiting | A+D+T | P0 | DONE | `handlers.py`, `config.py`, тесты | — | — | Метод `_check_quota()` + `enable_quota_check` в config (по умолчанию выключен). Тест: `test_quota_check.py` (9 тестов). PR #98 |
+| S4 | Фильтрация bot token из DEBUG логов | D+T | P1 | DONE | `logging_config.py`, `main.py`, тест | — | — | `SensitiveDataFilter` маскирует токены во всех log handlers. Тест: `test_logging_filter.py` (7 тестов). PR #98 |
 | S5 | Маскировать database URL в логах | QF | P1 | DONE | `main.py` | — | — | Заменить `{settings.database_url}` на маскированную версию. 1 строка |
 | S6 | Маскировать API key (показывать меньше символов) | QF | P2 | DONE | `llm_service.py:122` | — | — | Заменить `[:8]` на `[:4]`. 1 строка |
-| S7 | Валидация callback_data в decode_callback_data | D+T | P2 | NEW | `keyboards.py`, тест | — | — | Добавить проверку типов и допустимых значений + тест |
-| S8 | Проверка лимита вариантов транскрипции | D+T | P2 | NEW | `callbacks.py`, `config.py`, тест | — | — | Добавить count check перед созданием. `max_cached_variants_per_transcription=10` уже в config |
+| S7 | Валидация callback_data в decode_callback_data | D+T | P2 | DONE | `keyboards.py`, тест | — | — | Валидация action, usage_id, параметров mode/length/emoji. Тесты в `test_keyboards.py`. PR #98 |
+| S8 | Проверка лимита вариантов транскрипции | D+T | P2 | DONE | `callbacks.py`, `repositories.py`, тест | — | — | `_check_variant_limit()` + `count_by_usage_id()` в repos. Проверяет `max_cached_variants_per_transcription`. PR #98 |
 | S9 | Исправить Docker HEALTHCHECK | QF | P2 | DONE | `Dockerfile` | — | — | Заменить заглушку на `CMD python -m src.health_check`. 1 строка |
 | S10 | Telethon session — минимальные права на файл | QF | P3 | DONE | `telegram_client.py` | — | — | Добавить `os.chmod(session_path, 0o600)` после создания |
 | S11 | Предсказуемые имена persistent файлов → UUID | QF | P3 | DONE | `handlers.py:134` | — | — | Заменить `{usage_id}_{file_identifier}` на UUID. Путь сохраняется в DB, поэтому формат имени не влияет на lookup |
@@ -71,12 +71,12 @@
 |----|--------|-----|-----------|--------|-------|-----------|------------|-------------|
 | P1 | subprocess.run() → asyncio.create_subprocess_exec() | A+D+T | P0 | NEW | `audio_handler.py` (~10 вызовов), тесты | — | — | Переписать ~10 subprocess вызовов на async. **Поглощает S2** — если P1 делается, S2 не нужен. Обновить тесты audio_handler |
 | P2 | pydub chunking → ffmpeg streaming chunking | A+D+T | P1 | NEW | `openai_provider.py:339-395`, тест | — | — | Заменить `AudioSegment.from_file()` на `ffmpeg -ss -t`. Нужно спроектировать новый метод + тест |
-| P3 | Очистка _results dict в queue_manager | D+T | P1 | NEW | `queue_manager.py`, тест | — | — | Добавить cleanup после обработки callback. Нужен тест на отсутствие утечки |
+| P3 | Очистка _results dict в queue_manager | D+T | P1 | DONE | `queue_manager.py`, тест | — | — | `_schedule_cleanup()` удаляет результат через 300с. Тесты в `test_queue_manager.py`. PR #98 |
 | P4 | SQL SUM вместо загрузки всех записей | QF | P1 | DONE | `repositories.py:229-233` | P5 | — | Заменить `select(Usage)` + Python sum на `select(func.sum(...))`. 5 строк |
-| P5 | Исправить stats_command (limit=10 → агрегации) | D+T | P1 | NEW | `handlers.py:328-341`, `repositories.py`, тест | — | P4 | Зависит от P4 (нужен метод с SQL SUM). Добавить count_by_user_id + total_duration |
+| P5 | Исправить stats_command (limit=10 → агрегации) | D+T | P1 | DONE | `handlers.py`, `repositories.py` | — | P4 | SQL `COUNT`/`SUM` через `count_by_user_id()` и `get_user_total_duration()`. PR #98 |
 | P6 | Убрать UPDATE last_accessed_at при каждом SELECT | QF | P2 | DONE | `repositories.py:493-496` | P11 | — | Удалить 3 строки auto-update. last_accessed_at нигде не используется для логики, только для потенциального будущего LRU |
 | P7 | Bulk DELETE вместо N+1 для вариантов | QF | P2 | DONE | `repositories.py:509-527` | — | — | Заменить цикл на `delete(TranscriptionVariant).where(...)`. По аналогии с segments |
-| P8 | PDFGenerator — singleton вместо пересоздания | D+T | P2 | NEW | `callbacks.py`, `handlers.py`, `main.py` | — | — | Создать один экземпляр и передавать через конструкторы. Затрагивает 3 файла — нужно аккуратно |
+| P8 | PDFGenerator — singleton вместо пересоздания | D+T | P2 | DONE | `pdf_generator.py` | — | — | Module-level lazy singleton `_get_pdf_generator()`, без изменений конструкторов handlers/callbacks. PR #98 |
 | P9 | httpx клиент — connection pooling | QF | P2 | DONE | `audio_handler.py:147-161` | — | — | Создать `self._http_client` в `__init__`, переиспользовать. Не забыть `aclose()` в cleanup |
 | P10 | Кеширование segments в callbacks | QF | P2 | SKIP | `callbacks.py` (несколько мест) | — | — | Строки 453 и 711 в разных code paths (error handler vs normal flow), дупликация не подтверждена |
 | P11 | Двойной get_variant → UPSERT | D+T | P2 | NEW | `callbacks.py:410-416`, `repositories.py`, тест | — | P6 | Лучше после P6 (убрать auto-update). Добавить upsert метод |
@@ -95,8 +95,8 @@
 | A2 | Разбить _process_transcription на 4-5 методов | FULL | P2 | NEW | `handlers.py` | T4 | A1 | Делать после A1. Выделить _preprocess, _transcribe, _handle_structure, _handle_hybrid, _send_result, _finalize |
 | A3 | Выделить TranscriptionOrchestrator в сервисный слой | FULL | P2 | NEW | Новый `services/transcription_orchestrator.py`, `handlers.py`, `main.py` | T5, T13 | A1, A2 | Самый масштабный рефакторинг. Делать ПОСЛЕ A1+A2 |
 | A4 | Объединить дупликацию генерации вариантов в callbacks | FULL | P2 | NEW | `callbacks.py` | T3 | A9 (рек.) | Выделить _generate_variant(). **Рекомендация:** сначала A9 (PDF fallback) — он войдёт в состав |
-| A5 | Создать иерархию бизнес-исключений | D+T | P2 | NEW | Новый `exceptions.py`, обновить handlers, callbacks, services | — | — | **Рекомендация:** делать ДО A1-A4, чтобы использовать новые исключения при рефакторинге |
-| A6 | datetime.utcnow() → datetime.now(timezone.utc) | D+T | P2 | NEW | `models.py`, `repositories.py` (30+ мест) | — | — | 30+ замен. Нужно прогнать тесты — naive vs aware datetime могут конфликтовать при сравнениях. Изменено QF→D+T |
+| A5 | Создать иерархию бизнес-исключений | D+T | P2 | DONE | `exceptions.py` (новый), тест | — | — | `BotError` → `TranscriptionError`, `QuotaExceededError`, `FileProcessingError`, `LLMProcessingError`, `AuthorizationError`, `VariantLimitError`, `StateNotFoundError`. Тест: `test_exceptions.py` (7 тестов). PR #98 |
+| A6 | datetime.utcnow() → datetime.now(timezone.utc) | D+T | P2 | DONE | `models.py`, `repositories.py` | — | — | ~30 замен в models (default/onupdate lambda) и repositories. Все тесты проходят. PR #98 |
 | A7 | Вынести magic numbers в константы | QF | P3 | DONE | `handlers.py`, `openai_provider.py` | — | — | 2GB, 25MB, 224 tokens → именованные константы |
 | A8 | format_wait_time() — убрать дупликацию | QF | P2 | DONE | `handlers.py` | A1 (рек.) | — | Выделить функцию из 5 копий. **Рекомендация:** делать ДО A1, чтобы A1 уже работал с готовой функцией |
 | A9 | PDF fallback — выделить create_file_object() | QF | P2 | DONE | `handlers.py`, `callbacks.py`, `pdf_generator.py` | A4 (рек.) | — | Выделить утилиту из 4 копий. **Рекомендация:** делать ДО A4 |
@@ -111,12 +111,12 @@
 
 | ID | Задача | Тип | Приоритет | Статус | Файлы | Блокирует | Зависит от | Комментарий |
 |----|--------|-----|-----------|--------|-------|-----------|------------|-------------|
-| T1 | Тесты для keyboards.py (encode/decode/create) | D+T | P1 | NEW | `tests/unit/test_keyboards.py` (новый) | — | — | **Low-hanging fruit.** Чистые функции. 10-15 тестов: roundtrip, 64-byte limit, invalid data, create_keyboard |
-| T2 | Тесты для split_text() | D+T | P1 | NEW | `tests/unit/test_split_text.py` (новый) | — | — | Чистая функция, независимая от рефакторинга. 8-10 тестов: пустая строка, =4096, >4096, без пробелов, Unicode |
+| T1 | Тесты для keyboards.py (encode/decode/create) | D+T | P1 | DONE | `tests/unit/test_keyboards.py` (новый) | — | — | 32 теста: roundtrip, 64-byte limit, invalid data, action validation, create_keyboard. PR #98 |
+| T2 | Тесты для split_text() | D+T | P1 | DONE | `tests/unit/test_split_text.py` (новый) | — | — | 14 тестов: пустая строка, лимит, Unicode, emoji, разбиение по границам предложений/слов. PR #98 |
 | T3 | Тесты для CallbackHandlers | A+D+T | P1 | NEW | `tests/unit/test_callbacks.py` (новый) | — | S1, A4 | Лучше после S1 (IDOR fix) и A4 (рефакторинг). Но LEVEL_TRANSITIONS и routing можно тестировать сразу |
 | T4 | Тесты для handlers (после рефакторинга) | A+D+T | P2 | NEW | `tests/unit/test_handlers.py` (новый) | — | A1, A2 | **Зависит от A1+A2!** Тестировать God Object бессмысленно — сначала разбить |
 | T5 | Тесты для TranscriptionOrchestrator | D+T | P2 | NEW | `tests/unit/test_orchestrator.py` (новый) | — | A3 | **Зависит от A3!** Тестировать только после выделения сервиса |
-| T6 | Тесты для QueueManager | D+T | P1 | NEW | `tests/unit/test_queue_manager.py` (новый) | — | — | Независимая. Тесты enqueue/dequeue, concurrency, rate limits, queue overflow. pytest-asyncio |
+| T6 | Тесты для QueueManager | D+T | P1 | DONE | `tests/unit/test_queue_manager.py` (новый) | — | — | Async-тесты: init, enqueue, QueueFull, start/stop worker, get_stats, position, wait time. PR #98 |
 | T7 | Тесты для config.py (валидаторы) | D+T | P2 | NEW | `tests/unit/test_config.py` (новый) | — | — | Независимая. Тесты валидаторов, default значений, env переменных |
 | T8 | Тесты для progress_tracker | D+T | P2 | NEW | `tests/unit/test_progress_tracker.py` (новый) | — | — | Тесты _format_time, start/stop, RetryAfter handling |
 | T9 | Тесты для db_retry decorator | D+T | P3 | NEW | `tests/unit/test_db_retry.py` (новый) | — | — | Тесты retry на "database is locked", max_attempts, backoff |

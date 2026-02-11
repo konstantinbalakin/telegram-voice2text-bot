@@ -14,6 +14,7 @@ from src.storage.repositories import (
     TranscriptionVariantRepository,
     TranscriptionSegmentRepository,
     UsageRepository,
+    UserRepository,
 )
 from src.services.text_processor import TextProcessor
 from src.services.progress_tracker import ProgressTracker
@@ -48,6 +49,7 @@ class CallbackHandlers:
         usage_repo: "UsageRepository",
         text_processor: Optional[TextProcessor] = None,
         bot_handlers: Optional["BotHandlers"] = None,
+        user_repo: Optional["UserRepository"] = None,
     ):
         """
         Initialize callback handlers.
@@ -59,6 +61,7 @@ class CallbackHandlers:
             usage_repo: Repository for usage records
             text_processor: Text processor for LLM operations (optional)
             bot_handlers: BotHandlers instance for retranscription (optional, Phase 8)
+            user_repo: Repository for user records (optional, for ownership checks)
         """
         self.state_repo = state_repo
         self.variant_repo = variant_repo
@@ -66,6 +69,22 @@ class CallbackHandlers:
         self.usage_repo = usage_repo
         self.text_processor = text_processor
         self.bot_handlers = bot_handlers
+        self.user_repo = user_repo
+
+    async def _check_variant_limit(self, usage_id: int) -> bool:
+        """Check if the variant limit for a transcription has been reached.
+
+        Returns:
+            True if the limit has been reached, False otherwise.
+        """
+        count = await self.variant_repo.count_by_usage_id(usage_id)
+        if count >= settings.max_cached_variants_per_transcription:
+            logger.warning(
+                f"Variant limit reached: usage_id={usage_id}, count={count}, "
+                f"limit={settings.max_cached_variants_per_transcription}"
+            )
+            return True
+        return False
 
     async def update_transcription_display(
         self,
@@ -244,6 +263,23 @@ class CallbackHandlers:
             await query.answer("Ошибка обработки", show_alert=True)
             return
 
+        # IDOR protection: verify the user pressing the button owns the transcription
+        usage_id = data.get("usage_id")
+        if usage_id is not None and self.user_repo:
+            usage = await self.usage_repo.get_by_id(usage_id)
+            if not usage:
+                logger.warning(f"IDOR check: usage_id={usage_id} not found")
+                await query.answer("Доступ запрещён", show_alert=True)
+                return
+            owner = await self.user_repo.get_by_id(usage.user_id)
+            if not owner or owner.telegram_id != query.from_user.id:
+                logger.warning(
+                    f"IDOR blocked: user {query.from_user.id} tried to access "
+                    f"usage_id={usage_id} owned by user_id={usage.user_id}"
+                )
+                await query.answer("Доступ запрещён", show_alert=True)
+                return
+
         # Route to appropriate handler
         try:
             if action == "mode":
@@ -406,6 +442,10 @@ class CallbackHandlers:
                         )
                         variant = existing_variant
                     else:
+                        # Check variant limit before creating
+                        if await self._check_variant_limit(usage_id):
+                            await query.answer("Достигнут лимит вариантов", show_alert=True)
+                            return
                         # Create new variant
                         # For emoji_level=1, structured prompt already generates minimal emojis
                         # For emoji_level=0, would need to remove emojis (handled by emoji toggle)
@@ -518,6 +558,10 @@ class CallbackHandlers:
                         )
                         variant = existing_variant
                     else:
+                        # Check variant limit before creating
+                        if await self._check_variant_limit(usage_id):
+                            await query.answer("Достигнут лимит вариантов", show_alert=True)
+                            return
                         # Create new variant
                         variant = await self.variant_repo.create(
                             usage_id=usage_id,
@@ -627,6 +671,10 @@ class CallbackHandlers:
                         )
                         variant = existing_variant
                     else:
+                        # Check variant limit before creating
+                        if await self._check_variant_limit(usage_id):
+                            await query.answer("Достигнут лимит вариантов", show_alert=True)
+                            return
                         # Create new variant
                         variant = await self.variant_repo.create(
                             usage_id=usage_id,
