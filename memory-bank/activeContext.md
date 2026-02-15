@@ -1,11 +1,11 @@
 # Active Context: Telegram Voice2Text Bot
 
-## Current Status (2026-01-27)
+## Current Status (2026-02-15)
 
-**Phase**: Infrastructure Maintenance & Optimization 🔧
-**Stage**: Package Manager Migration COMPLETE ✅ (Poetry → UV)
-**Branch**: refactor/poetry-to-uv (ready to merge)
-**Production Version**: v0.0.3+ (commit 04837c1)
+**Phase**: Code Audit Wave 4 — Architectural Refactoring ✅ COMPLETE
+**Stage**: All 5 tasks (A1, A2, A3, A4, A13) implemented and verified
+**Branch**: refactor/audit-wave4
+**Production Version**: v0.0.3+
 **Production Status**: ✅ OPERATIONAL
 
 ### Infrastructure
@@ -38,54 +38,24 @@
 
 ## Recent Developments (Last 2 Weeks)
 
-### ✅ Package Manager Migration: Poetry → UV (2026-01-27)
+### ✅ Code Audit Wave 4: Architectural Refactoring (2026-02-15)
 
-**What**: Complete migration from Poetry to UV for faster, standards-compliant dependency management
+**What**: Major architectural refactoring — 5 tasks eliminating God Object pattern and service duplication
 
-**Key Implementation**:
+**Tasks Completed**:
 
-**Этап 1: UV Lock & Verification**
-1. ✅ Установлен Python 3.11 через Homebrew
-2. ✅ Создан `uv.lock` (95 пакетов)
-3. ✅ Исправлен email в `pyproject.toml` (PEP 621 валидация)
-4. ✅ Все 181 тест прошли успешно
+1. **A1: Unified Media Handlers** — 4 duplicated handlers (voice/audio/document/video) consolidated into `MediaInfo` dataclass + `_extract_media_info()` + `_handle_media_message()` + 4 thin wrappers. handlers.py: 2239 → 786 lines (−65%).
 
-**Этап 2-3: CI/CD Migration**
-1. ✅ `.github/workflows/ci.yml` - заменён Poetry на `astral-sh/setup-uv@v4`
-2. ✅ `.github/workflows/build-and-tag.yml` - заменён на UV workflow
+2. **A2: Split _process_transcription** — Monolithic 506-line method decomposed into `_preprocess_audio`, `_run_transcription`, `_apply_structuring`, `_apply_refinement`, `_finalize_and_send` + orchestrator.
 
-**Этап 4: Scripts & Configuration**
-1. ✅ `.claude/settings.json` - все `poetry run` → `uv run`
-2. ✅ `.dockerignore` - обновлён для UV
-3. ✅ `scripts/update-requirements.sh` - удалён (используйте `make deps`)
+3. **A3: TranscriptionOrchestrator** — Business logic extracted from BotHandlers into new `src/services/transcription_orchestrator.py` (792 lines). handlers.py now only handles Telegram message routing.
 
-**Этап 5: Documentation Updates** (10 файлов):
-1. ✅ `docs/getting-started/installation.md`
-2. ✅ `docs/getting-started/quick-start.md`
-3. ✅ `docs/development/dependencies.md`
-4. ✅ `docs/development/testing.md`
-5. ✅ `docs/development/database-migrations.md`
-6. ✅ `docs/getting-started/configuration.md`
-7. ✅ `docs/features/llm-integration.md`
-8. ✅ `docs/README.md`
-9. ✅ `README.md`
-10. ✅ `PHASE1_ACCEPTANCE.md`
-11. ✅ `CLAUDE.md` - добавлены команды разработки
-12. ✅ `memory-bank/techContext.md` - обновлён стек
+4. **A4: Callbacks Deduplication** — 3 duplicate variant generation blocks in callbacks.py unified into `_generate_variant()` method + `MODE_LABELS` constant. callbacks.py: 1295 → 1154 lines (−11%).
 
-**Этап 6: Finalization**
-1. ✅ `poetry.lock` удалён
-2. ✅ `uv.lock` создан и зафиксирован
-3. ✅ Ветка `refactor/poetry-to-uv` создана
+5. **A13: AsyncService Protocol** — New `src/services/lifecycle.py` with `AsyncService` Protocol. `TranscriptionProvider.initialize()` changed from sync to async. Services adapted with lifecycle methods. Tests in `test_lifecycle.py`.
 
-**Benefits**:
-- **Speed**: UV значительно быстрее Poetry (Rust-based)
-- **Standards**: PEP 621 compliant `pyproject.toml`
-- **Simplicity**: Меньше файлов конфигурации
-- **Reliability**: Все 181 тест прошли успешно
-- **CI/CD**: Обновлённые пайплайны работают корректно
-
-**Status**: ✅ Complete, ready for merge and deployment
+**Verification**: ruff ✅, black ✅, mypy ✅, 444 tests passed ✅
+**Files Changed**: 16 files (13 modified + 3 new), −2104/+562 lines (existing) + 1007 lines (new)
 
 ---
 

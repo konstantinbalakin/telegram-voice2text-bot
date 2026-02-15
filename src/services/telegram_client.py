@@ -66,6 +66,18 @@ class TelegramClientService:
             self._started = False
             logger.info("Telethon client stopped")
 
+    async def initialize(self) -> None:
+        """Initialize the service (start Telethon client)."""
+        await self.start()
+
+    async def shutdown(self) -> None:
+        """Shutdown the service (stop Telethon client)."""
+        await self.stop()
+
+    def is_initialized(self) -> bool:
+        """Check if the service is initialized and ready."""
+        return self._started
+
     async def download_large_file(
         self,
         message_id: int,

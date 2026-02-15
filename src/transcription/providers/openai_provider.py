@@ -76,7 +76,7 @@ class OpenAIProvider(TranscriptionProvider):
 
         return None  # whisper-1 or other - no format requirements
 
-    def initialize(self) -> None:
+    async def initialize(self) -> None:
         """Initialize the OpenAI API client."""
         if self._initialized:
             logger.warning("OpenAIProvider already initialized")

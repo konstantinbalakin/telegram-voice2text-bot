@@ -37,7 +37,7 @@ async def initialized_provider():
     ) as mock_model_class:
         mock_model = MagicMock()
         mock_model_class.return_value = mock_model
-        provider.initialize()
+        await provider.initialize()
         provider._model = mock_model
 
     yield provider
@@ -56,7 +56,8 @@ class TestFasterWhisperProviderInit:
         assert provider.beam_size == 1
         assert not provider.is_initialized()
 
-    def test_provider_initialization(self):
+    @pytest.mark.asyncio
+    async def test_provider_initialization(self):
         """Test provider initialization loads model."""
         provider = FastWhisperProvider(model_size="tiny", device="cpu")
 
@@ -66,7 +67,7 @@ class TestFasterWhisperProviderInit:
             mock_model = MagicMock()
             mock_model_class.return_value = mock_model
 
-            provider.initialize()
+            await provider.initialize()
 
             assert provider.is_initialized()
             assert provider._model is not None
@@ -136,7 +137,7 @@ class TestFasterWhisperProviderShutdown:
         provider = FastWhisperProvider(model_size="tiny")
 
         with patch("src.transcription.providers.faster_whisper_provider.WhisperModel"):
-            provider.initialize()
+            await provider.initialize()
             assert provider.is_initialized()
 
             await provider.shutdown()

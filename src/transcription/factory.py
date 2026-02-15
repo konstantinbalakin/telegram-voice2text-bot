@@ -21,7 +21,7 @@ from src.transcription.routing.strategies import (
 logger = logging.getLogger(__name__)
 
 
-def create_transcription_router() -> TranscriptionRouter:
+async def create_transcription_router() -> TranscriptionRouter:
     """
     Create transcription router with configured providers and strategy.
 
@@ -180,7 +180,7 @@ def create_transcription_router() -> TranscriptionRouter:
         initialized_providers = {}
         for name, provider in providers.items():
             try:
-                provider.initialize()
+                await provider.initialize()
                 logger.info(f"✓ Provider '{name}' initialized")
                 initialized_providers[name] = provider
             except Exception as e:
@@ -204,7 +204,7 @@ def create_transcription_router() -> TranscriptionRouter:
         )
 
     # Create routing strategy with initialized providers
-    strategy = _create_routing_strategy(providers)
+    strategy = await _create_routing_strategy(providers)
 
     # Create router
     router = TranscriptionRouter(providers=providers, strategy=strategy)
@@ -213,7 +213,7 @@ def create_transcription_router() -> TranscriptionRouter:
     return router
 
 
-def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> RoutingStrategy:
+async def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> RoutingStrategy:
     """
     Create routing strategy based on configuration.
 
@@ -369,7 +369,7 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
                     beam_size=settings.faster_whisper_beam_size,
                     vad_filter=settings.faster_whisper_vad_filter,
                 )
-                providers["faster-whisper"].initialize()
+                await providers["faster-whisper"].initialize()
                 logger.info(f"✓ Configured provider: faster-whisper (model={model_name})")
             elif provider_name == "openai":
                 if not settings.openai_api_key:
@@ -379,7 +379,7 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
                     model=model_name,
                     timeout=settings.openai_timeout,
                 )
-                providers["openai"].initialize()
+                await providers["openai"].initialize()
                 logger.info(f"✓ Configured provider: openai (model={model_name})")
             else:
                 raise ValueError(
@@ -419,7 +419,7 @@ def _create_routing_strategy(providers: dict[str, TranscriptionProvider]) -> Rou
 _router_instance: Optional[TranscriptionRouter] = None
 
 
-def get_transcription_router() -> TranscriptionRouter:
+async def get_transcription_router() -> TranscriptionRouter:
     """
     Get or create global transcription router instance.
 
@@ -428,7 +428,7 @@ def get_transcription_router() -> TranscriptionRouter:
     """
     global _router_instance
     if _router_instance is None:
-        _router_instance = create_transcription_router()
+        _router_instance = await create_transcription_router()
     return _router_instance
 
 

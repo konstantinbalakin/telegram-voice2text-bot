@@ -20,6 +20,17 @@
 - **Branch**: `refactor/poetry-to-uv`
 - **Status**: Ready for merge to main
 
+### Code Audit & Refactoring (2026-02)
+- **Wave 1 (QF)**: 22 quick-fix tasks ✅ (2026-02-11)
+- **Wave 2**: 13 security/performance/test tasks ✅ (2026-02-12)
+- **Wave 3**: 9 performance/security/test tasks ✅ (2026-02-13)
+- **Wave 4**: 5 architectural refactoring tasks ✅ (2026-02-15)
+  - A1: Unified 4 media handlers into `_handle_media_message()` (handlers.py: 2239→786 lines)
+  - A2: Split `_process_transcription` into 5 focused methods
+  - A3: Extracted `TranscriptionOrchestrator` to service layer
+  - A4: Deduplicated variant generation in callbacks.py
+  - A13: Created `AsyncService` protocol, async `initialize()` for providers
+
 ## Completed Phases
 
 ### Infrastructure & Core (Phases 1-7.4)
@@ -229,6 +240,9 @@ OPENAI_CHUNKING=false  # Enable manual chunking if needed
 11. **MIME Type Filtering**: Validate document MIME types before processing to avoid non-audio files
 12. **Audio Stream Detection**: Check for audio streams in video files before attempting extraction
 13. **Standards-Compliant Packaging**: PEP 621 with UV for fast, reliable dependency management
+14. **Unified Media Handler Pattern**: Single `_handle_media_message()` with `MediaInfo` dataclass handles voice/audio/document/video
+15. **Service Layer Separation**: `TranscriptionOrchestrator` isolates business logic from Telegram handlers
+16. **AsyncService Protocol**: Runtime-checkable protocol for uniform async lifecycle (initialize/shutdown/is_initialized)
 
 ---
 

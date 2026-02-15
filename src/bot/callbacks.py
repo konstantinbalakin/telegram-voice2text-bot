@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes
 from src.services.pdf_generator import create_file_object
 
 from src.bot.keyboards import decode_callback_data, create_transcription_keyboard
-from src.storage.models import TranscriptionState
+from src.storage.models import TranscriptionState, TranscriptionVariant
 from src.storage.repositories import (
     TranscriptionStateRepository,
     TranscriptionVariantRepository,
@@ -36,6 +36,13 @@ LEVEL_TRANSITIONS = {
     "shorter": {"longer": "short"},  # No further shorter
     "long": {"shorter": "default", "longer": "longer"},
     "longer": {"shorter": "long"},  # No further longer
+}
+
+MODE_LABELS: dict[str, str] = {
+    "original": "Исходный текст",
+    "structured": "Структурированный",
+    "summary": "Резюме",
+    "magic": "Красиво",
 }
 
 
@@ -87,6 +94,149 @@ class CallbackHandlers:
             return True
         return False
 
+    async def _generate_variant(
+        self,
+        query: CallbackQuery,
+        context: ContextTypes.DEFAULT_TYPE,
+        state: TranscriptionState,
+        usage_id: int,
+        mode: str,
+        original_text: str,
+        emoji_level: int,
+        length_level: str,
+        timestamps_enabled: bool,
+    ) -> Optional[TranscriptionVariant]:
+        """Generate a variant for the given mode using the text processor.
+
+        Unifies the duplicated generation logic for structured/summary/magic modes.
+
+        Args:
+            query: Callback query for UI updates
+            context: Bot context
+            state: Current transcription state
+            usage_id: Usage record ID
+            mode: Target mode ("structured", "summary", or "magic")
+            original_text: Original text to process
+            emoji_level: Target emoji level
+            length_level: Target length level
+            timestamps_enabled: Whether timestamps are enabled
+
+        Returns:
+            The generated variant, or None on error.
+        """
+        assert self.text_processor is not None
+
+        # Mode-specific configuration
+        mode_config: dict[str, dict[str, str]] = {
+            "structured": {
+                "ack_message": "Начинаю обработку...",
+                "processing_message": "🔄 Структурирую текст, пожалуйста подождите...",
+                "error_message": "Не удалось обработать текст",
+                "log_label": "structured text",
+            },
+            "summary": {
+                "ack_message": "Начинаю создание резюме...",
+                "processing_message": "🔄 Создаю резюме текста, пожалуйста подождите...",
+                "error_message": "Не удалось создать резюме",
+                "log_label": "summary text",
+            },
+            "magic": {
+                "ack_message": "Начинаю обработку...",
+                "processing_message": "🪄 Делаю красиво, пожалуйста подождите...",
+                "error_message": "Не удалось обработать текст",
+                "log_label": "magic text",
+            },
+        }
+
+        config = mode_config[mode]
+
+        # Acknowledge callback immediately
+        await query.answer(config["ack_message"])
+
+        # Edit message to show processing started
+        try:
+            await query.edit_message_text(config["processing_message"])
+        except Exception as e:
+            logger.warning(f"Failed to update message to processing state: {e}")
+
+        # Start progress tracker
+        progress = ProgressTracker(
+            message=cast(Message, query.message),
+            duration_seconds=settings.llm_processing_duration,
+            rtf=1.0,
+            update_interval=settings.progress_update_interval,
+        )
+        await progress.start()
+
+        try:
+            start_time = time.time()
+
+            # Call the appropriate text processor method
+            if mode == "structured":
+                generated_text = await self.text_processor.create_structured(original_text)
+            elif mode == "summary":
+                generated_text = await self.text_processor.summarize_text(
+                    original_text, length_level=length_level
+                )
+            else:  # magic
+                generated_text = await self.text_processor.create_magic(original_text)
+
+            processing_time = time.time() - start_time
+
+            await progress.stop()
+
+            # Check variant limit before creating
+            if await self._check_variant_limit(usage_id):
+                await query.answer("Достигнут лимит вариантов", show_alert=True)
+                return None
+
+            variant, created = await self.variant_repo.get_or_create_variant(
+                usage_id=usage_id,
+                mode=mode,
+                text_content=generated_text,
+                length_level=length_level,
+                emoji_level=emoji_level,
+                timestamps_enabled=timestamps_enabled,
+                generated_by="llm",
+                llm_model=settings.llm_model,
+                processing_time_seconds=processing_time,
+            )
+            if created:
+                logger.info(
+                    f"Generated {config['log_label']}: usage_id={usage_id}, "
+                    f"time={processing_time:.2f}s"
+                )
+            else:
+                logger.info(
+                    f"{mode.capitalize()} variant already exists: usage_id={usage_id}, "
+                    "using cached version"
+                )
+            return variant
+
+        except Exception as e:
+            await progress.stop()
+
+            logger.error(f"Failed to generate {config['log_label']}: {e}", exc_info=True)
+
+            # Restore original text and show error
+            try:
+                segments = await self.segment_repo.get_by_usage_id(usage_id)
+                has_segments = len(segments) > 0
+                await query.edit_message_text(
+                    sanitize_html(original_text),
+                    reply_markup=create_transcription_keyboard(state, has_segments, settings),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                pass
+
+            # Try to answer query (may fail if query is too old)
+            try:
+                await query.answer(config["error_message"], show_alert=True)
+            except Exception as answer_error:
+                logger.warning(f"Failed to answer callback query: {answer_error}")
+            return None
+
     async def update_transcription_display(
         self,
         query: CallbackQuery,
@@ -129,13 +279,7 @@ class CallbackHandlers:
             chat_id = message.chat_id
 
             # Get mode label
-            mode_labels = {
-                "original": "Исходный текст",
-                "structured": "Структурированный",
-                "summary": "Резюме",
-                "magic": "Красиво",
-            }
-            mode_label = mode_labels.get(state.active_mode, state.active_mode)
+            mode_label = MODE_LABELS.get(state.active_mode, state.active_mode)
 
             # Update main message with keyboard
             await query.edit_message_text(
@@ -179,13 +323,7 @@ class CallbackHandlers:
             message = cast(Message, query.message)
             chat_id = message.chat_id
 
-            mode_labels = {
-                "original": "Исходный текст",
-                "structured": "Структурированный",
-                "summary": "Резюме",
-                "magic": "Красиво",
-            }
-            mode_label = mode_labels.get(state.active_mode, state.active_mode)
+            mode_label = MODE_LABELS.get(state.active_mode, state.active_mode)
 
             # Update existing message to info message
             await query.edit_message_text(
@@ -377,8 +515,7 @@ class CallbackHandlers:
 
         if not variant:
             # Need to generate variant
-            if new_mode == "structured":
-                # Generate structured text
+            if new_mode in ("structured", "summary", "magic"):
                 if not self.text_processor:
                     await query.answer(
                         "Обработка текста недоступна (LLM отключен)", show_alert=True
@@ -393,296 +530,18 @@ class CallbackHandlers:
                     await query.answer("Исходный текст не найден", show_alert=True)
                     return
 
-                # Acknowledge callback immediately
-                await query.answer("Начинаю обработку...")
-
-                # Edit message to show processing started
-                processing_message = "🔄 Структурирую текст, пожалуйста подождите..."
-                try:
-                    await query.edit_message_text(processing_message)
-                except Exception as e:
-                    logger.warning(f"Failed to update message to processing state: {e}")
-
-                # Start progress tracker
-                # Note: ProgressTracker expects a Message object, but we have query.message
-                # We'll use estimated duration from config for LLM processing
-                progress = ProgressTracker(
-                    message=cast(Message, query.message),
-                    duration_seconds=settings.llm_processing_duration,
-                    rtf=1.0,  # For LLM, we use fixed duration, so RTF = 1.0
-                    update_interval=settings.progress_update_interval,
+                variant = await self._generate_variant(
+                    query=query,
+                    context=context,
+                    state=state,
+                    usage_id=usage_id,
+                    mode=new_mode,
+                    original_text=original_variant.text_content,
+                    emoji_level=target_emoji_level,
+                    length_level=target_length_level,
+                    timestamps_enabled=target_timestamps_enabled,
                 )
-                await progress.start()
-
-                # Generate structured text
-                try:
-                    start_time = time.time()
-
-                    # Run text processing and progress tracking concurrently
-                    structured_text = await self.text_processor.create_structured(
-                        original_variant.text_content
-                    )
-
-                    processing_time = time.time() - start_time
-
-                    # Stop progress tracker
-                    await progress.stop()
-
-                    # Save variant (UPSERT: handles race conditions)
-                    # Check variant limit before creating
-                    if await self._check_variant_limit(usage_id):
-                        await query.answer("Достигнут лимит вариантов", show_alert=True)
-                        return
-                    variant, created = await self.variant_repo.get_or_create_variant(
-                        usage_id=usage_id,
-                        mode="structured",
-                        text_content=structured_text,
-                        length_level=target_length_level,
-                        emoji_level=target_emoji_level,
-                        timestamps_enabled=target_timestamps_enabled,
-                        generated_by="llm",
-                        llm_model=settings.llm_model,
-                        processing_time_seconds=processing_time,
-                    )
-                    if created:
-                        logger.info(
-                            f"Generated structured text: usage_id={usage_id}, "
-                            f"time={processing_time:.2f}s"
-                        )
-                    else:
-                        logger.info(
-                            f"Structured variant already exists: usage_id={usage_id}, "
-                            "using cached version"
-                        )
-
-                except Exception as e:
-                    # Stop progress tracker on error
-                    await progress.stop()
-
-                    logger.error(f"Failed to generate structured text: {e}", exc_info=True)
-
-                    # Restore original text and show error
-                    try:
-                        segments = await self.segment_repo.get_by_usage_id(usage_id)
-                        has_segments = len(segments) > 0
-                        await query.edit_message_text(
-                            sanitize_html(original_variant.text_content),
-                            reply_markup=create_transcription_keyboard(
-                                state, has_segments, settings
-                            ),
-                            parse_mode="HTML",
-                        )
-                    except Exception:
-                        pass
-
-                    # Try to answer query (may fail if query is too old)
-                    try:
-                        await query.answer("Не удалось обработать текст", show_alert=True)
-                    except Exception as answer_error:
-                        logger.warning(f"Failed to answer callback query: {answer_error}")
-                    return
-
-            elif new_mode == "summary":
-                # Generate summary text (Phase 4)
-                if not self.text_processor:
-                    await query.answer(
-                        "Обработка текста недоступна (LLM отключен)", show_alert=True
-                    )
-                    return
-
-                # Get original text
-                original_variant = await self.variant_repo.get_variant(
-                    usage_id=usage_id, mode="original"
-                )
-                if not original_variant:
-                    await query.answer("Исходный текст не найден", show_alert=True)
-                    return
-
-                # Acknowledge callback immediately
-                await query.answer("Начинаю создание резюме...")
-
-                # Edit message to show processing started
-                processing_message = "🔄 Создаю резюме текста, пожалуйста подождите..."
-                try:
-                    await query.edit_message_text(processing_message)
-                except Exception as e:
-                    logger.warning(f"Failed to update message to processing state: {e}")
-
-                # Start progress tracker
-                progress = ProgressTracker(
-                    message=cast(Message, query.message),
-                    duration_seconds=settings.llm_processing_duration,
-                    rtf=1.0,  # For LLM, we use fixed duration, so RTF = 1.0
-                    update_interval=settings.progress_update_interval,
-                )
-                await progress.start()
-
-                # Generate summary
-                try:
-                    start_time = time.time()
-
-                    # Run text processing with default length level
-                    summary_text = await self.text_processor.summarize_text(
-                        original_variant.text_content, length_level=target_length_level
-                    )
-
-                    processing_time = time.time() - start_time
-
-                    # Stop progress tracker
-                    await progress.stop()
-
-                    # Save variant (UPSERT: handles race conditions)
-                    # Check variant limit before creating
-                    if await self._check_variant_limit(usage_id):
-                        await query.answer("Достигнут лимит вариантов", show_alert=True)
-                        return
-                    variant, created = await self.variant_repo.get_or_create_variant(
-                        usage_id=usage_id,
-                        mode="summary",
-                        text_content=summary_text,
-                        length_level=target_length_level,
-                        emoji_level=target_emoji_level,
-                        timestamps_enabled=target_timestamps_enabled,
-                        generated_by="llm",
-                        llm_model=settings.llm_model,
-                        processing_time_seconds=processing_time,
-                    )
-                    if created:
-                        logger.info(
-                            f"Generated summary text: usage_id={usage_id}, "
-                            f"time={processing_time:.2f}s"
-                        )
-                    else:
-                        logger.info(
-                            f"Summary variant already exists: usage_id={usage_id}, "
-                            "using cached version"
-                        )
-
-                except Exception as e:
-                    # Stop progress tracker on error
-                    await progress.stop()
-
-                    logger.error(f"Failed to generate summary: {e}", exc_info=True)
-
-                    # Restore original text and show error
-                    try:
-                        segments = await self.segment_repo.get_by_usage_id(usage_id)
-                        has_segments = len(segments) > 0
-                        await query.edit_message_text(
-                            sanitize_html(original_variant.text_content),
-                            reply_markup=create_transcription_keyboard(
-                                state, has_segments, settings
-                            ),
-                            parse_mode="HTML",
-                        )
-                    except Exception:
-                        pass
-
-                    # Try to answer query (may fail if query is too old)
-                    try:
-                        await query.answer("Не удалось создать резюме", show_alert=True)
-                    except Exception as answer_error:
-                        logger.warning(f"Failed to answer callback query: {answer_error}")
-                    return
-
-            elif new_mode == "magic":
-                # Generate magic (publication-ready) text
-                if not self.text_processor:
-                    await query.answer(
-                        "Обработка текста недоступна (LLM отключен)", show_alert=True
-                    )
-                    return
-
-                # Get original text
-                original_variant = await self.variant_repo.get_variant(
-                    usage_id=usage_id, mode="original"
-                )
-                if not original_variant:
-                    await query.answer("Исходный текст не найден", show_alert=True)
-                    return
-
-                # Acknowledge callback immediately
-                await query.answer("Начинаю обработку...")
-
-                # Edit message to show processing started
-                processing_message = "🪄 Делаю красиво, пожалуйста подождите..."
-                try:
-                    await query.edit_message_text(processing_message)
-                except Exception as e:
-                    logger.warning(f"Failed to update message to processing state: {e}")
-
-                # Start progress tracker
-                progress = ProgressTracker(
-                    message=cast(Message, query.message),
-                    duration_seconds=settings.llm_processing_duration,
-                    rtf=1.0,
-                    update_interval=settings.progress_update_interval,
-                )
-                await progress.start()
-
-                # Generate magic text
-                try:
-                    start_time = time.time()
-
-                    magic_text = await self.text_processor.create_magic(
-                        original_variant.text_content
-                    )
-
-                    processing_time = time.time() - start_time
-
-                    # Stop progress tracker
-                    await progress.stop()
-
-                    # Save variant (UPSERT: handles race conditions)
-                    # Check variant limit before creating
-                    if await self._check_variant_limit(usage_id):
-                        await query.answer("Достигнут лимит вариантов", show_alert=True)
-                        return
-                    variant, created = await self.variant_repo.get_or_create_variant(
-                        usage_id=usage_id,
-                        mode="magic",
-                        text_content=magic_text,
-                        length_level=target_length_level,
-                        emoji_level=target_emoji_level,
-                        timestamps_enabled=target_timestamps_enabled,
-                        generated_by="llm",
-                        llm_model=settings.llm_model,
-                        processing_time_seconds=processing_time,
-                    )
-                    if created:
-                        logger.info(
-                            f"Generated magic text: usage_id={usage_id}, "
-                            f"time={processing_time:.2f}s"
-                        )
-                    else:
-                        logger.info(
-                            f"Magic variant already exists: usage_id={usage_id}, "
-                            "using cached version"
-                        )
-
-                except Exception as e:
-                    logger.error(f"Failed to generate magic text: {e}", exc_info=True)
-                    await progress.stop()
-
-                    # Restore original text and show error
-                    try:
-                        segments = await self.segment_repo.get_by_usage_id(usage_id)
-                        has_segments = len(segments) > 0
-                        await query.edit_message_text(
-                            sanitize_html(original_variant.text_content),
-                            reply_markup=create_transcription_keyboard(
-                                state, has_segments, settings
-                            ),
-                            parse_mode="HTML",
-                        )
-                    except Exception:
-                        pass
-
-                    # Try to answer query (may fail if query is too old)
-                    try:
-                        await query.answer("Не удалось обработать текст", show_alert=True)
-                    except Exception as answer_error:
-                        logger.warning(f"Failed to answer callback query: {answer_error}")
+                if variant is None:
                     return
 
             elif new_mode == "original":

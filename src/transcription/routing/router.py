@@ -278,7 +278,7 @@ class TranscriptionRouter:
             raise ValueError(f"Unknown provider: {config.provider_name}")
 
         # Initialize provider
-        provider.initialize()
+        await provider.initialize()
         self._benchmark_providers[provider_key] = provider
 
         return provider
@@ -307,7 +307,7 @@ class TranscriptionRouter:
         for name, provider in self.providers.items():
             try:
                 if not provider.is_initialized():
-                    provider.initialize()
+                    await provider.initialize()
                     logger.info(f"✓ Provider '{name}' initialized successfully")
             except Exception as e:
                 logger.error(f"✗ Failed to initialize provider '{name}': {e}")

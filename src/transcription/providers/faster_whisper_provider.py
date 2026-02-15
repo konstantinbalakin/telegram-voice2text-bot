@@ -65,7 +65,7 @@ class FastWhisperProvider(TranscriptionProvider):
         """Unique provider identifier."""
         return "faster-whisper"
 
-    def initialize(self) -> None:
+    async def initialize(self) -> None:
         """Initialize the Whisper model and thread pool executor."""
         if self._initialized:
             logger.warning("FastWhisperProvider already initialized")
@@ -78,11 +78,7 @@ class FastWhisperProvider(TranscriptionProvider):
         logger.info(f"Initializing FasterWhisper model: {self.model_size}...")
         try:
             start_time = time.time()
-            self._model = WhisperModel(
-                self.model_size,
-                device=self.device,
-                compute_type=self.compute_type,
-            )
+            self._model = await asyncio.to_thread(self._load_model)
             self._executor = ThreadPoolExecutor(max_workers=self.max_workers)
             self._initialized = True
             init_time = time.time() - start_time
@@ -91,6 +87,14 @@ class FastWhisperProvider(TranscriptionProvider):
         except Exception as e:
             logger.error(f"Failed to initialize FasterWhisper model: {e}")
             raise
+
+    def _load_model(self) -> WhisperModel:
+        """Load the Whisper model synchronously (called from thread)."""
+        return WhisperModel(
+            self.model_size,
+            device=self.device,
+            compute_type=self.compute_type,
+        )
 
     async def transcribe(
         self, audio_path: Path, context: TranscriptionContext

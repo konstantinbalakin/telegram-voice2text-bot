@@ -275,3 +275,15 @@ class LLMService:
         """Cleanup resources."""
         if self.provider:
             await self.provider.close()
+
+    async def initialize(self) -> None:
+        """Initialize the service (no-op, ready after __init__)."""
+        pass
+
+    async def shutdown(self) -> None:
+        """Shutdown the service and cleanup resources."""
+        await self.close()
+
+    def is_initialized(self) -> bool:
+        """Check if the service is initialized and ready."""
+        return True
