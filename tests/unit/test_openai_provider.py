@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 import pytest
+import pytest_asyncio
 from pathlib import Path
 
 from src.transcription.providers.openai_provider import OpenAIProvider
@@ -20,10 +21,10 @@ def provider():
     )
 
 
-@pytest.fixture
-def initialized_provider(provider):
+@pytest_asyncio.fixture
+async def initialized_provider(provider):
     """Create and initialize OpenAIProvider."""
-    provider.initialize()
+    await provider.initialize()
     yield provider
 
 
@@ -37,9 +38,10 @@ class TestOpenAIProviderInit:
         assert provider.api_key == "test-api-key"
         assert not provider.is_initialized()
 
-    def test_provider_initialization(self, provider):
+    @pytest.mark.asyncio
+    async def test_provider_initialization(self, provider):
         """Test provider initialization."""
-        provider.initialize()
+        await provider.initialize()
 
         assert provider.is_initialized()
         assert provider._client is not None

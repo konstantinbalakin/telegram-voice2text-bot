@@ -37,6 +37,7 @@ from src.services.queue_manager import QueueManager
 from src.services.llm_service import LLMFactory, LLMService
 from src.services.text_processor import TextProcessor
 from src.services.telegram_client import TelegramClientService
+from src.services.transcription_orchestrator import TranscriptionOrchestrator
 from src.utils.logging_config import setup_logging, log_deployment_event, get_config_summary
 
 # Setup centralized logging
@@ -86,7 +87,7 @@ async def main() -> None:
 
     # Initialize transcription router
     logger.info("Initializing transcription router...")
-    transcription_router = get_transcription_router()
+    transcription_router = await get_transcription_router()
     logger.info("Transcription router initialized")
 
     # Initialize audio handler
@@ -166,14 +167,22 @@ async def main() -> None:
             "LLM service not available - structured mode will be disabled even if flag is set"
         )
 
+    # Create transcription orchestrator
+    orchestrator = TranscriptionOrchestrator(
+        transcription_router=transcription_router,
+        audio_handler=audio_handler,
+        llm_service=llm_service,
+        text_processor=text_processor,
+    )
+    logger.info("TranscriptionOrchestrator created")
+
     # Create bot handlers
     bot_handlers = BotHandlers(
         transcription_router=transcription_router,
         audio_handler=audio_handler,
         queue_manager=queue_manager,
-        llm_service=llm_service,
+        orchestrator=orchestrator,
         telegram_client=telegram_client,
-        text_processor=text_processor,
     )
 
     # Build telegram bot application

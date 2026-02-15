@@ -180,6 +180,18 @@ class AudioHandler:
         """Close the shared HTTP client."""
         await self._http_client.aclose()
 
+    async def initialize(self) -> None:
+        """Initialize the service (no-op, ready after __init__)."""
+        pass
+
+    async def shutdown(self) -> None:
+        """Shutdown the service and cleanup resources."""
+        await self.cleanup_http()
+
+    def is_initialized(self) -> bool:
+        """Check if the service is initialized and ready."""
+        return True
+
     def cleanup_old_files(self, max_age_hours: int = 24) -> int:
         """
         Clean up old audio files from temp directory.

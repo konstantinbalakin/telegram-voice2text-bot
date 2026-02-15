@@ -31,7 +31,7 @@ class TranscriptionProvider(ABC):
         return None
 
     @abstractmethod
-    def initialize(self) -> None:
+    async def initialize(self) -> None:
         """
         Initialize the provider (load models, setup resources).
 
