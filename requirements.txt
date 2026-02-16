@@ -98,7 +98,7 @@ packaging==26.0
     # via
     #   huggingface-hub
     #   onnxruntime
-pillow==12.1.0
+pillow==12.1.1
     # via weasyprint
 protobuf==6.33.4
     # via onnxruntime
