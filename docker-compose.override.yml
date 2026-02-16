@@ -1,0 +1,16 @@
+# Local development overrides.
+# Auto-loaded by `docker compose up` (no -f flags needed).
+services:
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Resource limits for local development (adjust based on your machine)
+    deploy:
+      resources:
+        limits:
+          cpus: '4.0'
+          memory: 4G
+        reservations:
+          cpus: '0.5'
+          memory: 512M

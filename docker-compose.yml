@@ -1,16 +1,10 @@
-version: '3.8'
-
 services:
   bot:
-    build:
-      context: .
-      dockerfile: Dockerfile
     container_name: telegram-voice2text-bot
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      # Override with Docker-specific settings if needed
       - DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
     volumes:
       # Persist database
@@ -20,20 +14,11 @@ services:
       # Cache Whisper models to avoid re-downloading
       - whisper-models:/home/appuser/.cache/huggingface
     healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      test: ["CMD", "python", "-m", "src.health_check"]
       interval: 60s
       timeout: 30s
       retries: 5
       start_period: 60s
-    # Resource limits (adjust based on your server)
-    deploy:
-      resources:
-        limits:
-          cpus: '4.0'
-          memory: 4G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
 
   # Optional: PostgreSQL for production
   # Uncomment if you want to use PostgreSQL instead of SQLite

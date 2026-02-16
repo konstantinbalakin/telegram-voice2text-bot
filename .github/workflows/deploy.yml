@@ -375,7 +375,7 @@ jobs:
             chown -R 1000:1000 data logs
 
             # Rolling update with zero downtime
-            docker compose -f docker-compose.prod.yml up -d --no-deps bot
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps bot
 
             # Wait for container to be healthy
             echo "⏳ Waiting for health check..."
@@ -386,13 +386,13 @@ jobs:
 
             if [ "$CONTAINER_STATUS" != "healthy" ] && [ "$CONTAINER_STATUS" != "unknown" ]; then
               echo "❌ Health check failed! Container status: $CONTAINER_STATUS"
-              docker compose -f docker-compose.prod.yml logs --tail=50 bot
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50 bot
               exit 1
             fi
 
             # Show status
             echo "✅ Deployment successful! Version $VERSION is now live."
-            docker compose -f docker-compose.prod.yml ps
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
 
             # Cleanup old images (keep last 3 versions)
             echo "🧹 Cleaning up old Docker images..."
