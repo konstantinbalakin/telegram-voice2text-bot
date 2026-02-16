@@ -20,16 +20,15 @@
 - **Branch**: `refactor/poetry-to-uv`
 - **Status**: Ready for merge to main
 
-### Code Audit & Refactoring (2026-02)
-- **Wave 1 (QF)**: 22 quick-fix tasks ✅ (2026-02-11)
-- **Wave 2**: 13 security/performance/test tasks ✅ (2026-02-12)
-- **Wave 3**: 9 performance/security/test tasks ✅ (2026-02-13)
-- **Wave 4**: 5 architectural refactoring tasks ✅ (2026-02-15)
-  - A1: Unified 4 media handlers into `_handle_media_message()` (handlers.py: 2239→786 lines)
-  - A2: Split `_process_transcription` into 5 focused methods
-  - A3: Extracted `TranscriptionOrchestrator` to service layer
-  - A4: Deduplicated variant generation in callbacks.py
-  - A13: Created `AsyncService` protocol, async `initialize()` for providers
+### Code Audit & Refactoring (2026-02, PR #96-102)
+5 волн, 53 задачи, только рефакторинг (без бизнес-функциональности):
+- **Wave 1**: 22 quick-fix (security, performance, architecture) ✅
+- **Wave 2**: 13 задач (IDOR, квоты, бизнес-исключения, 27 тестов) ✅
+- **Wave 3**: 9 задач (async subprocess, ffmpeg streaming, rate limiter, 130 тестов) ✅
+- **Wave 4**: 5 архитектурных (handlers.py 2239→786, TranscriptionOrchestrator, AsyncService) ✅
+- **Wave 5**: 157 новых тестов (callbacks, handlers, orchestrator, integration) ✅
+- **Pre-commit hooks**: ruff, black, mypy, pytest ✅
+- **Итого тестов**: 181 → 590 (+226%)
 
 ## Completed Phases
 
@@ -243,6 +242,9 @@ OPENAI_CHUNKING=false  # Enable manual chunking if needed
 14. **Unified Media Handler Pattern**: Single `_handle_media_message()` with `MediaInfo` dataclass handles voice/audio/document/video
 15. **Service Layer Separation**: `TranscriptionOrchestrator` isolates business logic from Telegram handlers
 16. **AsyncService Protocol**: Runtime-checkable protocol for uniform async lifecycle (initialize/shutdown/is_initialized)
+17. **Business Exception Hierarchy**: Typed exceptions in `src/exceptions.py` for structured error handling
+18. **IDOR Protection**: Callback query ownership verification
+19. **Pre-commit/Pre-push Hooks**: Automated quality gates (ruff, black, mypy, pytest)
 
 ---
 

@@ -1,7 +1,7 @@
 # System Patterns: Telegram Voice2Text Bot
 
-**Last Updated**: 2026-01-27
-**Architecture**: API-First (OpenAI + DeepSeek + Local Fallback)
+**Last Updated**: 2026-02-16
+**Architecture**: API-First with Service Layer Separation (post-audit)
 
 ---
 
@@ -14,8 +14,10 @@ Current architecture is **API-first** with intelligent text processing:
 ```
 User Input (Voice/Audio/Video)
   ↓
-File Detection & Download
-  ↓
+BotHandlers (routing only, 786 lines)
+  ↓ MediaInfo dataclass
+TranscriptionOrchestrator (business logic, 792 lines)
+  ↓ preprocess → transcribe → structure → refine → send
 ┌──────────────────────────────────────┐
 │ Primary: OpenAI API (whisper-1)      │
 │ - Fast: 5-10s for 1-minute audio      │
@@ -34,7 +36,7 @@ File Detection & Download
 │ - 2-5s processing time               │
 └──────────────────────────────────────┘
   ↓
-Interactive Keyboard + Variant Caching
+CallbackHandlers (_generate_variant() + variant caching)
 ```
 
 **See:** [architecture-evolution.md](./architecture-evolution.md) for complete story
@@ -642,7 +644,15 @@ For detailed documentation, see the archived version: `systemPatterns-2025-01-09
 46. **Audio Extraction from Video** - ffmpeg-based extraction
 47. **ffprobe-Based Duration Detection** - Document/video duration
 
-**Total:** 47 patterns implemented across 4 development months
+### Code Audit Patterns (2026-02, 6 patterns)
+48. **IDOR Protection** - Callback query ownership verification
+49. **Business Exception Hierarchy** - Typed exceptions (`src/exceptions.py`)
+50. **Async Subprocess** - `asyncio.create_subprocess_exec()` instead of `subprocess.run()`
+51. **ffmpeg Streaming** - Pipe-based chunking (no OOM on large files)
+52. **get_or_create_variant()** - Race condition elimination with IntegrityError handling
+53. **Sensitive Data Filtering** - Bot token masking in logs
+
+**Total:** 53 patterns implemented across 5 development months
 
 ---
 

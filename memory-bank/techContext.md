@@ -396,6 +396,17 @@ application.add_handler(MessageHandler(filters.VIDEO, bot_handlers.video_message
 5. **__init__.py**
    - Module exports: `QueueManager`, `TranscriptionRequest`, `TranscriptionResponse`, `ProgressTracker`, `LLMService`, `PDFGenerator`
 
+6. **transcription_orchestrator.py** (792 lines) - NEW (2026-02-15)
+   - `TranscriptionOrchestrator`: Core business logic extracted from BotHandlers
+   - **Methods**: `_preprocess_audio`, `_run_transcription`, `_apply_structuring`, `_apply_refinement`, `_finalize_and_send`
+   - **Pattern**: Service layer — handlers only route, orchestrator processes
+   - **Integration**: Used by BotHandlers via `_handle_media_message()`
+
+7. **lifecycle.py** (20 lines) - NEW (2026-02-15)
+   - `AsyncService`: Runtime-checkable Protocol
+   - **Methods**: `initialize()`, `shutdown()`, `is_initialized`
+   - **Pattern**: Uniform async lifecycle for all services/providers
+
 **Usage**:
 ```python
 # In main.py
@@ -644,9 +655,10 @@ cp .env.example .env
 - `black` - auto-formatting
 - `ruff` - fast linting
 - `mypy` - type checking
+- `pre-commit` / `pre-push` hooks (ruff, black, mypy, pytest)
 
 **Testing**:
-- `pytest` - test runner
+- `pytest` - test runner (590 tests: 579 unit + 11 integration)
 - `pytest-asyncio` - async tests
 - `pytest-cov` - coverage reports
 
@@ -875,10 +887,15 @@ Key APIs to use:
 
 ## Technical Decisions Log
 
-**Recent Updates (2026-01-27): Package Manager Migration**
+**Recent Updates (2026-02-16): Code Audit & Refactoring**
 
 | Date | Area | Decision | Status | Rationale |
 |------|------|----------|--------|-----------|
+| 2026-02 | Architecture | **TranscriptionOrchestrator** | ✅ Active | Extract business logic from handlers (God Object elimination) |
+| 2026-02 | Architecture | **MediaInfo dataclass** | ✅ Active | Unified media handling for voice/audio/document/video |
+| 2026-02 | Architecture | **AsyncService Protocol** | ✅ Active | Uniform async lifecycle for services |
+| 2026-02 | Security | **IDOR protection** | ✅ Active | Callback query ownership verification |
+| 2026-02 | Quality | **Pre-commit hooks** | ✅ Active | Automated gates: ruff, black, mypy, pytest |
 | 2026-01-27 | Package Manager | **uv (from Poetry)** | ✅ Active | Faster builds, PEP 621 standard, Rust-based |
 | 2025-12-25 | Transcription | **OpenAI API primary** | ✅ Active | 4-7x faster, better quality |
 | 2025-12-25 | Text Processing | **DeepSeek V3** | ✅ Active | Cost-effective LLM |
