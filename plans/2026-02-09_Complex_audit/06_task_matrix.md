@@ -1,7 +1,7 @@
 # Матрица задач аудита: цикл разработки и зависимости
 
 **Дата:** 2026-02-09
-**Обновлено:** 2026-02-15 (ревизия 6 — Волна 4: 5 задач выполнены, ветка refactor/audit-wave4)
+**Обновлено:** 2026-02-16 (ревизия 7 — Волна 5: 4 задачи выполнены, ветка test/audit-wave5)
 
 ## Легенда: типы цикла разработки
 
@@ -113,9 +113,9 @@
 |----|--------|-----|-----------|--------|-------|-----------|------------|-------------|
 | T1 | Тесты для keyboards.py (encode/decode/create) | D+T | P1 | DONE | `tests/unit/test_keyboards.py` (новый) | — | — | 32 теста: roundtrip, 64-byte limit, invalid data, action validation, create_keyboard. PR #98 |
 | T2 | Тесты для split_text() | D+T | P1 | DONE | `tests/unit/test_split_text.py` (новый) | — | — | 14 тестов: пустая строка, лимит, Unicode, emoji, разбиение по границам предложений/слов. PR #98 |
-| T3 | Тесты для CallbackHandlers | A+D+T | P1 | NEW | `tests/unit/test_callbacks.py` (новый) | — | S1, A4 | Лучше после S1 (IDOR fix) и A4 (рефакторинг). Но LEVEL_TRANSITIONS и routing можно тестировать сразу |
-| T4 | Тесты для handlers (после рефакторинга) | A+D+T | P2 | NEW | `tests/unit/test_handlers.py` (новый) | — | A1, A2 | **Зависит от A1+A2!** Тестировать God Object бессмысленно — сначала разбить |
-| T5 | Тесты для TranscriptionOrchestrator | D+T | P2 | NEW | `tests/unit/test_orchestrator.py` (новый) | — | A3 | **Зависит от A3!** Тестировать только после выделения сервиса |
+| T3 | Тесты для CallbackHandlers | A+D+T | P1 | DONE | `tests/unit/test_callbacks.py` (новый) | — | S1, A4 | 46 тестов: routing, mode change, length change, emoji toggle, timestamps toggle, back, _generate_variant, _check_variant_limit, update_transcription_display (4 cases). Ветка test/audit-wave5 |
+| T4 | Тесты для handlers (после рефакторинга) | A+D+T | P2 | DONE | `tests/unit/test_handlers.py` (новый) | — | A1, A2 | 34 теста: MediaInfo, format_wait_time, _extract_media_info, _check_quota, start/help/stats commands, media wrappers, _handle_media_message (validation, enqueue, errors), error_handler. Ветка test/audit-wave5 |
+| T5 | Тесты для TranscriptionOrchestrator | D+T | P2 | DONE | `tests/unit/test_orchestrator.py` (новый) | — | A3 | 30 тестов: save_audio_file, preprocess, run_transcription, apply_structuring, apply_refinement, create_interactive_state, send_result, send_draft, process_transcription (all strategies + fallback). Ветка test/audit-wave5 |
 | T6 | Тесты для QueueManager | D+T | P1 | DONE | `tests/unit/test_queue_manager.py` (новый) | — | — | Async-тесты: init, enqueue, QueueFull, start/stop worker, get_stats, position, wait time. PR #98 |
 | T7 | Тесты для config.py (валидаторы) | D+T | P2 | DONE | `tests/unit/test_config.py` (новый) | — | — | 83 теста: defaults, validators, env override, field constraints, model config. Ветка fix/audit-wave3 |
 | T8 | Тесты для progress_tracker | D+T | P2 | DONE | `tests/unit/test_progress_tracker.py` (новый) | — | — | 27 тестов: format_time, progress bar, init, start/stop, rate limiter, RetryAfter, Telegram errors. Ветка fix/audit-wave3 |
@@ -123,7 +123,7 @@
 | T10 | Исправить пустой test_transcribe_success | D+T | P2 | DONE | `tests/unit/test_openai_provider.py:75` | — | — | Реальный тест с моком httpx.AsyncClient.post, проверка text/language/provider/model/time. Ветка fix/audit-wave3 |
 | T11 | Вынести audio_handler fixture в conftest | QF | P3 | DONE | `tests/unit/conftest.py` | — | — | Перенести из 3 файлов в общий conftest |
 | T12 | Исправить asyncio.run() антипаттерн | QF | P3 | DONE | `tests/unit/test_faster_whisper_provider.py:45` | — | — | Заменить на @pytest_asyncio.fixture + await |
-| T13 | Интеграционный тест: полный pipeline | A+D+T | P2 | NEW | `tests/integration/test_pipeline.py` (новый) | — | A3 | Лучше после A3 (orchestrator). Мок Telegram API + Whisper → полный flow |
+| T13 | Интеграционный тест: полный pipeline | A+D+T | P2 | DONE | `tests/integration/test_pipeline.py` (новый) | — | A3 | 11 тестов: orchestrator с реальной DB, callback mode switch, queue→orchestrator pipeline, error recovery, variant caching, timestamps toggle, IDOR, variant limit, full roundtrip. Ветка test/audit-wave5 |
 
 ---
 
