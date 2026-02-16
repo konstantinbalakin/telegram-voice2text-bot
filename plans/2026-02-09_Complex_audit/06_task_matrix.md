@@ -1,7 +1,7 @@
 # Матрица задач аудита: цикл разработки и зависимости
 
 **Дата:** 2026-02-09
-**Обновлено:** 2026-02-11 (ревизия 5 — Волна 3: 9 задач выполнены, ветка fix/audit-wave3)
+**Обновлено:** 2026-02-15 (ревизия 6 — Волна 4: 5 задач выполнены, ветка refactor/audit-wave4)
 
 ## Легенда: типы цикла разработки
 
@@ -91,10 +91,10 @@
 
 | ID | Задача | Тип | Приоритет | Статус | Файлы | Блокирует | Зависит от | Комментарий |
 |----|--------|-----|-----------|--------|-------|-----------|------------|-------------|
-| A1 | Объединить 4 media handlers в _handle_media_message() | FULL | P2 | NEW | `handlers.py` | A2, T4 | A8 (рек.) | **Ключевой рефакторинг.** ~800 строк → ~200. MediaInfo dataclass. Ревью обязательно. **Рекомендация:** сначала сделать A8 (format_wait_time) — он войдёт в состав |
-| A2 | Разбить _process_transcription на 4-5 методов | FULL | P2 | NEW | `handlers.py` | T4 | A1 | Делать после A1. Выделить _preprocess, _transcribe, _handle_structure, _handle_hybrid, _send_result, _finalize |
-| A3 | Выделить TranscriptionOrchestrator в сервисный слой | FULL | P2 | NEW | Новый `services/transcription_orchestrator.py`, `handlers.py`, `main.py` | T5, T13 | A1, A2 | Самый масштабный рефакторинг. Делать ПОСЛЕ A1+A2 |
-| A4 | Объединить дупликацию генерации вариантов в callbacks | FULL | P2 | NEW | `callbacks.py` | T3 | A9 (рек.) | Выделить _generate_variant(). **Рекомендация:** сначала A9 (PDF fallback) — он войдёт в состав |
+| A1 | Объединить 4 media handlers в _handle_media_message() | FULL | P2 | DONE | `handlers.py` | A2, T4 | A8 (рек.) | MediaInfo dataclass + `_extract_media_info()` + `_handle_media_message()` + 4 тонкие обёртки. handlers.py: 2239→786 строк (−65%). PR #100 |
+| A2 | Разбить _process_transcription на 4-5 методов | FULL | P2 | DONE | `handlers.py` | T4 | A1 | Разбит на `_preprocess_audio`, `_run_transcription`, `_apply_structuring`, `_apply_refinement`, `_finalize_and_send` + оркестратор. PR #100 |
+| A3 | Выделить TranscriptionOrchestrator в сервисный слой | FULL | P2 | DONE | Новый `services/transcription_orchestrator.py`, `handlers.py`, `main.py` | T5, T13 | A1, A2 | Бизнес-логика транскрипции вынесена в `TranscriptionOrchestrator` (792 строки). handlers.py отвечает только за приём сообщений. PR #100 |
+| A4 | Объединить дупликацию генерации вариантов в callbacks | FULL | P2 | DONE | `callbacks.py` | T3 | A9 (рек.) | `_generate_variant()` + `MODE_LABELS` константа. callbacks.py: 1295→1154 строк (−11%). PR #100 |
 | A5 | Создать иерархию бизнес-исключений | D+T | P2 | DONE | `exceptions.py` (новый), тест | — | — | `BotError` → `TranscriptionError`, `QuotaExceededError`, `FileProcessingError`, `LLMProcessingError`, `AuthorizationError`, `VariantLimitError`, `StateNotFoundError`. Тест: `test_exceptions.py` (7 тестов). PR #98 |
 | A6 | datetime.utcnow() → datetime.now(timezone.utc) | D+T | P2 | DONE | `models.py`, `repositories.py` | — | — | ~30 замен в models (default/onupdate lambda) и repositories. Все тесты проходят. PR #98 |
 | A7 | Вынести magic numbers в константы | QF | P3 | DONE | `handlers.py`, `openai_provider.py` | — | — | 2GB, 25MB, 224 tokens → именованные константы |
@@ -103,7 +103,7 @@
 | A10 | Переименовать whisper_service → transcription_router | QF | P3 | DONE | `handlers.py:152`, `main.py` | — | — | Rename параметра. 2 строки |
 | A11 | Dict → dict, Optional → X \| None (стиль) | QF | P3 | DONE | `prompt_loader.py`, `logging_config.py` | — | — | Механическая замена типов |
 | A12 | Убрать устаревший комментарий "Phase 3 not implemented" | QF | P3 | DONE | `text_processor.py:35` | — | — | 1 строка |
-| A13 | Унифицировать lifecycle сервисов (async init/shutdown) | A+D+T | P3 | NEW | Несколько файлов providers, services | — | — | Создать Protocol с async initialize() + shutdown(). Рефакторить сервисы |
+| A13 | Унифицировать lifecycle сервисов (async init/shutdown) | A+D+T | P3 | DONE | Несколько файлов providers, services | — | — | `AsyncService` Protocol в `src/services/lifecycle.py`. `TranscriptionProvider.initialize()` стал async. Сервисы адаптированы. Тесты: `test_lifecycle.py` (195 строк). PR #100 |
 
 ---
 
