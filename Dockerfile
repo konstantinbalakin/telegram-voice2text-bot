@@ -15,6 +15,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
+# Optional: corporate CA certificate for SSL proxy environments
+# File is empty by default (no-op). Populated by Makefile when CORP_CA_CERT_PATH is set.
+COPY .corp-ca-cert.pem /tmp/.corp-ca-cert.pem
+RUN if [ -s /tmp/.corp-ca-cert.pem ]; then \
+      cp /tmp/.corp-ca-cert.pem /usr/local/share/ca-certificates/corp-ca.crt && \
+      update-ca-certificates && \
+      echo "Corporate CA certificate installed"; \
+    fi && rm -f /tmp/.corp-ca-cert.pem
+ENV PIP_CERT=/etc/ssl/certs/ca-certificates.crt \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
+    REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
+
 # Copy requirements for Docker (base + faster-whisper)
 COPY requirements.txt requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \

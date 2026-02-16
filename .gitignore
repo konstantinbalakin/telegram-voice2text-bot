@@ -79,6 +79,9 @@ temp/
 debug/
 logs/
 
+# Corporate CA certificate (temporary, created during Docker build)
+.corp-ca-cert.pem
+
 # Telethon session files (Client API)
 *.session
 *.session-journal
