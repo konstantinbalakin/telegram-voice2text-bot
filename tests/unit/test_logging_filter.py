@@ -61,9 +61,34 @@ class TestSensitiveDataFilter:
             exc_info=None,
         )
         f.filter(record)
-        assert isinstance(record.args, tuple)
-        assert "secret123" not in record.args[0]
-        assert "secr***REDACTED***" in record.args[0]
+        assert "secret123" not in str(record.msg)
+        assert "secr***REDACTED***" in str(record.msg)
+
+    def test_masks_non_string_args(self) -> None:
+        """Token in non-string args (e.g. httpx.URL objects) should be masked."""
+
+        class FakeURL:
+            """Simulates httpx.URL that contains a token in its string representation."""
+
+            def __init__(self, url: str) -> None:
+                self._url = url
+
+            def __str__(self) -> str:
+                return self._url
+
+        f = SensitiveDataFilter(patterns=["secret123"])
+        record = logging.LogRecord(
+            name="httpx",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg="HTTP Request: %s %s %r",
+            args=("POST", FakeURL("https://api.example.com/botsecret123/getMe"), "200 OK"),
+            exc_info=None,
+        )
+        f.filter(record)
+        assert "secret123" not in str(record.msg)
+        assert "secr***REDACTED***" in str(record.msg)
 
     def test_add_pattern(self) -> None:
         f = SensitiveDataFilter()

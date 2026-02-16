@@ -34,19 +34,18 @@ class SensitiveDataFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         if self._patterns:
-            msg = str(record.msg)
+            # Use fully formatted message to catch tokens in non-string args
+            # (e.g. httpx.URL objects that contain the bot token)
+            formatted = record.getMessage()
+            needs_redaction = False
             for pattern in self._patterns:
-                redacted = pattern[:4] + "***REDACTED***"
-                msg = msg.replace(pattern, redacted)
-            record.msg = msg
-            if record.args and isinstance(record.args, tuple):
-                new_args = []
-                for a in record.args:
-                    if isinstance(a, str):
-                        for pattern in self._patterns:
-                            a = a.replace(pattern, pattern[:4] + "***REDACTED***")
-                    new_args.append(a)
-                record.args = tuple(new_args)
+                if pattern in formatted:
+                    redacted = pattern[:4] + "***REDACTED***"
+                    formatted = formatted.replace(pattern, redacted)
+                    needs_redaction = True
+            if needs_redaction:
+                record.msg = formatted
+                record.args = None
         return True
 
 

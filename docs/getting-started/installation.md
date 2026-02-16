@@ -194,8 +194,34 @@ sudo apt-get update && sudo apt-get install -y ffmpeg
 ffmpeg -version
 ```
 
-**Note**: Some audio processing features (mono conversion, speed adjustment) require ffmpeg. The bot will work without it but those features will be disabled.
+**Note**: Without ffmpeg, the bot cannot convert audio formats. Models gpt-4o-transcribe and gpt-4o-mini-transcribe require MP3/WAV and will fail on Telegram's .oga files without ffmpeg.
 
 ### Docker installation fails
 
 See [Docker Troubleshooting](../deployment/docker.md#troubleshooting)
+
+### SSL: CERTIFICATE_VERIFY_FAILED (корпоративный ноутбук)
+
+Если на корпоративном ноутбуке с SSL-инспекцией
+видите ошибку `SSL: CERTIFICATE_VERIFY_FAILED: self-signed certificate in certificate chain`,
+нужно добавить корпоративный CA в CA-бандл Python.
+
+**Для Python** (httpx, aiohttp и др.):
+
+```bash
+# 1. Создать комбинированный CA-бандл (certifi + корпоративный CA)
+cat "$(uv run python3 -c 'import certifi; print(certifi.where())')" \
+    ~/<FOLDER_WITH_CERT>/<YOUR_CORP_CERT>.pem \
+    > ~/<FOLDER_WITH_CERT>/<YOUR_CORP_CERT>.pem
+
+# 2. Добавить в ~/.profile
+echo 'export SSL_CERT_FILE="$HOME/<FOLDER_WITH_CERT>/<YOUR_CORP_CERT>.pem"' >> ~/.profile
+source ~/.profile
+```
+
+**Для Node.js** (npm, и др.):
+
+```bash
+echo 'export NODE_EXTRA_CA_CERTS="$HOME/<FOLDER_WITH_CERT>/<YOUR_CORP_CERT>.pem"' >> ~/.profile
+source ~/.profile
+```

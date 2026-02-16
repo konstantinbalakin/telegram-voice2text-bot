@@ -59,12 +59,19 @@ docker-compose up -d
 # Установить uv (если не установлен)
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
+# Установить ffmpeg (необходим для обработки аудио)
+brew install ffmpeg  # macOS
+# sudo apt-get install -y ffmpeg  # Ubuntu/Debian
+
 # Установить зависимости
 uv sync --all-extras
 
 # Настроить .env
 cp .env.example .env
 nano .env  # Указать BOT_TOKEN
+
+# Инициализировать базу данных
+uv run alembic upgrade head
 
 # Запустить
 uv run python -m src.main

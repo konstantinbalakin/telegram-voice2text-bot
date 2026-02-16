@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 from pathlib import Path
+from urllib.parse import quote, urlparse
 
 from telegram import Update
 from telegram.ext import (
@@ -54,7 +55,7 @@ setup_logging(
     enable_syslog=SYSLOG_ENABLED,
     syslog_host=SYSLOG_HOST,
     syslog_port=SYSLOG_PORT,
-    sensitive_patterns=[settings.telegram_bot_token],
+    sensitive_patterns=[settings.telegram_bot_token, quote(settings.telegram_bot_token, safe="")],
 )
 
 logger = logging.getLogger(__name__)
@@ -74,8 +75,6 @@ async def main() -> None:
     logger.info(f"Bot mode: {settings.bot_mode}")
     logger.info(f"Enabled providers: {settings.whisper_providers}")
     logger.info(f"Routing strategy: {settings.whisper_routing_strategy}")
-    from urllib.parse import urlparse
-
     parsed_db_url = urlparse(settings.database_url)
     masked_db_url = f"{parsed_db_url.scheme}://***/{parsed_db_url.path.split('/')[-1]}"
     logger.info(f"Database: {masked_db_url}")
