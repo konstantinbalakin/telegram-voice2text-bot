@@ -1,33 +1,16 @@
+# Production overrides for VPS deployment.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 services:
   bot:
     # Use pre-built image from Docker Hub instead of building
     image: ${IMAGE_NAME:-konstantinbalakin/telegram-voice2text-bot:latest}
-    container_name: telegram-voice2text-bot
-    restart: unless-stopped
-    env_file:
-      - .env
     environment:
-      # Override with Docker-specific settings if needed
-      - DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
       # Application version for logging
       - APP_VERSION=${APP_VERSION:-unknown}
       # Optional: Remote syslog configuration
       - SYSLOG_ENABLED=${SYSLOG_ENABLED:-false}
       - SYSLOG_HOST=${SYSLOG_HOST:-}
       - SYSLOG_PORT=${SYSLOG_PORT:-514}
-    volumes:
-      # Persist database
-      - ./data:/app/data
-      # Persist logs
-      - ./logs:/app/logs
-      # Cache Whisper models to avoid re-downloading
-      - whisper-models:/home/appuser/.cache/huggingface
-    healthcheck:
-      test: ["CMD", "python", "-m", "src.health_check"]
-      interval: 60s
-      timeout: 30s
-      retries: 5
-      start_period: 60s
     # DNS configuration for model downloads
     dns:
       - 198.18.18.18  # VPS host DNS
@@ -43,27 +26,3 @@ services:
     #     reservations:
     #       cpus: '0.1'
     #       memory: 150M
-
-  # Optional: PostgreSQL for production
-  # Uncomment if you want to use PostgreSQL instead of SQLite
-  # postgres:
-  #   image: postgres:16-alpine
-  #   container_name: telegram-bot-db
-  #   restart: unless-stopped
-  #   environment:
-  #     - POSTGRES_USER=botuser
-  #     - POSTGRES_PASSWORD=botpassword
-  #     - POSTGRES_DB=telegram_bot
-  #   volumes:
-  #     - postgres-data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U botuser"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-volumes:
-  whisper-models:
-    driver: local
-  # postgres-data:
-  #   driver: local
