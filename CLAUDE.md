@@ -114,6 +114,47 @@ uv run mypy src/
 TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v
 ```
 
+## Source Code Map
+
+```
+src/
+├── main.py                    # Entry point, DI wiring, graceful shutdown
+├── config.py                  # Pydantic Settings from .env
+├── exceptions.py              # BotError hierarchy (each has user_message)
+├── bot/                       # Telegram handlers (BotHandlers, CallbackHandlers, keyboards)
+├── transcription/             # Core: providers/, routing/strategies, models, factory
+├── services/                  # Business logic: orchestrator, queue, LLM, Telethon, PDF
+├── storage/                   # Async SQLAlchemy: database.py, models.py, repositories.py
+└── utils/                     # logging_config, db_retry, html_utils
+```
+
+## Architecture Patterns
+
+- **Dependency Injection**: All services wired in `main.py`, passed via constructors
+- **Strategy Pattern**: `transcription/routing/strategies.py` — 5 routing strategies
+- **Repository Pattern**: `storage/repositories.py` — all DB access through repos
+- **Protocol-based services**: `services/lifecycle.py` — `AsyncService` protocol
+- **Custom exceptions**: `exceptions.py` — always include `user_message` field
+- **Queue + Semaphore**: `services/queue_manager.py` — concurrency control
+
+## Code Conventions
+
+- **Python**: >=3.11, full type annotations everywhere
+- **Black**: line-length=100, target-version=py311
+- **Ruff**: same line-length, extends Black
+- **mypy**: `disallow_untyped_defs=true` (strict)
+- **Logging**: `logger = logging.getLogger(__name__)` in every module
+- **Async**: all I/O is async (`async def`, `await`, `asyncio` primitives)
+- **Config**: all settings via `.env` → `config.py` (Pydantic Settings)
+
+## Testing Patterns
+
+- **DB fixtures**: in-memory SQLite via `async_engine`/`async_session` (see `tests/conftest.py`)
+- **Mock helpers**: `_make_handlers()`, `_make_update()`, `_make_context()` in test files
+- **Async mocks**: `unittest.mock.AsyncMock` for async methods
+- **DB patching**: `@patch("src.storage.database.get_session")` for repository tests
+- **Run single test**: `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/test_foo.py -v`
+
 ## Development Commands
 
 This project uses **uv** for Python package management:
@@ -135,9 +176,14 @@ uv run mypy src/
 
 # Database migrations
 uv run alembic upgrade head
+uv run alembic revision --autogenerate -m "description"  # create new migration
 
-# Export requirements for Docker
-make deps
+# Docker via Makefile
+make deps      # Export requirements.txt from uv.lock
+make build     # Build Docker image
+make up        # Start container
+make logs      # Stream logs
+make down      # Stop container
 ```
 
 ## Development Status
