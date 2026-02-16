@@ -193,7 +193,7 @@ typing-inspection==0.4.2
     # via
     #   pydantic
     #   pydantic-settings
-weasyprint==62.3
+weasyprint==68.0
     # via telegram-voice2text-bot
 webencodings==0.5.1
     # via
