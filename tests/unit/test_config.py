@@ -5,6 +5,12 @@ import pytest
 from src.config import Settings
 
 
+@pytest.fixture(autouse=True)
+def _no_env_file(tmp_path, monkeypatch):
+    """Ensure tests don't pick up .env file from project root."""
+    monkeypatch.chdir(tmp_path)
+
+
 class TestSettingsMinimal:
     """Settings can be created with minimal required env vars."""
 

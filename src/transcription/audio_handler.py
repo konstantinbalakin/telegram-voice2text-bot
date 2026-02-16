@@ -431,6 +431,12 @@ class AudioHandler:
                 if path != audio_path:
                     logger.info(f"Optimized for {target_provider}: {path.name}")
             except Exception as e:
+                if self._is_format_conversion_required(audio_path, target_provider, target_model):
+                    raise RuntimeError(
+                        f"Audio format conversion failed but is required for "
+                        f"{target_provider}/{target_model}: {e}. "
+                        f"Ensure ffmpeg is installed."
+                    ) from e
                 logger.warning(f"Provider optimization failed: {e}, using original")
                 path = audio_path
 
@@ -638,6 +644,26 @@ class AudioHandler:
         else:
             logger.debug(f"No optimization for provider: {provider_name}")
             return input_path
+
+    def _is_format_conversion_required(
+        self,
+        audio_path: Path,
+        provider_name: str,
+        model_name: Optional[str] = None,
+    ) -> bool:
+        """Check if format conversion is required (not optional) for the provider/model."""
+        from src.config import OPENAI_FORMAT_REQUIREMENTS
+
+        if provider_name != "openai":
+            return False
+
+        model = model_name or settings.openai_model
+        required_formats = OPENAI_FORMAT_REQUIREMENTS.get(model)
+        if not required_formats:
+            return False
+
+        current_ext = audio_path.suffix.lower().lstrip(".")
+        return current_ext not in required_formats
 
     async def _convert_to_mp3(self, input_path: Path) -> Path:
         """
