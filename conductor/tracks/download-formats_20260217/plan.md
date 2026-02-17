@@ -3,7 +3,7 @@
 **Track ID:** download-formats_20260217
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-02-17
-**Status:** [~] In Progress
+**Status:** [x] Complete
 
 ## Overview
 
@@ -101,25 +101,25 @@
 
 ### Tasks
 
-- [ ] Task 5.1: Создать экземпляр `ExportService` в `main.py` и передать в `callback_query_wrapper`
-- [ ] Task 5.2: Обновить `callback_query_wrapper` для передачи `ExportService` в `CallbackHandlers`
-- [ ] Task 5.3: Добавить `ENABLE_DOWNLOAD_BUTTON=true` в `.env.example` и `.env.example.short`
-- [ ] Task 5.4: Запустить полный набор проверок: ruff, black, mypy, pytest
-- [ ] Task 5.5: Обновить документацию: добавить описание кнопки "Скачать" в README или docs
+- [x] Task 5.1: Создать экземпляр `ExportService` в `main.py` и передать в `callback_query_wrapper`
+- [x] Task 5.2: Обновить `callback_query_wrapper` для передачи `ExportService` в `CallbackHandlers`
+- [x] Task 5.3: Добавить `ENABLE_DOWNLOAD_BUTTON=true` в `.env.example` и `.env.example.short`
+- [x] Task 5.4: Запустить полный набор проверок: ruff, black, mypy, pytest
+- [x] Task 5.5: Обновить документацию: добавить описание кнопки "Скачать" в README или docs
 
 ### Verification
 
-- [ ] `uv run ruff check src/` — чисто
-- [ ] `uv run black --check src/ tests/` — чисто
-- [ ] `uv run mypy src/` — чисто
-- [ ] `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v` — все тесты зелёные
+- [x] `uv run ruff check src/` — чисто
+- [x] `uv run black --check src/ tests/` — чисто
+- [x] `uv run mypy src/` — чисто
+- [x] `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v` — все тесты зелёные
 
 ## Final Verification
 
-- [ ] All acceptance criteria met
-- [ ] Tests passing
-- [ ] Documentation updated
-- [ ] Ready for review
+- [x] All acceptance criteria met
+- [x] Tests passing
+- [x] Documentation updated
+- [x] Ready for review
 
 ---
 
