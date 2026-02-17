@@ -32,21 +32,21 @@
 
 ### Tasks
 
-- [ ] Task 2.1: Написать тесты для `ExportService` (`tests/unit/test_export_service.py`): генерация MD, TXT, PDF, DOCX; проверка содержимого; обработка пустого текста
-- [ ] Task 2.2: Создать `src/services/export_service.py` с классом `ExportService`:
+- [x] Task 2.1: Написать тесты для `ExportService` (`tests/unit/test_export_service.py`): генерация MD, TXT, PDF, DOCX; проверка содержимого; обработка пустого текста
+- [x] Task 2.2: Создать `src/services/export_service.py` с классом `ExportService`:
   - `export_md(text, filename) -> io.BytesIO` — текст как есть в .md
   - `export_txt(text, filename) -> io.BytesIO` — текст с удалённой markdown-разметкой (strip **bold**, *italic*, #headers, bullet points → plain text)
   - `export_pdf(text, filename) -> io.BytesIO` — через существующий `PDFGenerator`
   - `export_docx(text, filename) -> io.BytesIO` — markdown → docx (заголовки, списки, параграфы) через `python-docx`
   - `export(text, format, filename) -> io.BytesIO` — диспетчер по формату
-- [ ] Task 2.3: Реализовать метод `_strip_markdown(text) -> str` для TXT-формата (удаление **, *, #, •, нумерации списков, inline code)
-- [ ] Task 2.4: Реализовать метод `_markdown_to_docx(text, filename) -> io.BytesIO` для DOCX-формата (парсинг markdown → python-docx: заголовки H1-H3, bullet lists, numbered lists, bold, italic, параграфы)
-- [ ] Task 2.5: Убедиться, что все тесты проходят
+- [x] Task 2.3: Реализовать метод `_strip_markdown(text) -> str` для TXT-формата (удаление **, *, #, •, нумерации списков, inline code)
+- [x] Task 2.4: Реализовать метод `_markdown_to_docx(text, filename) -> io.BytesIO` для DOCX-формата (парсинг markdown → python-docx: заголовки H1-H3, bullet lists, numbered lists, bold, italic, параграфы)
+- [x] Task 2.5: Убедиться, что все тесты проходят
 
 ### Verification
 
-- [ ] `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/test_export_service.py -v` — все тесты зелёные
-- [ ] Каждый формат корректно генерирует BytesIO с установленным `.name`
+- [x] `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/test_export_service.py -v` — все тесты зелёные
+- [x] Каждый формат корректно генерирует BytesIO с установленным `.name`
 
 ## Phase 3: Keyboard & UI — Кнопка "Скачать" и подменю
 
