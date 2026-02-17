@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes
 from src.services.pdf_generator import create_file_object
 
 from src.bot.keyboards import decode_callback_data, create_transcription_keyboard
+from src.bot.keyboards import create_download_format_keyboard
 from src.storage.models import TranscriptionState, TranscriptionVariant
 from src.storage.repositories import (
     TranscriptionStateRepository,
@@ -24,6 +25,7 @@ from src.utils.html_utils import sanitize_html
 
 if TYPE_CHECKING:
     from src.bot.handlers import BotHandlers
+    from src.services.export_service import ExportService
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,7 @@ class CallbackHandlers:
         text_processor: Optional[TextProcessor] = None,
         bot_handlers: Optional["BotHandlers"] = None,
         user_repo: Optional["UserRepository"] = None,
+        export_service: Optional["ExportService"] = None,
     ):
         """
         Initialize callback handlers.
@@ -70,6 +73,7 @@ class CallbackHandlers:
             text_processor: Text processor for LLM operations (optional)
             bot_handlers: BotHandlers instance for retranscription (optional, Phase 8)
             user_repo: Repository for user records (optional, for ownership checks)
+            export_service: Export service for file generation (optional)
         """
         self.state_repo = state_repo
         self.variant_repo = variant_repo
@@ -78,6 +82,7 @@ class CallbackHandlers:
         self.text_processor = text_processor
         self.bot_handlers = bot_handlers
         self.user_repo = user_repo
+        self.export_service = export_service
 
     async def _check_variant_limit(self, usage_id: int) -> bool:
         """Check if the variant limit for a transcription has been reached.
@@ -442,6 +447,10 @@ class CallbackHandlers:
                 await handle_retranscribe(update, context, self.bot_handlers)
             elif action == "back":
                 await self.handle_back(update, context)
+            elif action == "download":
+                await self.handle_download_menu(update, context)
+            elif action == "download_fmt":
+                await self.handle_download_format(update, context)
             else:
                 logger.warning(f"Unknown callback action: {action}")
                 await query.answer("Функция пока не реализована", show_alert=True)
@@ -1152,3 +1161,121 @@ class CallbackHandlers:
         except Exception as e:
             logger.error(f"Failed to update message: {e}")
             await query.answer("Не удалось обновить сообщение", show_alert=True)
+
+    async def handle_download_menu(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """
+        Handle download button press — show format selection submenu.
+
+        Replaces the main keyboard with a download format submenu.
+
+        Args:
+            update: Telegram update
+            context: Bot context
+        """
+        query = update.callback_query
+        if not query or not query.data:
+            return
+
+        data = decode_callback_data(query.data)
+        usage_id = data["usage_id"]
+
+        logger.info(f"Download menu requested: usage_id={usage_id}")
+
+        # Get current state
+        state = await self.state_repo.get_by_usage_id(usage_id)
+        if not state:
+            await query.answer("Состояние не найдено", show_alert=True)
+            return
+
+        await query.answer("Выберите формат")
+
+        # Replace keyboard with format submenu
+        format_keyboard = create_download_format_keyboard(usage_id)
+        try:
+            await query.edit_message_text(
+                "📥 Выберите формат для скачивания:",
+                reply_markup=format_keyboard,
+            )
+        except Exception as e:
+            logger.error(f"Failed to show download menu: {e}")
+            await query.answer("Не удалось показать меню", show_alert=True)
+
+    async def handle_download_format(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """
+        Handle download format selection — generate and send file.
+
+        Args:
+            update: Telegram update
+            context: Bot context
+        """
+        query = update.callback_query
+        if not query or not query.data:
+            return
+
+        data = decode_callback_data(query.data)
+        usage_id = data["usage_id"]
+        fmt = data.get("fmt", "txt")
+
+        logger.info(f"Download format selected: usage_id={usage_id}, format={fmt}")
+
+        # Get current state
+        state = await self.state_repo.get_by_usage_id(usage_id)
+        if not state:
+            await query.answer("Состояние не найдено", show_alert=True)
+            return
+
+        # Get current active variant
+        variant = await self.variant_repo.get_variant(
+            usage_id=usage_id,
+            mode=state.active_mode,
+            length_level=state.length_level,
+            emoji_level=state.emoji_level,
+            timestamps_enabled=state.timestamps_enabled,
+        )
+
+        if not variant:
+            await query.answer("Текст не найден", show_alert=True)
+            return
+
+        if not self.export_service:
+            await query.answer("Экспорт недоступен", show_alert=True)
+            return
+
+        # Generate filename
+        usage = await self.usage_repo.get_by_id(usage_id)
+        if usage:
+            file_number = await self.usage_repo.count_by_user_id(usage.user_id)
+        else:
+            file_number = usage_id
+
+        filename = f"{file_number}_{state.active_mode}"
+
+        try:
+            # Generate file
+            file_obj = self.export_service.export(variant.text_content, fmt, filename)
+
+            # Send file
+            message = cast(Message, query.message)
+            await context.bot.send_document(
+                chat_id=message.chat_id,
+                document=file_obj,
+                filename=file_obj.name,
+                caption=f"📄 {file_obj.name}",
+            )
+
+            await query.answer("Файл отправлен!")
+
+            # Restore main keyboard
+            segments = await self.segment_repo.get_by_usage_id(usage_id)
+            has_segments = len(segments) > 0
+            keyboard = create_transcription_keyboard(state, has_segments, settings)
+            await query.edit_message_reply_markup(reply_markup=keyboard)
+
+            logger.info(f"File sent: usage_id={usage_id}, format={fmt}")
+        except Exception as e:
+            logger.error(f"Failed to send file: {e}", exc_info=True)
+            await query.answer("Не удалось отправить файл", show_alert=True)

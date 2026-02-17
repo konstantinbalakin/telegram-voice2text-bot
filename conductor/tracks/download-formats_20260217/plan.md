@@ -74,26 +74,26 @@
 
 ### Tasks
 
-- [ ] Task 4.1: Написать тесты для callback-обработчиков скачивания (`tests/unit/test_callbacks_download.py`): нажатие "Скачать" показывает подменю; выбор формата отправляет файл; кнопка "Назад" возвращает основную клавиатуру
-- [ ] Task 4.2: Добавить метод `handle_download_menu()` в `CallbackHandlers`:
+- [x] Task 4.1: Написать тесты для callback-обработчиков скачивания (`tests/unit/test_callbacks_download.py`): нажатие "Скачать" показывает подменю; выбор формата отправляет файл; кнопка "Назад" возвращает основную клавиатуру
+- [x] Task 4.2: Добавить метод `handle_download_menu()` в `CallbackHandlers`:
   - Получить state и текущий текст
   - Заменить клавиатуру на подменю форматов (`create_download_format_keyboard`)
   - Ответить `query.answer("Выберите формат")`
-- [ ] Task 4.3: Добавить метод `handle_download_format()` в `CallbackHandlers`:
+- [x] Task 4.3: Добавить метод `handle_download_format()` в `CallbackHandlers`:
   - Декодировать формат из callback_data (`fmt` параметр)
   - Получить текущий активный вариант текста из `variant_repo`
   - Вызвать `ExportService.export(text, format, filename)`
   - Отправить файл через `context.bot.send_document()`
   - Вернуть основную клавиатуру
-- [ ] Task 4.4: Зарегистрировать новые actions в роутере `handle_callback_query()` (блок if/elif для `"download"` и `"download_fmt"`)
-- [ ] Task 4.5: Передать `ExportService` в `CallbackHandlers.__init__()` (опциональный параметр)
+- [x] Task 4.4: Зарегистрировать новые actions в роутере `handle_callback_query()` (блок if/elif для `"download"` и `"download_fmt"`)
+- [x] Task 4.5: Передать `ExportService` в `CallbackHandlers.__init__()` (опциональный параметр)
 
 ### Verification
 
-- [ ] Unit-тесты callback-обработчиков проходят
-- [ ] Подменю показывается при нажатии "Скачать"
-- [ ] Файл отправляется в правильном формате
-- [ ] После отправки файла возвращается основная клавиатура
+- [x] Unit-тесты callback-обработчиков проходят
+- [x] Подменю показывается при нажатии "Скачать"
+- [x] Файл отправляется в правильном формате
+- [x] После отправки файла возвращается основная клавиатура
 
 ## Phase 5: Integration — DI-wiring и E2E
 
