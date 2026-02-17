@@ -363,7 +363,18 @@ def create_transcription_keyboard(
             ]
         )
 
-    # Row 7: Retranscribe (Phase 8) - only if audio file is saved
+    # Row 7: Download button - export transcription to file
+    if settings.enable_download_button:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "📥 Скачать",
+                    callback_data=encode_callback_data("download", state.usage_id),
+                )
+            ]
+        )
+
+    # Row 8: Retranscribe (Phase 8) - only if audio file is saved
     if settings.enable_retranscribe:
         keyboard.append(
             [
@@ -375,3 +386,52 @@ def create_transcription_keyboard(
         )
 
     return InlineKeyboardMarkup(keyboard) if keyboard else None
+
+
+def create_download_format_keyboard(usage_id: int) -> InlineKeyboardMarkup:
+    """
+    Create inline keyboard for download format selection.
+
+    Layout:
+        [📄 TXT] [📝 MD]
+        [📕 PDF] [📘 DOCX]
+        [◀ Назад]
+
+    Args:
+        usage_id: Usage record ID
+
+    Returns:
+        InlineKeyboardMarkup with format buttons and back button
+    """
+    keyboard = [
+        # Row 1: TXT and MD
+        [
+            InlineKeyboardButton(
+                "📄 TXT",
+                callback_data=encode_callback_data("download_fmt", usage_id, fmt="txt"),
+            ),
+            InlineKeyboardButton(
+                "📝 MD",
+                callback_data=encode_callback_data("download_fmt", usage_id, fmt="md"),
+            ),
+        ],
+        # Row 2: PDF and DOCX
+        [
+            InlineKeyboardButton(
+                "📕 PDF",
+                callback_data=encode_callback_data("download_fmt", usage_id, fmt="pdf"),
+            ),
+            InlineKeyboardButton(
+                "📘 DOCX",
+                callback_data=encode_callback_data("download_fmt", usage_id, fmt="docx"),
+            ),
+        ],
+        # Row 3: Back button
+        [
+            InlineKeyboardButton(
+                "◀ Назад",
+                callback_data=encode_callback_data("back", usage_id),
+            ),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)

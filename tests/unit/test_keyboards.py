@@ -3,9 +3,12 @@
 from unittest.mock import MagicMock
 
 import pytest
+from telegram import InlineKeyboardMarkup
 
 from src.bot.keyboards import (
     _VALID_ACTIONS,
+    _VALID_DOWNLOAD_FORMATS,
+    create_download_format_keyboard,
     create_transcription_keyboard,
     decode_callback_data,
     encode_callback_data,
@@ -165,6 +168,7 @@ def _make_settings(**overrides: object) -> MagicMock:
         "enable_timestamps_option": False,
         "enable_length_variations": False,
         "enable_retranscribe": False,
+        "enable_download_button": False,
     }
     defaults.update(overrides)
     settings = MagicMock()
@@ -274,3 +278,91 @@ class TestCreateTranscriptionKeyboard:
         assert kb is not None
         last_row = kb.inline_keyboard[-1]
         assert "Могу лучше" in last_row[0].text
+
+    def test_download_button_shown_when_enabled(self) -> None:
+        state = _make_state()
+        settings = _make_settings(enable_download_button=True)
+        kb = create_transcription_keyboard(state, False, settings)
+        assert kb is not None
+        texts = [btn.text for row in kb.inline_keyboard for btn in row]
+        assert any("Скачать" in t for t in texts)
+
+    def test_download_button_hidden_when_disabled(self) -> None:
+        state = _make_state()
+        settings = _make_settings(enable_download_button=False)
+        kb = create_transcription_keyboard(state, False, settings)
+        assert kb is not None
+        texts = [btn.text for row in kb.inline_keyboard for btn in row]
+        assert not any("Скачать" in t for t in texts)
+
+    def test_download_button_before_retranscribe(self) -> None:
+        state = _make_state()
+        settings = _make_settings(enable_download_button=True, enable_retranscribe=True)
+        kb = create_transcription_keyboard(state, False, settings)
+        assert kb is not None
+        texts = [btn.text for row in kb.inline_keyboard for btn in row]
+        download_idx = next(i for i, t in enumerate(texts) if "Скачать" in t)
+        retranscribe_idx = next(i for i, t in enumerate(texts) if "Могу лучше" in t)
+        assert download_idx < retranscribe_idx
+
+
+# ---------------------------------------------------------------------------
+# decode_callback_data — download format validation
+# ---------------------------------------------------------------------------
+
+
+class TestDecodeDownloadFormat:
+    def test_download_action_accepted(self) -> None:
+        result = decode_callback_data("download:1")
+        assert result["action"] == "download"
+
+    def test_download_fmt_action_accepted(self) -> None:
+        result = decode_callback_data("download_fmt:1:fmt=txt")
+        assert result["action"] == "download_fmt"
+        assert result["fmt"] == "txt"
+
+    def test_all_download_formats_valid(self) -> None:
+        for fmt in _VALID_DOWNLOAD_FORMATS:
+            result = decode_callback_data(f"download_fmt:1:fmt={fmt}")
+            assert result["fmt"] == fmt
+
+    def test_invalid_download_format_raises(self) -> None:
+        with pytest.raises(ValueError, match="Invalid download format"):
+            decode_callback_data("download_fmt:1:fmt=html")
+
+
+# ---------------------------------------------------------------------------
+# create_download_format_keyboard
+# ---------------------------------------------------------------------------
+
+
+class TestCreateDownloadFormatKeyboard:
+    def test_returns_markup(self) -> None:
+        kb = create_download_format_keyboard(1)
+        assert isinstance(kb, InlineKeyboardMarkup)
+
+    def test_has_four_format_buttons(self) -> None:
+        kb = create_download_format_keyboard(1)
+        all_buttons = [btn for row in kb.inline_keyboard for btn in row]
+        format_buttons = [b for b in all_buttons if "download_fmt" in (b.callback_data or "")]
+        assert len(format_buttons) == 4
+
+    def test_has_back_button(self) -> None:
+        kb = create_download_format_keyboard(1)
+        last_row = kb.inline_keyboard[-1]
+        assert "Назад" in last_row[0].text
+
+    def test_callback_data_within_64_bytes(self) -> None:
+        kb = create_download_format_keyboard(999999)
+        for row in kb.inline_keyboard:
+            for btn in row:
+                if btn.callback_data:
+                    assert len(btn.callback_data.encode("utf-8")) <= 64
+
+    def test_format_buttons_labels(self) -> None:
+        kb = create_download_format_keyboard(1)
+        all_texts = [btn.text for row in kb.inline_keyboard for btn in row]
+        assert any("TXT" in t for t in all_texts)
+        assert any("MD" in t for t in all_texts)
+        assert any("PDF" in t for t in all_texts)
+        assert any("DOCX" in t for t in all_texts)
