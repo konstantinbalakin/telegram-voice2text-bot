@@ -1,0 +1,16 @@
+{
+  "id": "download-formats_20260217",
+  "title": "Download Transcription in Multiple Formats",
+  "type": "feature",
+  "status": "in_progress",
+  "created": "2026-02-17T00:00:00Z",
+  "updated": "2026-02-17T00:00:00Z",
+  "phases": {
+    "total": 5,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 23,
+    "completed": 0
+  }
+}

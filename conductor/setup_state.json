@@ -1,0 +1,35 @@
+{
+  "status": "complete",
+  "project_type": "brownfield",
+  "current_section": "complete",
+  "current_question": 0,
+  "completed_sections": ["product", "guidelines", "tech_stack", "workflow", "styleguides"],
+  "answers": {
+    "project_name": "telegram-voice2text-bot",
+    "description": "Telegram-бот для транскрипции голосовых сообщений с AI-обработкой текста",
+    "problem": "Неудобно прослушивать голосовые сообщения и трудно извлечь смысл из длинных голосовых",
+    "target_users": "Пользователи Telegram",
+    "goals": "Транскрипция + обработка + большие файлы",
+    "voice_tone": "Дружелюбно и доступно",
+    "design_principles": "Производительность, Качество результата",
+    "language": "Python 3.11+",
+    "database": "SQLite",
+    "deployment": "Docker на VPS",
+    "tdd": "Строгий TDD",
+    "commits": "Conventional Commits",
+    "code_review": "Обязательно для всех изменений",
+    "verification": "По завершении трека",
+    "styleguide": "Python (на основе текущих конфигов)"
+  },
+  "files_created": [
+    "conductor/index.md",
+    "conductor/product.md",
+    "conductor/product-guidelines.md",
+    "conductor/tech-stack.md",
+    "conductor/workflow.md",
+    "conductor/tracks.md",
+    "conductor/code_styleguides/python.md"
+  ],
+  "started_at": "2026-02-17T00:00:00Z",
+  "last_updated": "2026-02-17T00:00:00Z"
+}

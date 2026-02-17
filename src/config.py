@@ -262,6 +262,9 @@ class Settings(BaseSettings):
     enable_retranscribe: bool = Field(
         default=False, description="Enable retranscription option (Phase 8)"
     )
+    enable_download_button: bool = Field(
+        default=False, description="Enable download button for exporting transcriptions"
+    )
 
     # Interactive Transcription Limits
     max_cached_variants_per_transcription: int = Field(

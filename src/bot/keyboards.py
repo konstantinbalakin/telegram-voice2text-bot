@@ -39,12 +39,24 @@ def encode_callback_data(action: str, usage_id: int, **params: Any) -> str:
 
 
 _VALID_ACTIONS = frozenset(
-    ["mode", "length", "emoji", "timestamps", "retranscribe_menu", "retranscribe", "back", "noop"]
+    [
+        "mode",
+        "length",
+        "emoji",
+        "timestamps",
+        "retranscribe_menu",
+        "retranscribe",
+        "back",
+        "noop",
+        "download",
+        "download_fmt",
+    ]
 )
 
 _VALID_MODES = frozenset(["original", "structured", "summary", "magic"])
 _VALID_LENGTH_DIRECTIONS = frozenset(["shorter", "longer"])
 _VALID_EMOJI_DIRECTIONS = frozenset(["increase", "decrease", "few", "moderate"])
+_VALID_DOWNLOAD_FORMATS = frozenset(["md", "txt", "pdf", "docx"])
 
 
 def decode_callback_data(data: str) -> dict:
@@ -104,6 +116,12 @@ def decode_callback_data(data: str) -> dict:
             raise ValueError(
                 f"Invalid emoji direction {result['direction']!r}, "
                 f"expected one of {sorted(_VALID_EMOJI_DIRECTIONS)}"
+            )
+    if action == "download_fmt" and "fmt" in result:
+        if result["fmt"] not in _VALID_DOWNLOAD_FORMATS:
+            raise ValueError(
+                f"Invalid download format {result['fmt']!r}, "
+                f"expected one of {sorted(_VALID_DOWNLOAD_FORMATS)}"
             )
 
     return result
