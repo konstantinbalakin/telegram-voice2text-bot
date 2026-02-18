@@ -170,31 +170,40 @@ class TestExportDispatcher:
 
 
 class TestStripMarkdown:
+    """Test that export_txt properly strips markdown via strip_markdown()."""
+
     def test_strips_bold_asterisks(self, export_service: ExportService) -> None:
-        assert "bold" == export_service._strip_markdown("**bold**").strip()
+        result = export_service.export_txt("**bold**", "file")
+        assert result.read().decode("utf-8").strip() == "bold"
 
     def test_strips_italic_asterisks(self, export_service: ExportService) -> None:
-        assert "italic" == export_service._strip_markdown("*italic*").strip()
+        result = export_service.export_txt("*italic*", "file")
+        assert result.read().decode("utf-8").strip() == "italic"
 
     def test_strips_headers(self, export_service: ExportService) -> None:
-        result = export_service._strip_markdown("### Header text")
-        assert "#" not in result
-        assert "Header text" in result
+        result = export_service.export_txt("### Header text", "file")
+        content = result.read().decode("utf-8")
+        assert "#" not in content
+        assert "Header text" in content
 
     def test_strips_inline_code(self, export_service: ExportService) -> None:
-        result = export_service._strip_markdown("`code`")
-        assert "`" not in result
-        assert "code" in result
+        result = export_service.export_txt("`code`", "file")
+        content = result.read().decode("utf-8")
+        assert "`" not in content
+        assert "code" in content
 
     def test_strips_bullet_dashes(self, export_service: ExportService) -> None:
-        result = export_service._strip_markdown("- item")
-        assert "item" in result
+        result = export_service.export_txt("- item", "file")
+        content = result.read().decode("utf-8")
+        assert "item" in content
 
     def test_strips_bullet_dots(self, export_service: ExportService) -> None:
-        result = export_service._strip_markdown("• item")
-        assert "item" in result
+        result = export_service.export_txt("• item", "file")
+        content = result.read().decode("utf-8")
+        assert "item" in content
 
     def test_strips_numbered_list(self, export_service: ExportService) -> None:
-        result = export_service._strip_markdown("1. first\n2. second")
-        assert "first" in result
-        assert "second" in result
+        result = export_service.export_txt("1. first\n2. second", "file")
+        content = result.read().decode("utf-8")
+        assert "first" in content
+        assert "second" in content

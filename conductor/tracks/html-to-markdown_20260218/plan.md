@@ -103,12 +103,12 @@
 
 ### Tasks
 
-- [ ] Task 6.1: Обновить тесты ExportService — убедиться, что входные данные теперь в Markdown
-- [ ] Task 6.2: Обновить `export_service.py` — метод `export_txt()` должен использовать `strip_markdown()` из `markdown_utils` для корректной очистки, включая сохранение эмодзи
-- [ ] Task 6.3: Проверить, что `export_md()` возвращает валидный Markdown (теперь работает корректно, т.к. вход — Markdown)
-- [ ] Task 6.4: Проверить, что `export_docx()` корректно парсит Markdown (уже работает)
-- [ ] Task 6.5: Удалить или пометить как deprecated `src/utils/html_utils.py` (если не используется нигде)
-- [ ] Task 6.6: Запустить полный набор тестов и линтеров: `ruff check`, `black --check`, `mypy`, `pytest`
+- [x] Task 6.1: Обновить тесты ExportService — убедиться, что входные данные теперь в Markdown
+- [x] Task 6.2: Обновить `export_service.py` — метод `export_txt()` должен использовать `strip_markdown()` из `markdown_utils` для корректной очистки, включая сохранение эмодзи
+- [x] Task 6.3: Проверить, что `export_md()` возвращает валидный Markdown (теперь работает корректно, т.к. вход — Markdown)
+- [x] Task 6.4: Проверить, что `export_docx()` корректно парсит Markdown (уже работает)
+- [x] Task 6.5: Удалить или пометить как deprecated `src/utils/html_utils.py` (если не используется нигде)
+- [x] Task 6.6: Запустить полный набор тестов и линтеров: `ruff check`, `black --check`, `mypy`, `pytest`
 
 ### Verification
 
