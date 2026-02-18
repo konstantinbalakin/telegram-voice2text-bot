@@ -1,0 +1,19 @@
+{
+  "id": "html-to-markdown_20260218",
+  "title": "Переход форматирования с HTML на MarkdownV2",
+  "type": "bug",
+  "status": "in_progress",
+  "created": "2026-02-18T00:00:00Z",
+  "updated": "2026-02-18T12:00:00Z",
+  "current_phase": 1,
+  "current_task": "1.1",
+  "phases": {
+    "total": 6,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 27,
+    "completed": 0
+  },
+  "commits": []
+}

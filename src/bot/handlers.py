@@ -650,7 +650,7 @@ class BotHandlers:
                         )
                     ]
                     for chunk in chunks:
-                        await update.message.reply_text(chunk, parse_mode="MarkdownV2")
+                        await update.message.reply_text(chunk)
 
                 logger.info(f"Benchmark completed for user {user.id}")
                 return
