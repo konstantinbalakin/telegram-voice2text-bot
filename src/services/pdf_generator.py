@@ -23,6 +23,101 @@ def _get_pdf_generator() -> PDFGenerator:
     return _pdf_generator
 
 
+def convert_markdown_to_html(text: str) -> str:
+    """Convert Markdown-formatted text to HTML for PDF rendering.
+
+    Supports: headings, bold, italic, inline code, code blocks,
+    bullet lists (- and •), numbered lists, links, paragraphs.
+
+    Args:
+        text: Text with standard Markdown formatting
+
+    Returns:
+        HTML string suitable for PDF rendering
+    """
+    if not text:
+        return text
+
+    result = text
+
+    # Code blocks: ```...``` → <pre><code>...</code></pre>
+    result = re.sub(
+        r"```[^\n]*\n(.*?)```",
+        r"<pre><code>\1</code></pre>",
+        result,
+        flags=re.DOTALL,
+    )
+
+    # Inline code: `text` → <code>text</code>
+    result = re.sub(r"`([^`\n]+?)`", r"<code>\1</code>", result)
+
+    # Bold: **text** → <strong>text</strong>
+    result = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", result)
+
+    # Italic: *text* → <em>text</em>
+    result = re.sub(r"\*(.+?)\*", r"<em>\1</em>", result)
+
+    # Underline: __text__ → <u>text</u>
+    result = re.sub(r"__(.+?)__", r"<u>\1</u>", result)
+
+    # Links: [text](url) → <a href="url">text</a>
+    result = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', result)
+
+    # Headings: # text → <h1>text</h1>, ## → h2, ### → h3
+    result = re.sub(r"^### (.+)$", r"<h3>\1</h3>", result, flags=re.MULTILINE)
+    result = re.sub(r"^## (.+)$", r"<h2>\1</h2>", result, flags=re.MULTILINE)
+    result = re.sub(r"^# (.+)$", r"<h1>\1</h1>", result, flags=re.MULTILINE)
+
+    # Process blocks: split by double newlines for paragraphs/lists
+    blocks = result.split("\n\n")
+    html_blocks: list[str] = []
+
+    for block in blocks:
+        block = block.strip()
+        if not block:
+            continue
+
+        # Skip blocks that are already HTML elements
+        if block.startswith(("<h1>", "<h2>", "<h3>", "<pre>")):
+            html_blocks.append(block)
+            continue
+
+        lines = block.split("\n")
+
+        # Bullet list (• or -)
+        if any(re.match(r"^\s*[•\-]\s+", line) for line in lines):
+            list_items: list[str] = []
+            for line in lines:
+                line = line.strip()
+                match = re.match(r"^[•\-]\s+(.*)", line)
+                if match:
+                    list_items.append(f"<li>{match.group(1)}</li>")
+                elif line and list_items:
+                    list_items[-1] = list_items[-1][:-5] + " " + line + "</li>"
+            if list_items:
+                html_blocks.append("<ul>" + "".join(list_items) + "</ul>")
+
+        # Numbered list
+        elif any(re.match(r"^\d+\.", line.strip()) for line in lines):
+            list_items = []
+            for line in lines:
+                line = line.strip()
+                match = re.match(r"^\d+\.\s*(.*)", line)
+                if match:
+                    list_items.append(f"<li>{match.group(1).strip()}</li>")
+                elif line and list_items:
+                    list_items[-1] = list_items[-1][:-5] + " " + line + "</li>"
+            if list_items:
+                html_blocks.append("<ol>" + "".join(list_items) + "</ol>")
+
+        # Regular paragraph
+        else:
+            paragraph_text = "<br>".join(lines)
+            html_blocks.append(f"<p>{paragraph_text}</p>")
+
+    return "".join(html_blocks)
+
+
 class PDFGenerator:
     """Service for generating PDF files from HTML content."""
 
@@ -167,14 +262,14 @@ class PDFGenerator:
 </html>"""
         return html_template
 
-    def generate_pdf(self, html_content: str) -> bytes:
+    def generate_pdf(self, text: str) -> bytes:
         """
-        Generate PDF from HTML content.
+        Generate PDF from text content (Markdown or plain text).
 
-        Automatically converts text formatting (bullets, paragraphs) to HTML structure.
+        Automatically converts Markdown formatting to HTML for PDF rendering.
 
         Args:
-            html_content: HTML content or plain text with formatting to convert to PDF
+            text: Markdown-formatted or plain text content to convert to PDF
 
         Returns:
             PDF file as bytes
@@ -183,15 +278,8 @@ class PDFGenerator:
             Exception: If PDF generation fails
         """
         try:
-            # Convert text formatting to HTML if needed
-            # This handles cases where content has bullets (•) and paragraphs
-            # but not proper HTML tags
-            if (
-                "<ul>" not in html_content
-                and "<ol>" not in html_content
-                and "<p>" not in html_content
-            ):
-                html_content = self.convert_text_to_html(html_content)
+            # Convert Markdown to HTML for rendering
+            html_content = convert_markdown_to_html(text)
 
             # Create styled HTML document
             styled_html = self.create_styled_html(html_content)
