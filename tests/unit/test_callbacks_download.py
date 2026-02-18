@@ -249,10 +249,10 @@ class TestHandleDownloadFormat:
         sent_doc = call_kwargs.kwargs["document"]
         assert sent_doc.name.endswith(".docx")
 
-    async def test_restores_main_keyboard_after_send(
+    async def test_restores_text_and_keyboard_after_send(
         self, handler: CallbackHandlers, repos: tuple
     ) -> None:
-        """After sending file, should restore main keyboard."""
+        """After sending file, should restore both text and main keyboard."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
         query = _make_query("download_fmt:42:fmt=txt")
         update = _make_update(query)
@@ -269,8 +269,11 @@ class TestHandleDownloadFormat:
 
         await handler.handle_download_format(update, context)
 
-        # edit_message_text should be called to restore main keyboard
-        query.edit_message_reply_markup.assert_called_once()
+        # edit_message_text should be called to restore text AND keyboard
+        query.edit_message_text.assert_called()
+        call_kwargs = query.edit_message_text.call_args
+        assert call_kwargs.kwargs.get("reply_markup") is not None
+        assert "Hello world" in call_kwargs.args[0]
 
     async def test_variant_not_found(self, handler: CallbackHandlers, repos: tuple) -> None:
         """If variant not found, should show error."""

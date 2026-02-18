@@ -1269,11 +1269,13 @@ class CallbackHandlers:
 
             await query.answer("Файл отправлен!")
 
-            # Restore main keyboard
+            # Restore original text and main keyboard
             segments = await self.segment_repo.get_by_usage_id(usage_id)
             has_segments = len(segments) > 0
             keyboard = create_transcription_keyboard(state, has_segments, settings)
-            await query.edit_message_reply_markup(reply_markup=keyboard)
+            await self.update_transcription_display(
+                query, context, state, variant.text_content, keyboard, self.state_repo
+            )
 
             logger.info(f"File sent: usage_id={usage_id}, format={fmt}")
         except Exception as e:
