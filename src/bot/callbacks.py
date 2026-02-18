@@ -21,7 +21,7 @@ from src.services.text_processor import TextProcessor
 from src.services.progress_tracker import ProgressTracker
 from src.config import settings
 from src.bot.retranscribe_handlers import handle_retranscribe_menu, handle_retranscribe
-from src.utils.html_utils import sanitize_html
+from src.utils.markdown_utils import sanitize_markdown, escape_markdownv2
 
 if TYPE_CHECKING:
     from src.bot.handlers import BotHandlers
@@ -228,9 +228,9 @@ class CallbackHandlers:
                 segments = await self.segment_repo.get_by_usage_id(usage_id)
                 has_segments = len(segments) > 0
                 await query.edit_message_text(
-                    sanitize_html(original_text),
+                    escape_markdownv2(sanitize_markdown(original_text)),
                     reply_markup=create_transcription_keyboard(state, has_segments, settings),
-                    parse_mode="HTML",
+                    parse_mode="MarkdownV2",
                 )
             except Exception:
                 pass
@@ -270,12 +270,14 @@ class CallbackHandlers:
             file_number = state.usage_id
             logger.warning(f"Usage {state.usage_id} not found, using usage_id as file_number")
 
-        # Sanitize HTML before sending to Telegram (LLM may produce unsupported tags)
-        new_text = sanitize_html(new_text)
+        # Sanitize Markdown before sending to Telegram (LLM may produce HTML tags)
+        new_text = sanitize_markdown(new_text)
 
         if not state.is_file_message and len(new_text) <= settings.file_threshold_chars:
             # Simple case: text message, stays text message
-            await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
+            await query.edit_message_text(
+                escape_markdownv2(new_text), reply_markup=keyboard, parse_mode="MarkdownV2"
+            )
             logger.debug(f"Updated text message: usage_id={state.usage_id}")
 
         elif state.is_file_message and len(new_text) > settings.file_threshold_chars:
@@ -288,9 +290,9 @@ class CallbackHandlers:
 
             # Update main message with keyboard
             await query.edit_message_text(
-                f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}",
+                escape_markdownv2(f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}"),
                 reply_markup=keyboard,
-                parse_mode="HTML",
+                parse_mode="MarkdownV2",
             )
 
             # Delete old file
@@ -310,8 +312,10 @@ class CallbackHandlers:
                 chat_id=chat_id,
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 {mode_label} ({len(new_text)} символов, {file_extension})",
-                parse_mode="HTML",
+                caption=escape_markdownv2(
+                    f"📄 {mode_label} ({len(new_text)} символов, {file_extension})"
+                ),
+                parse_mode="MarkdownV2",
             )
 
             # Update state with new file_message_id
@@ -332,9 +336,9 @@ class CallbackHandlers:
 
             # Update existing message to info message
             await query.edit_message_text(
-                f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}",
+                escape_markdownv2(f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}"),
                 reply_markup=keyboard,
-                parse_mode="HTML",
+                parse_mode="MarkdownV2",
             )
 
             # Send file (PDF if possible, fallback to TXT)
@@ -346,8 +350,10 @@ class CallbackHandlers:
                 chat_id=chat_id,
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 {mode_label} ({len(new_text)} символов, {file_extension})",
-                parse_mode="HTML",
+                caption=escape_markdownv2(
+                    f"📄 {mode_label} ({len(new_text)} символов, {file_extension})"
+                ),
+                parse_mode="MarkdownV2",
             )
 
             # Update state: now it's a file message
@@ -371,7 +377,9 @@ class CallbackHandlers:
                     logger.warning(f"Could not delete file: {e}")
 
             # Update main message with text
-            await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
+            await query.edit_message_text(
+                escape_markdownv2(new_text), reply_markup=keyboard, parse_mode="MarkdownV2"
+            )
 
             # Update state: no longer file message
             state.is_file_message = False
@@ -735,9 +743,9 @@ class CallbackHandlers:
                     segments = await self.segment_repo.get_by_usage_id(usage_id)
                     has_segments = len(segments) > 0
                     await query.edit_message_text(
-                        sanitize_html(current_variant.text_content),
+                        escape_markdownv2(sanitize_markdown(current_variant.text_content)),
                         reply_markup=create_transcription_keyboard(state, has_segments, settings),
-                        parse_mode="HTML",
+                        parse_mode="MarkdownV2",
                     )
                 except Exception:
                     pass
@@ -945,11 +953,11 @@ class CallbackHandlers:
                         segments = await self.segment_repo.get_by_usage_id(usage_id)
                         has_segments = len(segments) > 0
                         await query.edit_message_text(
-                            sanitize_html(current_variant.text_content),
+                            escape_markdownv2(sanitize_markdown(current_variant.text_content)),
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),
-                            parse_mode="HTML",
+                            parse_mode="MarkdownV2",
                         )
                 except Exception:
                     pass

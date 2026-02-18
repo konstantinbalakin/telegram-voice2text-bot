@@ -367,7 +367,7 @@ class TestHandleModeChange:
     """Tests for handle_mode_change handler."""
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_switch_to_original_uses_cached_variant(
         self, mock_keyboard, mock_sanitize, repos
@@ -561,7 +561,7 @@ class TestHandleModeChange:
         assert any("Исходный текст не найден" in str(c) for c in query.answer.call_args_list)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_switch_to_structured_generates_variant(
@@ -647,7 +647,7 @@ class TestHandleModeChange:
 
         with (
             _default_settings_patch(),
-            patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x),
+            patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x),
             patch("src.bot.callbacks.create_transcription_keyboard"),
         ):
             await handler.handle_mode_change(update, context)
@@ -728,7 +728,7 @@ class TestHandleLengthChange:
         assert any("Уже максимальная длина" in str(c) for c in query.answer.call_args_list)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_valid_transition_with_cached_variant(self, mock_keyboard, mock_sanitize, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
@@ -763,7 +763,7 @@ class TestHandleLengthChange:
         state_repo.update.assert_called_once_with(state)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_variant_generation_on_cache_miss(
@@ -812,7 +812,7 @@ class TestHandleLengthChange:
         assert state.length_level == "short"
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_error_recovery_restores_text(
@@ -930,7 +930,7 @@ class TestHandleEmojiToggle:
 
         with (
             _default_settings_patch(),
-            patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x),
+            patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x),
             patch("src.bot.callbacks.create_transcription_keyboard"),
         ):
             await handler.handle_emoji_toggle(update, context)
@@ -964,7 +964,7 @@ class TestHandleEmojiToggle:
 
         with (
             _default_settings_patch(),
-            patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x),
+            patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x),
             patch("src.bot.callbacks.create_transcription_keyboard"),
         ):
             await handler.handle_emoji_toggle(update, context)
@@ -1018,7 +1018,7 @@ class TestHandleEmojiToggle:
         assert any("Смайлы уже убраны" in str(c) for c in query.answer.call_args_list)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_source_variant_prefers_level_0_when_adding(
@@ -1068,7 +1068,7 @@ class TestHandleEmojiToggle:
         text_processor.add_emojis.assert_called_once_with("clean text", 1, current_level=0)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_error_recovery_restores_text(
@@ -1153,7 +1153,7 @@ class TestHandleTimestampsToggle:
         assert any("Таймкоды недоступны" in str(c) for c in query.answer.call_args_list)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_enable_timestamps_generates_variant(self, mock_keyboard, mock_sanitize, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
@@ -1200,7 +1200,7 @@ class TestHandleTimestampsToggle:
         state_repo.update.assert_called_once_with(state)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_disable_timestamps_uses_base_variant(self, mock_keyboard, mock_sanitize, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
@@ -1246,7 +1246,7 @@ class TestHandleBack:
     """Tests for handle_back handler."""
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_back_restores_keyboard(self, mock_keyboard, mock_sanitize, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
@@ -1455,7 +1455,7 @@ class TestGenerateVariant:
         text_processor.create_magic.assert_called_once_with("original")
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_error_recovery_restores_original(
@@ -1594,7 +1594,7 @@ class TestUpdateTranscriptionDisplay:
     """Tests for update_transcription_display method."""
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     async def test_text_to_text_short_stays_text(self, mock_sanitize, repos):
         """Short text message stays as text message."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
@@ -1620,12 +1620,12 @@ class TestUpdateTranscriptionDisplay:
             )
 
         query.edit_message_text.assert_called_once_with(
-            short_text, reply_markup=keyboard, parse_mode="HTML"
+            short_text, reply_markup=keyboard, parse_mode="MarkdownV2"
         )
 
     @pytest.mark.asyncio
     @patch("src.bot.callbacks.create_file_object")
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     async def test_file_to_file_long_stays_file(self, mock_sanitize, mock_file_obj, repos):
         """Long file message stays as file message."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
@@ -1670,7 +1670,7 @@ class TestUpdateTranscriptionDisplay:
 
     @pytest.mark.asyncio
     @patch("src.bot.callbacks.create_file_object")
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     async def test_text_to_file_conversion(self, mock_sanitize, mock_file_obj, repos):
         """Text message becomes file message when text too long."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
@@ -1709,7 +1709,7 @@ class TestUpdateTranscriptionDisplay:
         state_repo.update.assert_called_once_with(state)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     async def test_file_to_text_conversion(self, mock_sanitize, repos):
         """File message becomes text message when text short enough."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
@@ -1741,7 +1741,7 @@ class TestUpdateTranscriptionDisplay:
         context.bot.delete_message.assert_called_once_with(1000, 999)
         # Message updated with text
         query.edit_message_text.assert_called_once_with(
-            short_text, reply_markup=keyboard, parse_mode="HTML"
+            short_text, reply_markup=keyboard, parse_mode="MarkdownV2"
         )
         assert state.is_file_message is False
         assert state.file_message_id is None
