@@ -112,21 +112,21 @@
 
 ### Verification
 
-- [ ] `ruff check src/` — без ошибок
-- [ ] `black --check src/ tests/` — без ошибок
-- [ ] `mypy src/` — без ошибок
-- [ ] `TELEGRAM_BOT_TOKEN=test pytest tests/unit/ -v` — все тесты проходят
+- [x] `ruff check src/` — без ошибок
+- [x] `black --check src/ tests/` — без ошибок
+- [x] `mypy src/` — без ошибок
+- [x] `TELEGRAM_BOT_TOKEN=test pytest tests/unit/ -v` — все тесты проходят
 
 ## Final Verification
 
-- [ ] Все acceptance criteria из spec.md выполнены
-- [ ] MD-файл содержит валидную Markdown-разметку
-- [ ] TXT-файл содержит чистый текст с эмодзи (если были) без форматирования
-- [ ] PDF корректно отображает форматирование
-- [ ] DOCX корректно отображает форматирование
-- [ ] Telegram-сообщения корректно отображаются с MarkdownV2
-- [ ] Все тесты и линтеры проходят
-- [ ] Коммиты сделаны в ветке `feature/download-formats`
+- [x] Все acceptance criteria из spec.md выполнены
+- [x] MD-файл содержит валидную Markdown-разметку
+- [x] TXT-файл содержит чистый текст с эмодзи (если были) без форматирования
+- [x] PDF корректно отображает форматирование
+- [x] DOCX корректно отображает форматирование
+- [x] Telegram-сообщения корректно отображаются с MarkdownV2
+- [x] Все тесты и линтеры проходят
+- [x] Коммиты сделаны в ветке `feature/download-formats`
 
 ---
 
