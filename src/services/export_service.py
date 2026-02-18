@@ -9,6 +9,7 @@ from docx import Document  # type: ignore[import-untyped]
 from docx.shared import Pt  # type: ignore[import-untyped]
 
 from src.services.pdf_generator import PDFGenerator
+from src.utils.markdown_utils import strip_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class ExportService:
         Returns:
             BytesIO with .name set to {filename}.txt
         """
-        plain = self._strip_markdown(text)
+        plain = strip_markdown(text)
         buf = io.BytesIO(plain.encode("utf-8"))
         buf.name = f"{filename}.txt"
         return buf
@@ -100,45 +101,6 @@ class ExportService:
         """
         buf = self._markdown_to_docx(text, filename)
         return buf
-
-    def _strip_markdown(self, text: str) -> str:
-        """Remove markdown formatting from text to produce plain text.
-
-        Strips: **bold**, *italic*, # headers, `inline code`, - bullets, • bullets,
-        numbered lists (1. 2. etc.)
-
-        Args:
-            text: Markdown-formatted text
-
-        Returns:
-            Plain text without markdown markers
-        """
-        if not text:
-            return text
-
-        result = text
-
-        # Strip headers (# ## ### etc.)
-        result = re.sub(r"^#{1,6}\s+", "", result, flags=re.MULTILINE)
-
-        # Strip bold **text** and __text__
-        result = re.sub(r"\*\*(.+?)\*\*", r"\1", result)
-        result = re.sub(r"__(.+?)__", r"\1", result)
-
-        # Strip italic *text* and _text_
-        result = re.sub(r"\*(.+?)\*", r"\1", result)
-        result = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"\1", result)
-
-        # Strip inline code `text`
-        result = re.sub(r"`(.+?)`", r"\1", result)
-
-        # Strip bullet markers (- and •)
-        result = re.sub(r"^[-•]\s+", "", result, flags=re.MULTILINE)
-
-        # Strip numbered list markers (1. 2. etc.)
-        result = re.sub(r"^\d+\.\s+", "", result, flags=re.MULTILINE)
-
-        return result
 
     def _markdown_to_docx(self, text: str, filename: str) -> io.BytesIO:
         """Convert markdown text to DOCX with basic formatting.
