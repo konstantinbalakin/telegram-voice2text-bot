@@ -833,7 +833,7 @@ class TestCreateInteractiveStateAndKeyboard:
 class TestSendTranscriptionResult:
     """Tests for _send_transcription_result."""
 
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.settings")
     async def test_short_text_sends_message(self, mock_settings, mock_get_session, _mock_sanitize):
@@ -862,7 +862,7 @@ class TestSendTranscriptionResult:
         request.user_message.reply_text.assert_awaited()
 
     @patch("src.services.transcription_orchestrator.create_file_object")
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.settings")
     async def test_long_text_sends_file(
@@ -895,7 +895,7 @@ class TestSendTranscriptionResult:
         assert file_msg is not None
         request.user_message.reply_document.assert_awaited()
 
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.settings")
     async def test_keyboard_attached_to_message(
@@ -935,7 +935,7 @@ class TestSendTranscriptionResult:
 class TestSendDraftMessages:
     """Tests for _send_draft_messages."""
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.settings")
     async def test_short_draft_sends_text(self, mock_settings, mock_get_session, _mock_escape):
@@ -961,7 +961,7 @@ class TestSendDraftMessages:
         request.user_message.reply_text.assert_awaited()
 
     @patch("src.services.transcription_orchestrator.create_file_object")
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.settings")
     async def test_long_draft_sends_file(
@@ -1021,7 +1021,7 @@ class TestSendResultAndUpdateState:
                 return_value=mock_usage_repo,
             ),
             patch(
-                "src.services.transcription_orchestrator.sanitize_html",
+                "src.services.transcription_orchestrator.sanitize_markdown",
                 side_effect=lambda x: x,
             ),
         ):
@@ -1084,7 +1084,7 @@ class TestSendResultAndUpdateState:
                 return_value=kb,
             ),
             patch(
-                "src.services.transcription_orchestrator.sanitize_html",
+                "src.services.transcription_orchestrator.sanitize_markdown",
                 side_effect=lambda x: x,
             ),
         ):
@@ -1113,8 +1113,8 @@ class TestSendResultAndUpdateState:
 class TestProcessTranscription:
     """Tests for process_transcription — the main orchestration method."""
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
@@ -1169,8 +1169,8 @@ class TestProcessTranscription:
         audio_handler.cleanup_file.assert_called()
         mock_usage_repo.update.assert_awaited()
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
@@ -1243,8 +1243,8 @@ class TestProcessTranscription:
         text_processor.create_structured.assert_awaited_once()
         strategy.requires_structuring.assert_called()
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
@@ -1310,8 +1310,8 @@ class TestProcessTranscription:
         llm_service.refine_transcription.assert_awaited_once()
         hybrid_strategy.requires_refinement.assert_called_with(120)
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
@@ -1385,8 +1385,8 @@ class TestProcessTranscription:
         assert returned is result
         audio_handler.cleanup_file.assert_called()
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
@@ -1452,8 +1452,8 @@ class TestProcessTranscription:
         # Status message should show error fallback
         request.status_message.edit_text.assert_awaited()
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
@@ -1493,8 +1493,8 @@ class TestProcessTranscription:
         request.status_message.edit_text.assert_awaited()
         audio_handler.cleanup_file.assert_called()
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
@@ -1548,8 +1548,8 @@ class TestProcessTranscription:
         audio_handler.cleanup_file.assert_any_call(request.file_path)
         audio_handler.cleanup_file.assert_any_call(processed)
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
@@ -1612,8 +1612,8 @@ class TestProcessTranscription:
         # LLM should NOT have been called
         llm_service.refine_transcription.assert_not_awaited()
 
-    @patch("src.services.transcription_orchestrator.escape_html", side_effect=lambda x: x)
-    @patch("src.services.transcription_orchestrator.sanitize_html", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.escape_markdownv2", side_effect=lambda x: x)
+    @patch("src.services.transcription_orchestrator.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.services.transcription_orchestrator.get_session")
     @patch("src.services.transcription_orchestrator.ProgressTracker")
     @patch("src.services.transcription_orchestrator.settings")
