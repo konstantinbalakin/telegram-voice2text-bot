@@ -357,6 +357,58 @@ class TestHandleCallbackQueryRouting:
         await handler.handle_callback_query(update, context)
         assert any("Ретранскрипция недоступна" in str(c) for c in query.answer.call_args_list)
 
+    @pytest.mark.asyncio
+    async def test_routes_to_download_menu(self, repos):
+        """download action routes to handle_download_menu."""
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+
+        usage = _make_usage()
+        owner = _make_user()
+        usage_repo.get_by_id = AsyncMock(return_value=usage)
+        user_repo.get_by_id = AsyncMock(return_value=owner)
+
+        handler = CallbackHandlers(
+            state_repo=state_repo,
+            variant_repo=variant_repo,
+            segment_repo=segment_repo,
+            usage_repo=usage_repo,
+            user_repo=user_repo,
+        )
+        handler.handle_download_menu = AsyncMock()
+
+        query = _make_query(data="download:42")
+        update = _make_update(query)
+        context = MagicMock()
+
+        await handler.handle_callback_query(update, context)
+        handler.handle_download_menu.assert_called_once_with(update, context)
+
+    @pytest.mark.asyncio
+    async def test_routes_to_download_format(self, repos):
+        """download_fmt action routes to handle_download_format."""
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+
+        usage = _make_usage()
+        owner = _make_user()
+        usage_repo.get_by_id = AsyncMock(return_value=usage)
+        user_repo.get_by_id = AsyncMock(return_value=owner)
+
+        handler = CallbackHandlers(
+            state_repo=state_repo,
+            variant_repo=variant_repo,
+            segment_repo=segment_repo,
+            usage_repo=usage_repo,
+            user_repo=user_repo,
+        )
+        handler.handle_download_format = AsyncMock()
+
+        query = _make_query(data="download_fmt:42:fmt=txt")
+        update = _make_update(query)
+        context = MagicMock()
+
+        await handler.handle_callback_query(update, context)
+        handler.handle_download_format.assert_called_once_with(update, context)
+
 
 # ===========================================================================
 # 3. handle_mode_change

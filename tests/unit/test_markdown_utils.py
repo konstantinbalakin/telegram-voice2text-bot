@@ -94,6 +94,12 @@ class TestEscapeMarkdownV2PreservesFormatting:
         assert "_курсив_" in result
         assert "`код`" in result
 
+    def test_nested_bold_italic_known_limitation(self) -> None:
+        # Nested formatting (**bold *italic* inside**) is not fully supported.
+        # Inner italic markers get escaped. Bold is still preserved.
+        result = escape_markdownv2("**bold *italic* inside**")
+        assert "*bold" in result  # Bold is converted
+
 
 class TestEscapeMarkdownV2SpecExample:
     """Verification example from spec."""
@@ -180,6 +186,10 @@ class TestSanitizeMarkdownRemovesHtml:
     def test_no_html(self) -> None:
         text = "Обычный **текст** без HTML"
         assert sanitize_markdown(text) == text
+
+    def test_nested_html_bold_italic(self) -> None:
+        result = sanitize_markdown("<b>bold <i>italic</i></b>")
+        assert "**bold *italic***" == result
 
     def test_multiple_newlines_cleaned(self) -> None:
         result = sanitize_markdown("первый\n\n\n\nвторой")

@@ -228,6 +228,10 @@ class TestConvertMarkdownToHtml:
         result = convert_markdown_to_html("[ссылка](https://example.com)")
         assert '<a href="https://example.com">ссылка</a>' in result
 
+    def test_underline(self) -> None:
+        result = convert_markdown_to_html("__подчёркнутый__")
+        assert "<u>подчёркнутый</u>" in result
+
     def test_paragraph(self) -> None:
         result = convert_markdown_to_html("Первый параграф\n\nВторой параграф")
         assert "<p>Первый параграф</p>" in result

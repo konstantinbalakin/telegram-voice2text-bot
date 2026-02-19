@@ -256,12 +256,12 @@ class TestHandleDownloadFormat:
         """After sending file, should restore both text and main keyboard."""
         mock_settings.interactive_mode_enabled = True
         mock_settings.enable_structured_mode = True
-        mock_settings.enable_beautify_mode = True
+        mock_settings.enable_magic_mode = True
         mock_settings.enable_summary_mode = True
         mock_settings.enable_length_variations = False
-        mock_settings.enable_emoji_control = False
+        mock_settings.enable_emoji_option = False
         mock_settings.enable_timestamps_option = False
-        mock_settings.enable_download_option = True
+        mock_settings.enable_download_button = True
         mock_settings.file_threshold_chars = 10000
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
         query = _make_query("download_fmt:42:fmt=txt")
@@ -323,3 +323,64 @@ class TestHandleDownloadFormat:
         await handler_no_export.handle_download_format(update, context)
 
         query.answer.assert_called_with("Экспорт недоступен", show_alert=True)
+
+
+class TestHandleDownloadFormatErrors:
+    """Test error paths in handle_download_format."""
+
+    async def test_export_error_shows_alert(self, handler: CallbackHandlers, repos: tuple) -> None:
+        """When export_service.export raises, user should see an error alert."""
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+        query = _make_query("download_fmt:42:fmt=pdf")
+        update = _make_update(query)
+        context = AsyncMock()
+
+        state = _make_state(usage_id=42)
+        state_repo.get_by_usage_id = AsyncMock(return_value=state)
+        variant = _make_variant("Hello world")
+        variant_repo.get_variant = AsyncMock(return_value=variant)
+        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.count_by_user_id = AsyncMock(return_value=5)
+        user_repo.get_by_id = AsyncMock(return_value=_make_user())
+
+        with patch.object(
+            handler.export_service, "export", side_effect=Exception("PDF generation failed")
+        ):
+            await handler.handle_download_format(update, context)
+
+        assert any("Не удалось создать файл" in str(c) for c in query.answer.call_args_list)
+        context.bot.send_document.assert_not_called()
+
+    async def test_state_not_found(self, handler: CallbackHandlers, repos: tuple) -> None:
+        """When state is not found, should show error."""
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+        query = _make_query("download_fmt:42:fmt=txt")
+        update = _make_update(query)
+        context = AsyncMock()
+
+        state_repo.get_by_usage_id = AsyncMock(return_value=None)
+
+        await handler.handle_download_format(update, context)
+
+        query.answer.assert_called_with("Состояние не найдено", show_alert=True)
+
+
+class TestHandleDownloadMenuErrors:
+    """Test error paths in handle_download_menu."""
+
+    async def test_edit_message_error_shows_alert(
+        self, handler: CallbackHandlers, repos: tuple
+    ) -> None:
+        """When edit_message_text fails, should answer with error."""
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+        query = _make_query("download:42")
+        update = _make_update(query)
+        context = AsyncMock()
+
+        state = _make_state(usage_id=42)
+        state_repo.get_by_usage_id = AsyncMock(return_value=state)
+        query.edit_message_text = AsyncMock(side_effect=Exception("Telegram error"))
+
+        await handler.handle_download_menu(update, context)
+
+        assert any("Не удалось показать меню" in str(c) for c in query.answer.call_args_list)
