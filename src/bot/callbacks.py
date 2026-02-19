@@ -472,9 +472,7 @@ class CallbackHandlers:
 
     async def handle_mode_change(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
-        Handle mode change (original/structured/summary).
-
-        Phase 2: Implements "original" and "structured" modes.
+        Handle mode change (original/structured/summary/magic).
 
         Args:
             update: Telegram update
@@ -1122,8 +1120,8 @@ class CallbackHandlers:
         """
         Handle back button to return to main keyboard from submenus.
 
-        This handler restores the main transcription keyboard without changing
-        the active mode or any parameters. Used when returning from retranscribe menu.
+        Restores the main transcription keyboard without changing the active mode
+        or any parameters. Used when returning from retranscribe or download format menus.
 
         Args:
             update: Telegram update

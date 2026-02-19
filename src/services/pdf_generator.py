@@ -119,7 +119,7 @@ def convert_markdown_to_html(text: str) -> str:
 
 
 class PDFGenerator:
-    """Service for generating PDF files from HTML content."""
+    """Service for generating PDF files from text content (Markdown or plain text)."""
 
     def __init__(self) -> None:
         """Initialize PDF generator with font configuration."""

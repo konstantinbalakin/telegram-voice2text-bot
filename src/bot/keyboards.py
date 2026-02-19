@@ -404,7 +404,6 @@ def create_download_format_keyboard(usage_id: int) -> InlineKeyboardMarkup:
         InlineKeyboardMarkup with format buttons and back button
     """
     keyboard = [
-        # Row 1: TXT and MD
         [
             InlineKeyboardButton(
                 "📄 TXT",
@@ -415,7 +414,6 @@ def create_download_format_keyboard(usage_id: int) -> InlineKeyboardMarkup:
                 callback_data=encode_callback_data("download_fmt", usage_id, fmt="md"),
             ),
         ],
-        # Row 2: PDF and DOCX
         [
             InlineKeyboardButton(
                 "📕 PDF",
@@ -426,7 +424,6 @@ def create_download_format_keyboard(usage_id: int) -> InlineKeyboardMarkup:
                 callback_data=encode_callback_data("download_fmt", usage_id, fmt="docx"),
             ),
         ],
-        # Row 3: Back button
         [
             InlineKeyboardButton(
                 "◀ Назад",

@@ -156,7 +156,6 @@ class ExportService:
                 i += 1
                 continue
 
-            # Headers
             header_match = re.match(r"^(#{1,3})\s+(.*)", stripped)
             if header_match:
                 level = len(header_match.group(1))
@@ -165,7 +164,6 @@ class ExportService:
                 i += 1
                 continue
 
-            # Bullet list (- or •)
             if re.match(r"^[-•]\s+", stripped):
                 while i < len(lines) and re.match(r"^[-•]\s+", lines[i].strip()):
                     item_text = re.sub(r"^[-•]\s+", "", lines[i].strip())
@@ -174,7 +172,6 @@ class ExportService:
                     i += 1
                 continue
 
-            # Numbered list
             if re.match(r"^\d+\.\s+", stripped):
                 while i < len(lines) and re.match(r"^\d+\.\s+", lines[i].strip()):
                     item_text = re.sub(r"^\d+\.\s+", "", lines[i].strip())
@@ -183,7 +180,6 @@ class ExportService:
                     i += 1
                 continue
 
-            # Regular paragraph
             p = doc.add_paragraph()
             self._add_formatted_text(p, stripped)
             i += 1
@@ -202,13 +198,13 @@ class ExportService:
         return result
 
     def _add_formatted_text(self, paragraph: Any, text: str) -> None:
-        """Add text with bold/italic formatting to a docx paragraph.
+        """Add text with bold/italic/code formatting to a docx paragraph.
 
-        Parses **bold** and *italic* markers and applies formatting via runs.
+        Parses **bold**, *italic*, and `code` markers and applies formatting via runs.
 
         Args:
             paragraph: python-docx paragraph object
-            text: Text that may contain **bold** and *italic* markers
+            text: Text that may contain **bold**, *italic*, and `code` markers
         """
         # Split by bold and italic markers
         # Pattern: **bold** or *italic*

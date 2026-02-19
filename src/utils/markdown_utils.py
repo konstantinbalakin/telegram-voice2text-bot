@@ -6,6 +6,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # MarkdownV2 special characters that must be escaped in plain text
+# See: https://core.telegram.org/bots/api#markdownv2-style
 MARKDOWNV2_SPECIAL_CHARS = r"_*[]()~`>#+-=|{}.!"
 
 
@@ -19,6 +20,8 @@ def escape_markdownv2(text: str) -> str:
     - ````` ```code block``` ````` preserved as-is
 
     All other MarkdownV2 special characters in plain text are escaped with backslash.
+    Unclosed markers (e.g. lone ``**`` or ``*``) are escaped rather than left unmatched,
+    which would cause Telegram API parse errors.
 
     Args:
         text: Text with standard Markdown formatting
@@ -128,7 +131,7 @@ def sanitize_markdown(text: str) -> str:
     - ``<code>`` → `` `text` ``
     - ``<pre>`` → `````text`````
     - ``<a href="url">text</a>`` → ``[text](url)``
-    - ``<u>`` → strips tags (no Markdown equivalent)
+    - ``<u>`` → stripped (content preserved, no Markdown conversion)
     - Other tags → strips tags, keeps content
 
     Args:

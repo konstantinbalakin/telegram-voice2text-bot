@@ -189,7 +189,7 @@ class TextProcessor:
         try:
             adjusted_text = await self._refine_with_custom_prompt(current_text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
+            # Sanitize markdown formatting
             adjusted_text = sanitize_markdown(adjusted_text)
 
             logger.info(
@@ -293,7 +293,7 @@ class TextProcessor:
             # Use custom prompt for summarization
             summary_text = await self._refine_with_custom_prompt(original_text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
+            # Sanitize markdown formatting
             summary_text = sanitize_markdown(summary_text)
 
             logger.info(f"Summary created: {len(original_text)} → {len(summary_text)} chars")
@@ -382,7 +382,7 @@ class TextProcessor:
             # Use custom prompt for magic transformation
             magic_text = await self._refine_with_custom_prompt(original_text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
+            # Sanitize markdown formatting
             magic_text = sanitize_markdown(magic_text)
 
             logger.info(f"Magic text created: {len(original_text)} → {len(magic_text)} chars")
@@ -480,7 +480,7 @@ class TextProcessor:
         try:
             text_with_emojis = await self._refine_with_custom_prompt(text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
+            # Sanitize markdown formatting
             text_with_emojis = sanitize_markdown(text_with_emojis)
 
             logger.info(
