@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 class ExportService:
     """Service for exporting transcription text to MD, TXT, PDF, DOCX."""
 
-    def __init__(self) -> None:
-        self._pdf_generator = PDFGenerator()
+    def __init__(self, pdf_generator: PDFGenerator | None = None) -> None:
+        self._pdf_generator = pdf_generator or PDFGenerator()
 
     def export(self, text: str, fmt: str, filename: str) -> io.BytesIO:
         """Dispatch export to the appropriate format handler.

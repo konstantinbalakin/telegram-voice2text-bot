@@ -36,7 +36,7 @@ def convert_markdown_to_html(text: str) -> str:
         HTML string suitable for PDF rendering
     """
     if not text:
-        return text
+        return text or ""
 
     result = text
 

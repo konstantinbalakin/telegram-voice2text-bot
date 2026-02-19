@@ -15,6 +15,7 @@ Navigation hub for project context.
 
 - [ ] [download-formats_20260217](./tracks/download-formats_20260217/index.md) — Download Transcription in Multiple Formats
 - [ ] [html-to-markdown_20260218](./tracks/html-to-markdown_20260218/index.md) — Переход форматирования с HTML на MarkdownV2
+- [ ] [pr-review-fixes_20260219](./tracks/pr-review-fixes_20260219/index.md) — PR Review Fixes for download-formats & html-to-markdown
 
 <!-- Auto-populated by /conductor:new-track -->
 
