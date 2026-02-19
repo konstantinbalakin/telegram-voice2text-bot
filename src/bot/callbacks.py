@@ -129,7 +129,9 @@ class CallbackHandlers:
         Returns:
             The generated variant, or None on error.
         """
-        assert self.text_processor is not None
+        if not self.text_processor:
+            logger.error("text_processor is None in _generate_variant")
+            return None
 
         # Mode-specific configuration
         mode_config: dict[str, dict[str, str]] = {
@@ -402,11 +404,9 @@ class CallbackHandlers:
         if not query or not query.data:
             return
 
-        # Acknowledge callback
-        await query.answer()
-
         # Handle noop (non-interactive buttons)
         if query.data == "noop":
+            await query.answer()
             return
 
         # Decode callback data
@@ -417,6 +417,10 @@ class CallbackHandlers:
             logger.error(f"Failed to decode callback data '{query.data}': {e}")
             await query.answer("Ошибка обработки", show_alert=True)
             return
+
+        # Acknowledge callback (skip for actions that manage their own answer)
+        if action not in ("download", "download_fmt"):
+            await query.answer()
 
         # IDOR protection: verify the user pressing the button owns the transcription
         usage_id = data.get("usage_id")
@@ -596,7 +600,7 @@ class CallbackHandlers:
             )
             logger.info(f"Mode changed successfully: usage_id={usage_id}, mode={new_mode}")
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_length_change(
@@ -780,7 +784,7 @@ class CallbackHandlers:
                 f"level={current_level}->{new_level}"
             )
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_emoji_toggle(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -992,7 +996,7 @@ class CallbackHandlers:
                 f"level={current_emoji}->{new_emoji}"
             )
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_timestamps_toggle(
@@ -1111,7 +1115,7 @@ class CallbackHandlers:
                 f"enabled={new_timestamps}"
             )
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_back(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1167,7 +1171,7 @@ class CallbackHandlers:
             )
             logger.info(f"Returned to main keyboard: usage_id={usage_id}")
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_download_menu(
@@ -1207,7 +1211,7 @@ class CallbackHandlers:
                 reply_markup=format_keyboard,
             )
         except Exception as e:
-            logger.error(f"Failed to show download menu: {e}")
+            logger.error(f"Failed to show download menu: {e}", exc_info=True)
             await query.answer("Не удалось показать меню", show_alert=True)
 
     async def handle_download_format(
@@ -1253,20 +1257,33 @@ class CallbackHandlers:
             await query.answer("Экспорт недоступен", show_alert=True)
             return
 
+        # Validate format
+        supported_formats = ("md", "txt", "pdf", "docx")
+        if fmt not in supported_formats:
+            logger.warning(f"Unsupported export format requested: {fmt!r}")
+            await query.answer("Неподдерживаемый формат", show_alert=True)
+            return
+
         # Generate filename
         usage = await self.usage_repo.get_by_id(usage_id)
         if usage:
             file_number = await self.usage_repo.count_by_user_id(usage.user_id)
         else:
+            logger.warning(f"Usage not found for usage_id={usage_id}, using id as file number")
             file_number = usage_id
 
         filename = f"{file_number}_{state.active_mode}"
 
+        # Generate file
         try:
-            # Generate file
             file_obj = self.export_service.export(variant.text_content, fmt, filename)
+        except Exception as e:
+            logger.error(f"Failed to generate file: {e}", exc_info=True)
+            await query.answer("Не удалось создать файл", show_alert=True)
+            return
 
-            # Send file
+        # Send file via Telegram
+        try:
             message = cast(Message, query.message)
             await context.bot.send_document(
                 chat_id=message.chat_id,
@@ -1274,18 +1291,22 @@ class CallbackHandlers:
                 filename=file_obj.name,
                 caption=f"📄 {file_obj.name}",
             )
-
             await query.answer("Файл отправлен!")
+            logger.info(f"File sent: usage_id={usage_id}, format={fmt}")
+        except Exception as e:
+            logger.error(f"Failed to send file: {e}", exc_info=True)
+            await query.answer("Не удалось отправить файл", show_alert=True)
+            return
+        finally:
+            file_obj.close()
 
-            # Restore original text and main keyboard
+        # Restore original text and main keyboard
+        try:
             segments = await self.segment_repo.get_by_usage_id(usage_id)
             has_segments = len(segments) > 0
             keyboard = create_transcription_keyboard(state, has_segments, settings)
             await self.update_transcription_display(
                 query, context, state, variant.text_content, keyboard, self.state_repo
             )
-
-            logger.info(f"File sent: usage_id={usage_id}, format={fmt}")
         except Exception as e:
-            logger.error(f"Failed to send file: {e}", exc_info=True)
-            await query.answer("Не удалось отправить файл", show_alert=True)
+            logger.warning(f"Failed to restore UI after download: {e}")
