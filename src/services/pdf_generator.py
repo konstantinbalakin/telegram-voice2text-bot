@@ -297,7 +297,9 @@ class PDFGenerator:
 
     def generate_pdf_from_text(self, text: str, wrap_paragraphs: bool = True) -> bytes:
         """
-        Generate PDF from plain text (not HTML).
+        Generate PDF from plain text (not Markdown).
+
+        Wraps text in HTML paragraphs directly, bypassing Markdown-to-HTML conversion.
 
         Args:
             text: Plain text content
@@ -311,13 +313,17 @@ class PDFGenerator:
         """
         try:
             if wrap_paragraphs:
-                # Split by double newlines for paragraphs
                 paragraphs = text.split("\n\n")
                 html_content = "".join(f"<p>{p.strip()}</p>" for p in paragraphs if p.strip())
             else:
-                html_content = text
+                html_content = f"<p>{text}</p>"
 
-            return self.generate_pdf(html_content)
+            styled_html = self.create_styled_html(html_content)
+            html_obj = HTML(string=styled_html)
+            pdf_bytes: bytes = html_obj.write_pdf(font_config=self.font_config)  # type: ignore[assignment]
+
+            logger.info("PDF generated from text successfully")
+            return pdf_bytes
 
         except Exception as e:
             logger.error(f"Failed to generate PDF from text: {e}", exc_info=True)

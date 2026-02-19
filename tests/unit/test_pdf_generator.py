@@ -1,6 +1,8 @@
 """Unit tests for PDF generator service."""
 
 import pytest
+from unittest.mock import patch
+
 from src.services.pdf_generator import PDFGenerator, convert_markdown_to_html
 
 
@@ -132,6 +134,15 @@ def hello_world():
         assert isinstance(pdf_bytes, bytes)
         assert len(pdf_bytes) > 0
         assert pdf_bytes[:4] == b"%PDF"
+
+    def test_generate_pdf_from_text_no_double_conversion(self, generator: PDFGenerator) -> None:
+        """generate_pdf_from_text must NOT run text through convert_markdown_to_html."""
+        plain_text = "Paragraph one.\n\nParagraph two."
+        with patch(
+            "src.services.pdf_generator.convert_markdown_to_html", wraps=convert_markdown_to_html
+        ) as mock_convert:
+            generator.generate_pdf_from_text(plain_text, wrap_paragraphs=True)
+            mock_convert.assert_not_called()
 
     def test_special_characters_escaping(self, generator: PDFGenerator) -> None:
         """Test that special characters are handled correctly."""
