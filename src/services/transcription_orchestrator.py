@@ -31,7 +31,7 @@ from src.services.pdf_generator import create_file_object
 from src.services.llm_service import LLMService
 from src.services.text_processor import TextProcessor
 from src.bot.keyboards import create_transcription_keyboard
-from src.utils.html_utils import sanitize_html, escape_html
+from src.utils.markdown_utils import sanitize_markdown, escape_markdownv2
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +137,18 @@ class TranscriptionOrchestrator:
 
                 state = await state_repo.get_by_usage_id(usage_id)
                 if not state:
+                    # Clean up stale placeholder state (message_id=0) for this chat
+                    # to avoid UNIQUE constraint violation on (message_id, chat_id)
+                    if message_id == 0:
+                        stale_state = await state_repo.get_by_message(0, chat_id)
+                        if stale_state:
+                            logger.warning(
+                                f"Removing stale state with message_id=0: "
+                                f"id={stale_state.id}, usage_id={stale_state.usage_id}"
+                            )
+                            await session.delete(stale_state)
+                            await session.flush()
+
                     state = await state_repo.create(
                         usage_id=usage_id,
                         message_id=message_id,
@@ -238,14 +250,15 @@ class TranscriptionOrchestrator:
                 file_number = usage_id
                 logger.warning(f"Usage {usage_id} not found, using usage_id as file_number")
 
-        text = sanitize_html(text)
+        cleaned_text = sanitize_markdown(text)
+        escaped_text = escape_markdownv2(cleaned_text)
 
-        if len(text) <= settings.file_threshold_chars:
+        if len(cleaned_text) <= settings.file_threshold_chars:
             msg = await request.user_message.reply_text(
-                prefix + text, reply_markup=keyboard, parse_mode="HTML"
+                prefix + escaped_text, reply_markup=keyboard, parse_mode="MarkdownV2"
             )
             logger.debug(
-                f"Sent text result: usage_id={usage_id}, length={len(text)}, "
+                f"Sent text result: usage_id={usage_id}, length={len(cleaned_text)}, "
                 f"threshold={settings.file_threshold_chars}"
             )
             return (msg, None)
@@ -254,17 +267,19 @@ class TranscriptionOrchestrator:
                 "📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard
             )
 
-            file_obj, file_extension = create_file_object(text, f"{file_number}_original")
+            file_obj, file_extension = create_file_object(cleaned_text, f"{file_number}_original")
 
             file_msg = await request.user_message.reply_document(
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 Транскрипция ({len(text)} символов, {file_extension})",
-                parse_mode="HTML",
+                caption=escape_markdownv2(
+                    f"📄 Транскрипция ({len(cleaned_text)} символов, {file_extension})"
+                ),
+                parse_mode="MarkdownV2",
             )
 
             logger.debug(
-                f"Sent file result: usage_id={usage_id}, length={len(text)}, "
+                f"Sent file result: usage_id={usage_id}, length={len(cleaned_text)}, "
                 f"threshold={settings.file_threshold_chars}"
             )
             return (info_msg, file_msg)
@@ -294,15 +309,15 @@ class TranscriptionOrchestrator:
         except Exception as e:
             logger.warning(f"Failed to delete status message: {e}")
 
-        draft_text = escape_html(draft_text)
+        escaped_draft = escape_markdownv2(draft_text)
 
         if len(draft_text) <= settings.file_threshold_chars:
             logger.debug(
                 f"Sending short draft as text: request_id={request.id}, length={len(draft_text)}"
             )
             message = await request.user_message.reply_text(
-                f"✅ Черновик готов:\n\n{draft_text}\n\n🔄 Улучшаю текст...",
-                parse_mode="HTML",
+                f"✅ Черновик готов:\n\n{escaped_draft}\n\n🔄 Улучшаю текст\\.\\.\\.",
+                parse_mode="MarkdownV2",
             )
             request.draft_messages.append(message)
         else:
@@ -320,8 +335,10 @@ class TranscriptionOrchestrator:
             file_msg = await request.user_message.reply_document(
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 Черновик ({len(draft_text)} символов, {file_extension})",
-                parse_mode="HTML",
+                caption=escape_markdownv2(
+                    f"📄 Черновик ({len(draft_text)} символов, {file_extension})"
+                ),
+                parse_mode="MarkdownV2",
             )
             request.draft_messages.append(file_msg)
 
@@ -442,7 +459,7 @@ class TranscriptionOrchestrator:
             await variant_repo.create(
                 usage_id=request.usage_id,
                 mode="original",
-                text_content=escape_html(result.text),
+                text_content=result.text,
                 length_level="default",
                 emoji_level=0,
                 timestamps_enabled=False,
@@ -553,25 +570,25 @@ class TranscriptionOrchestrator:
 
         if settings.llm_debug_mode:
             try:
-                escaped_draft = escape_html(draft_text)
-                escaped_refined = escape_html(refined_text)
+                escaped_draft = escape_markdownv2(draft_text)
+                escaped_refined = escape_markdownv2(refined_text)
                 debug_message = (
-                    "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
-                    f"📝 <b>Черновик ({result.model_name}):</b>\n"
-                    f"<code>{escaped_draft}</code>\n\n"
-                    f"✨ <b>После LLM ({settings.llm_model}):</b>\n"
-                    f"<code>{escaped_refined}</code>"
+                    "🔍 *Сравнение \\(LLM\\_DEBUG\\_MODE\\=true\\)*\n\n"
+                    f"📝 *Черновик \\({escape_markdownv2(result.model_name)}\\):*\n"
+                    f"`{escaped_draft}`\n\n"
+                    f"✨ *После LLM \\({escape_markdownv2(settings.llm_model)}\\):*\n"
+                    f"`{escaped_refined}`"
                 )
                 if len(debug_message) > 4000:
                     debug_message = (
-                        "🔍 <b>Сравнение (LLM_DEBUG_MODE=true)</b>\n\n"
-                        f"📝 <b>Черновик:</b> {len(draft_text)} символов\n"
-                        f"<code>{escaped_draft[:DEBUG_TEXT_PREVIEW_LENGTH]}...</code>\n\n"
-                        f"✨ <b>После LLM:</b> {len(refined_text)} символов\n"
-                        f"<code>{escaped_refined[:DEBUG_TEXT_PREVIEW_LENGTH]}...</code>\n\n"
+                        "🔍 *Сравнение \\(LLM\\_DEBUG\\_MODE\\=true\\)*\n\n"
+                        f"📝 *Черновик:* {len(draft_text)} символов\n"
+                        f"`{escaped_draft[:DEBUG_TEXT_PREVIEW_LENGTH]}\\.\\.\\.`\n\n"
+                        f"✨ *После LLM:* {len(refined_text)} символов\n"
+                        f"`{escaped_refined[:DEBUG_TEXT_PREVIEW_LENGTH]}\\.\\.\\.`\n\n"
                         f"ℹ️ Тексты слишком длинные, показаны первые {DEBUG_TEXT_PREVIEW_LENGTH} символов"
                     )
-                await request.user_message.reply_text(debug_message, parse_mode="HTML")
+                await request.user_message.reply_text(debug_message, parse_mode="MarkdownV2")
             except Exception as e:
                 logger.warning(f"Failed to send LLM debug comparison: {e}")
 
@@ -714,10 +731,9 @@ class TranscriptionOrchestrator:
                     except Exception:
                         pass
 
-                    escaped_text = escape_html(result.text)
                     await self._send_result_and_update_state(
                         request,
-                        escaped_text + "\n\nℹ️ (структурирование недоступно)",
+                        result.text + "\n\nℹ️ (структурирование недоступно)",
                         result,
                     )
 
@@ -746,9 +762,8 @@ class TranscriptionOrchestrator:
                 except Exception as e:
                     logger.warning(f"Failed to delete status message: {e}")
 
-                escaped_text = escape_html(result.text)
-                final_text = escaped_text
-                await self._send_result_and_update_state(request, escaped_text, result)
+                final_text = result.text
+                await self._send_result_and_update_state(request, result.text, result)
 
             async with get_session() as session:
                 usage_repo = UsageRepository(session)

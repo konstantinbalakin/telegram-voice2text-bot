@@ -39,12 +39,24 @@ def encode_callback_data(action: str, usage_id: int, **params: Any) -> str:
 
 
 _VALID_ACTIONS = frozenset(
-    ["mode", "length", "emoji", "timestamps", "retranscribe_menu", "retranscribe", "back", "noop"]
+    [
+        "mode",
+        "length",
+        "emoji",
+        "timestamps",
+        "retranscribe_menu",
+        "retranscribe",
+        "back",
+        "noop",
+        "download",
+        "download_fmt",
+    ]
 )
 
 _VALID_MODES = frozenset(["original", "structured", "summary", "magic"])
 _VALID_LENGTH_DIRECTIONS = frozenset(["shorter", "longer"])
 _VALID_EMOJI_DIRECTIONS = frozenset(["increase", "decrease", "few", "moderate"])
+_VALID_DOWNLOAD_FORMATS = frozenset(["md", "txt", "pdf", "docx"])
 
 
 def decode_callback_data(data: str) -> dict:
@@ -104,6 +116,12 @@ def decode_callback_data(data: str) -> dict:
             raise ValueError(
                 f"Invalid emoji direction {result['direction']!r}, "
                 f"expected one of {sorted(_VALID_EMOJI_DIRECTIONS)}"
+            )
+    if action == "download_fmt" and "fmt" in result:
+        if result["fmt"] not in _VALID_DOWNLOAD_FORMATS:
+            raise ValueError(
+                f"Invalid download format {result['fmt']!r}, "
+                f"expected one of {sorted(_VALID_DOWNLOAD_FORMATS)}"
             )
 
     return result
@@ -345,7 +363,18 @@ def create_transcription_keyboard(
             ]
         )
 
-    # Row 7: Retranscribe (Phase 8) - only if audio file is saved
+    # Row 7: Download button - export transcription to file
+    if settings.enable_download_button:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "📥 Скачать",
+                    callback_data=encode_callback_data("download", state.usage_id),
+                )
+            ]
+        )
+
+    # Row 8: Retranscribe (Phase 8) - only if audio file is saved
     if settings.enable_retranscribe:
         keyboard.append(
             [
@@ -357,3 +386,49 @@ def create_transcription_keyboard(
         )
 
     return InlineKeyboardMarkup(keyboard) if keyboard else None
+
+
+def create_download_format_keyboard(usage_id: int) -> InlineKeyboardMarkup:
+    """
+    Create inline keyboard for download format selection.
+
+    Layout:
+        [📄 TXT] [📝 MD]
+        [📕 PDF] [📘 DOCX]
+        [◀ Назад]
+
+    Args:
+        usage_id: Usage record ID
+
+    Returns:
+        InlineKeyboardMarkup with format buttons and back button
+    """
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "📄 TXT",
+                callback_data=encode_callback_data("download_fmt", usage_id, fmt="txt"),
+            ),
+            InlineKeyboardButton(
+                "📝 MD",
+                callback_data=encode_callback_data("download_fmt", usage_id, fmt="md"),
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "📕 PDF",
+                callback_data=encode_callback_data("download_fmt", usage_id, fmt="pdf"),
+            ),
+            InlineKeyboardButton(
+                "📘 DOCX",
+                callback_data=encode_callback_data("download_fmt", usage_id, fmt="docx"),
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                "◀ Назад",
+                callback_data=encode_callback_data("back", usage_id),
+            ),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)

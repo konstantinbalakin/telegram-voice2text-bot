@@ -4,7 +4,7 @@ import logging
 
 from src.services.llm_service import LLMService, LLMError
 from src.services.prompt_loader import load_prompt
-from src.utils.html_utils import sanitize_html
+from src.utils.markdown_utils import sanitize_markdown
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +97,8 @@ class TextProcessor:
             # Use custom prompt for structuring
             structured_text = await self._refine_with_custom_prompt(original_text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
-            structured_text = sanitize_html(structured_text)
+            # Sanitize to remove any HTML tags LLM may have inserted
+            structured_text = sanitize_markdown(structured_text)
 
             logger.info(
                 f"Structured text created: {len(original_text)} → {len(structured_text)} chars"
@@ -189,8 +189,8 @@ class TextProcessor:
         try:
             adjusted_text = await self._refine_with_custom_prompt(current_text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
-            adjusted_text = sanitize_html(adjusted_text)
+            # Sanitize markdown formatting
+            adjusted_text = sanitize_markdown(adjusted_text)
 
             logger.info(
                 f"Length adjusted: {len(current_text)} → {len(adjusted_text)} chars "
@@ -293,8 +293,8 @@ class TextProcessor:
             # Use custom prompt for summarization
             summary_text = await self._refine_with_custom_prompt(original_text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
-            summary_text = sanitize_html(summary_text)
+            # Sanitize markdown formatting
+            summary_text = sanitize_markdown(summary_text)
 
             logger.info(f"Summary created: {len(original_text)} → {len(summary_text)} chars")
 
@@ -368,8 +368,8 @@ class TextProcessor:
 1. Сохрани смысл, интонацию и стиль автора
 2. Сделай связный, читабельный текст
 3. Добавь эмодзи умеренно (по смыслу)
-4. Используй HTML-форматирование если уместно: <b>, <i>, <code>
-5. НЕ используй неподдерживаемые теги: <p>, <ul>, <li>, <h1>, <br>
+4. Используй Markdown-форматирование если уместно: **жирный**, *курсив*, `код`
+5. НЕ используй HTML-теги
 6. Для списков используй текст: • или 1.
 7. Разговорный, живой тон (без канцелярщины)
 
@@ -382,8 +382,8 @@ class TextProcessor:
             # Use custom prompt for magic transformation
             magic_text = await self._refine_with_custom_prompt(original_text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
-            magic_text = sanitize_html(magic_text)
+            # Sanitize markdown formatting
+            magic_text = sanitize_markdown(magic_text)
 
             logger.info(f"Magic text created: {len(original_text)} → {len(magic_text)} chars")
             return magic_text
@@ -480,8 +480,8 @@ class TextProcessor:
         try:
             text_with_emojis = await self._refine_with_custom_prompt(text, prompt)
 
-            # Sanitize HTML to remove unsupported tags
-            text_with_emojis = sanitize_html(text_with_emojis)
+            # Sanitize markdown formatting
+            text_with_emojis = sanitize_markdown(text_with_emojis)
 
             logger.info(
                 f"Emojis adjusted: {len(text)} → {len(text_with_emojis)} chars "

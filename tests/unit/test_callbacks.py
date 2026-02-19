@@ -4,75 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.bot.callbacks import CallbackHandlers, LEVEL_TRANSITIONS, MODE_LABELS
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _make_query(data: str, from_user_id: int = 111) -> AsyncMock:
-    """Create a mock CallbackQuery."""
-    query = AsyncMock()
-    query.data = data
-    query.from_user = MagicMock()
-    query.from_user.id = from_user_id
-    query.answer = AsyncMock()
-    query.edit_message_text = AsyncMock()
-    query.message = MagicMock()
-    query.message.chat_id = 1000
-    return query
-
-
-def _make_update(query: MagicMock) -> MagicMock:
-    """Create a mock Update with a callback query."""
-    update = MagicMock()
-    update.callback_query = query
-    return update
-
-
-def _make_state(
-    usage_id: int = 42,
-    active_mode: str = "original",
-    emoji_level: int = 0,
-    length_level: str = "default",
-    timestamps_enabled: bool = False,
-    is_file_message: bool = False,
-    file_message_id: int | None = None,
-) -> MagicMock:
-    """Create a mock TranscriptionState."""
-    state = MagicMock()
-    state.usage_id = usage_id
-    state.active_mode = active_mode
-    state.emoji_level = emoji_level
-    state.length_level = length_level
-    state.timestamps_enabled = timestamps_enabled
-    state.is_file_message = is_file_message
-    state.file_message_id = file_message_id
-    return state
-
-
-def _make_variant(text_content: str = "test text") -> MagicMock:
-    """Create a mock TranscriptionVariant."""
-    variant = MagicMock()
-    variant.text_content = text_content
-    return variant
-
-
-def _make_usage(usage_id: int = 42, user_id: int = 1) -> MagicMock:
-    """Create a mock Usage."""
-    usage = MagicMock()
-    usage.id = usage_id
-    usage.user_id = user_id
-    return usage
-
-
-def _make_user(user_id: int = 1, telegram_id: int = 111) -> MagicMock:
-    """Create a mock User."""
-    user = MagicMock()
-    user.id = user_id
-    user.telegram_id = telegram_id
-    return user
+from tests.helpers import make_query, make_update, make_state, make_variant, make_usage, make_user
 
 
 @pytest.fixture
@@ -199,24 +131,24 @@ class TestHandleCallbackQueryRouting:
 
     @pytest.mark.asyncio
     async def test_no_data_returns_early(self, handler):
-        query = _make_query(data="")
+        query = make_query(data="")
         query.data = None
-        update = _make_update(query)
+        update = make_update(query)
         context = MagicMock()
         await handler.handle_callback_query(update, context)
 
     @pytest.mark.asyncio
     async def test_noop_acknowledged_and_returns(self, handler):
-        query = _make_query(data="noop")
-        update = _make_update(query)
+        query = make_query(data="noop")
+        update = make_update(query)
         context = MagicMock()
         await handler.handle_callback_query(update, context)
         query.answer.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_invalid_callback_data(self, handler):
-        query = _make_query(data="totally_invalid")
-        update = _make_update(query)
+        query = make_query(data="totally_invalid")
+        update = make_update(query)
         context = MagicMock()
         await handler.handle_callback_query(update, context)
         # Should answer with error
@@ -228,8 +160,8 @@ class TestHandleCallbackQueryRouting:
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
         # Setup IDOR pass
-        usage = _make_usage()
-        owner = _make_user()
+        usage = make_usage()
+        owner = make_user()
         usage_repo.get_by_id = AsyncMock(return_value=usage)
         user_repo.get_by_id = AsyncMock(return_value=owner)
 
@@ -243,8 +175,8 @@ class TestHandleCallbackQueryRouting:
 
         # "noop" is a valid action that short-circuits before routing,
         # so we need to patch decode_callback_data for an unknown action
-        query = _make_query(data="back:42")
-        update = _make_update(query)
+        query = make_query(data="back:42")
+        update = make_update(query)
         context = MagicMock()
 
         # Back action routes to handle_back; instead let's test with a truly unknown
@@ -260,8 +192,8 @@ class TestHandleCallbackQueryRouting:
         """Test that action='mode' routes to handle_mode_change."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        usage = _make_usage()
-        owner = _make_user()
+        usage = make_usage()
+        owner = make_user()
         usage_repo.get_by_id = AsyncMock(return_value=usage)
         user_repo.get_by_id = AsyncMock(return_value=owner)
 
@@ -274,8 +206,8 @@ class TestHandleCallbackQueryRouting:
         )
         handler.handle_mode_change = AsyncMock()
 
-        query = _make_query(data="mode:42:mode=structured")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=structured")
+        update = make_update(query)
         context = MagicMock()
 
         await handler.handle_callback_query(update, context)
@@ -285,8 +217,8 @@ class TestHandleCallbackQueryRouting:
     async def test_routes_to_length_handler(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        usage = _make_usage()
-        owner = _make_user()
+        usage = make_usage()
+        owner = make_user()
         usage_repo.get_by_id = AsyncMock(return_value=usage)
         user_repo.get_by_id = AsyncMock(return_value=owner)
 
@@ -299,8 +231,8 @@ class TestHandleCallbackQueryRouting:
         )
         handler.handle_length_change = AsyncMock()
 
-        query = _make_query(data="length:42:direction=shorter")
-        update = _make_update(query)
+        query = make_query(data="length:42:direction=shorter")
+        update = make_update(query)
         context = MagicMock()
 
         await handler.handle_callback_query(update, context)
@@ -310,8 +242,8 @@ class TestHandleCallbackQueryRouting:
     async def test_routes_to_back_handler(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        usage = _make_usage()
-        owner = _make_user()
+        usage = make_usage()
+        owner = make_user()
         usage_repo.get_by_id = AsyncMock(return_value=usage)
         user_repo.get_by_id = AsyncMock(return_value=owner)
 
@@ -324,8 +256,8 @@ class TestHandleCallbackQueryRouting:
         )
         handler.handle_back = AsyncMock()
 
-        query = _make_query(data="back:42")
-        update = _make_update(query)
+        query = make_query(data="back:42")
+        update = make_update(query)
         context = MagicMock()
 
         await handler.handle_callback_query(update, context)
@@ -336,8 +268,8 @@ class TestHandleCallbackQueryRouting:
         """retranscribe action without bot_handlers returns error."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        usage = _make_usage()
-        owner = _make_user()
+        usage = make_usage()
+        owner = make_user()
         usage_repo.get_by_id = AsyncMock(return_value=usage)
         user_repo.get_by_id = AsyncMock(return_value=owner)
 
@@ -350,12 +282,64 @@ class TestHandleCallbackQueryRouting:
             bot_handlers=None,
         )
 
-        query = _make_query(data="retranscribe:42")
-        update = _make_update(query)
+        query = make_query(data="retranscribe:42")
+        update = make_update(query)
         context = MagicMock()
 
         await handler.handle_callback_query(update, context)
         assert any("Ретранскрипция недоступна" in str(c) for c in query.answer.call_args_list)
+
+    @pytest.mark.asyncio
+    async def test_routes_to_download_menu(self, repos):
+        """download action routes to handle_download_menu."""
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+
+        usage = make_usage()
+        owner = make_user()
+        usage_repo.get_by_id = AsyncMock(return_value=usage)
+        user_repo.get_by_id = AsyncMock(return_value=owner)
+
+        handler = CallbackHandlers(
+            state_repo=state_repo,
+            variant_repo=variant_repo,
+            segment_repo=segment_repo,
+            usage_repo=usage_repo,
+            user_repo=user_repo,
+        )
+        handler.handle_download_menu = AsyncMock()
+
+        query = make_query(data="download:42")
+        update = make_update(query)
+        context = MagicMock()
+
+        await handler.handle_callback_query(update, context)
+        handler.handle_download_menu.assert_called_once_with(update, context)
+
+    @pytest.mark.asyncio
+    async def test_routes_to_download_format(self, repos):
+        """download_fmt action routes to handle_download_format."""
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+
+        usage = make_usage()
+        owner = make_user()
+        usage_repo.get_by_id = AsyncMock(return_value=usage)
+        user_repo.get_by_id = AsyncMock(return_value=owner)
+
+        handler = CallbackHandlers(
+            state_repo=state_repo,
+            variant_repo=variant_repo,
+            segment_repo=segment_repo,
+            usage_repo=usage_repo,
+            user_repo=user_repo,
+        )
+        handler.handle_download_format = AsyncMock()
+
+        query = make_query(data="download_fmt:42:fmt=txt")
+        update = make_update(query)
+        context = MagicMock()
+
+        await handler.handle_callback_query(update, context)
+        handler.handle_download_format.assert_called_once_with(update, context)
 
 
 # ===========================================================================
@@ -367,24 +351,24 @@ class TestHandleModeChange:
     """Tests for handle_mode_change handler."""
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_switch_to_original_uses_cached_variant(
         self, mock_keyboard, mock_sanitize, repos
     ):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="structured")
+        state = make_state(active_mode="structured")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        original_variant = _make_variant("original text")
+        original_variant = make_variant("original text")
         # First call: get_variant for original with defaults -> returns variant
         variant_repo.get_variant = AsyncMock(return_value=original_variant)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
         mock_keyboard.return_value = MagicMock()
 
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -394,8 +378,8 @@ class TestHandleModeChange:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=original")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=original")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -409,7 +393,7 @@ class TestHandleModeChange:
     async def test_already_in_same_mode_noop(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="structured")
+        state = make_state(active_mode="structured")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         handler = CallbackHandlers(
@@ -419,8 +403,8 @@ class TestHandleModeChange:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=structured")
+        update = make_update(query)
         context = MagicMock()
 
         await handler.handle_mode_change(update, context)
@@ -432,7 +416,7 @@ class TestHandleModeChange:
     async def test_disabled_structured_mode(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="original")
+        state = make_state(active_mode="original")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         handler = CallbackHandlers(
@@ -442,8 +426,8 @@ class TestHandleModeChange:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=structured")
+        update = make_update(query)
         context = MagicMock()
 
         with patch("src.bot.callbacks.settings") as mock_settings:
@@ -458,7 +442,7 @@ class TestHandleModeChange:
     async def test_disabled_summary_mode(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="original")
+        state = make_state(active_mode="original")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         handler = CallbackHandlers(
@@ -468,8 +452,8 @@ class TestHandleModeChange:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=summary")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=summary")
+        update = make_update(query)
         context = MagicMock()
 
         with patch("src.bot.callbacks.settings") as mock_settings:
@@ -483,7 +467,7 @@ class TestHandleModeChange:
     async def test_disabled_magic_mode(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="original")
+        state = make_state(active_mode="original")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         handler = CallbackHandlers(
@@ -493,8 +477,8 @@ class TestHandleModeChange:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=magic")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=magic")
+        update = make_update(query)
         context = MagicMock()
 
         with patch("src.bot.callbacks.settings") as mock_settings:
@@ -509,7 +493,7 @@ class TestHandleModeChange:
     async def test_no_text_processor_returns_error(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="original")
+        state = make_state(active_mode="original")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         # No cached variant, so generation needed
@@ -523,8 +507,8 @@ class TestHandleModeChange:
             text_processor=None,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=structured")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -536,7 +520,7 @@ class TestHandleModeChange:
     async def test_original_variant_not_found(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="original")
+        state = make_state(active_mode="original")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         # No variant found at all
@@ -551,8 +535,8 @@ class TestHandleModeChange:
             text_processor=text_processor,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=structured")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -561,7 +545,7 @@ class TestHandleModeChange:
         assert any("Исходный текст не найден" in str(c) for c in query.answer.call_args_list)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_switch_to_structured_generates_variant(
@@ -569,23 +553,23 @@ class TestHandleModeChange:
     ):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="original")
+        state = make_state(active_mode="original")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        original_variant = _make_variant("original text")
+        original_variant = make_variant("original text")
 
         # First call returns None (no cached structured variant)
         # Second call returns original variant
         variant_repo.get_variant = AsyncMock(side_effect=[None, original_variant])
 
-        generated_variant = _make_variant("structured text")
+        generated_variant = make_variant("structured text")
         variant_repo.get_or_create_variant = AsyncMock(return_value=(generated_variant, True))
         variant_repo.count_by_usage_id = AsyncMock(return_value=1)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
         mock_keyboard.return_value = MagicMock()
 
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         # Progress tracker mock
@@ -603,8 +587,8 @@ class TestHandleModeChange:
             text_processor=text_processor,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=structured")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -618,7 +602,7 @@ class TestHandleModeChange:
         """Switching modes resets emoji/length/timestamps to defaults."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(
+        state = make_state(
             active_mode="original",
             emoji_level=2,
             length_level="short",
@@ -626,12 +610,12 @@ class TestHandleModeChange:
         )
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        variant = _make_variant("structured text")
+        variant = make_variant("structured text")
         variant_repo.get_variant = AsyncMock(return_value=variant)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
 
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -641,13 +625,13 @@ class TestHandleModeChange:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=structured")
+        update = make_update(query)
         context = MagicMock()
 
         with (
             _default_settings_patch(),
-            patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x),
+            patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x),
             patch("src.bot.callbacks.create_transcription_keyboard"),
         ):
             await handler.handle_mode_change(update, context)
@@ -669,8 +653,8 @@ class TestHandleModeChange:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
-        update = _make_update(query)
+        query = make_query(data="mode:42:mode=structured")
+        update = make_update(query)
         context = MagicMock()
 
         await handler.handle_mode_change(update, context)
@@ -687,8 +671,8 @@ class TestHandleLengthChange:
 
     @pytest.mark.asyncio
     async def test_feature_disabled(self, handler, repos):
-        query = _make_query(data="length:42:direction=shorter")
-        update = _make_update(query)
+        query = make_query(data="length:42:direction=shorter")
+        update = make_update(query)
         context = MagicMock()
 
         with patch("src.bot.callbacks.settings") as mock_settings:
@@ -700,11 +684,11 @@ class TestHandleLengthChange:
     @pytest.mark.asyncio
     async def test_boundary_cant_go_shorter_than_shorter(self, handler, repos):
         state_repo = repos[0]
-        state = _make_state(length_level="shorter")
+        state = make_state(length_level="shorter")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        query = _make_query(data="length:42:direction=shorter")
-        update = _make_update(query)
+        query = make_query(data="length:42:direction=shorter")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -715,11 +699,11 @@ class TestHandleLengthChange:
     @pytest.mark.asyncio
     async def test_boundary_cant_go_longer_than_longer(self, handler, repos):
         state_repo = repos[0]
-        state = _make_state(length_level="longer")
+        state = make_state(length_level="longer")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        query = _make_query(data="length:42:direction=longer")
-        update = _make_update(query)
+        query = make_query(data="length:42:direction=longer")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -728,21 +712,21 @@ class TestHandleLengthChange:
         assert any("Уже максимальная длина" in str(c) for c in query.answer.call_args_list)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_valid_transition_with_cached_variant(self, mock_keyboard, mock_sanitize, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(length_level="default", active_mode="structured")
+        state = make_state(length_level="default", active_mode="structured")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        variant = _make_variant("shorter text")
+        variant = make_variant("shorter text")
         variant_repo.get_variant = AsyncMock(return_value=variant)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
         mock_keyboard.return_value = MagicMock()
 
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -752,8 +736,8 @@ class TestHandleLengthChange:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="length:42:direction=shorter")
-        update = _make_update(query)
+        query = make_query(data="length:42:direction=shorter")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -763,7 +747,7 @@ class TestHandleLengthChange:
         state_repo.update.assert_called_once_with(state)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_variant_generation_on_cache_miss(
@@ -771,20 +755,20 @@ class TestHandleLengthChange:
     ):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(length_level="default", active_mode="structured")
+        state = make_state(length_level="default", active_mode="structured")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        current_variant = _make_variant("current text")
+        current_variant = make_variant("current text")
         # First call: no cached variant for new level; second call: current variant
         variant_repo.get_variant = AsyncMock(side_effect=[None, current_variant])
 
-        generated_variant = _make_variant("shorter text")
+        generated_variant = make_variant("shorter text")
         variant_repo.create = AsyncMock(return_value=generated_variant)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
         mock_keyboard.return_value = MagicMock()
 
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         mock_progress = AsyncMock()
@@ -801,8 +785,8 @@ class TestHandleLengthChange:
             text_processor=text_processor,
         )
 
-        query = _make_query(data="length:42:direction=shorter")
-        update = _make_update(query)
+        query = make_query(data="length:42:direction=shorter")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -812,7 +796,7 @@ class TestHandleLengthChange:
         assert state.length_level == "short"
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_error_recovery_restores_text(
@@ -821,10 +805,10 @@ class TestHandleLengthChange:
         """On generation error, current text is restored."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(length_level="default", active_mode="structured")
+        state = make_state(length_level="default", active_mode="structured")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        current_variant = _make_variant("current text")
+        current_variant = make_variant("current text")
         variant_repo.get_variant = AsyncMock(side_effect=[None, current_variant])
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
@@ -844,8 +828,8 @@ class TestHandleLengthChange:
             text_processor=text_processor,
         )
 
-        query = _make_query(data="length:42:direction=shorter")
-        update = _make_update(query)
+        query = make_query(data="length:42:direction=shorter")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -858,10 +842,58 @@ class TestHandleLengthChange:
         state_repo.update.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_no_text_processor(self, repos):
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.create_transcription_keyboard")
+    @patch("src.bot.callbacks.ProgressTracker")
+    async def test_error_recovery_logs_warning_on_restore_failure(
+        self, mock_progress_cls, mock_keyboard, mock_sanitize, repos, caplog
+    ):
+        """When UI restore also fails, a warning must be logged (not silently swallowed)."""
+        import logging
+
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(length_level="default")
+        state = make_state(length_level="default", active_mode="structured")
+        state_repo.get_by_usage_id = AsyncMock(return_value=state)
+
+        current_variant = make_variant("current text")
+        variant_repo.get_variant = AsyncMock(side_effect=[None, current_variant])
+
+        segment_repo.get_by_usage_id = AsyncMock(return_value=[])
+        mock_keyboard.return_value = MagicMock()
+
+        mock_progress = AsyncMock()
+        mock_progress_cls.return_value = mock_progress
+
+        text_processor = AsyncMock()
+        text_processor.adjust_length = AsyncMock(side_effect=Exception("LLM error"))
+
+        handler = CallbackHandlers(
+            state_repo=state_repo,
+            variant_repo=variant_repo,
+            segment_repo=segment_repo,
+            usage_repo=usage_repo,
+            text_processor=text_processor,
+        )
+
+        query = make_query(data="length:42:direction=shorter")
+        # Make UI restore fail
+        query.edit_message_text = AsyncMock(side_effect=Exception("Telegram API error"))
+        update = make_update(query)
+        context = MagicMock()
+
+        with (
+            _default_settings_patch(),
+            caplog.at_level(logging.WARNING, logger="src.bot.callbacks"),
+        ):
+            await handler.handle_length_change(update, context)
+
+        assert any(
+            "Failed to restore" in record.message for record in caplog.records
+        ), "Expected warning log when UI restore fails"
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+
+        state = make_state(length_level="default")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
         variant_repo.get_variant = AsyncMock(return_value=None)
 
@@ -873,8 +905,8 @@ class TestHandleLengthChange:
             text_processor=None,
         )
 
-        query = _make_query(data="length:42:direction=shorter")
-        update = _make_update(query)
+        query = make_query(data="length:42:direction=shorter")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -893,8 +925,8 @@ class TestHandleEmojiToggle:
 
     @pytest.mark.asyncio
     async def test_feature_disabled(self, handler, repos):
-        query = _make_query(data="emoji:42:direction=few")
-        update = _make_update(query)
+        query = make_query(data="emoji:42:direction=few")
+        update = make_update(query)
         context = MagicMock()
 
         with patch("src.bot.callbacks.settings") as mock_settings:
@@ -907,14 +939,14 @@ class TestHandleEmojiToggle:
     async def test_direction_few_sets_level_1(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(emoji_level=0)
+        state = make_state(emoji_level=0)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        variant = _make_variant("emoji text")
+        variant = make_variant("emoji text")
         variant_repo.get_variant = AsyncMock(return_value=variant)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -924,13 +956,13 @@ class TestHandleEmojiToggle:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="emoji:42:direction=few")
-        update = _make_update(query)
+        query = make_query(data="emoji:42:direction=few")
+        update = make_update(query)
         context = MagicMock()
 
         with (
             _default_settings_patch(),
-            patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x),
+            patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x),
             patch("src.bot.callbacks.create_transcription_keyboard"),
         ):
             await handler.handle_emoji_toggle(update, context)
@@ -941,14 +973,14 @@ class TestHandleEmojiToggle:
     async def test_direction_moderate_sets_level_2(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(emoji_level=0)
+        state = make_state(emoji_level=0)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        variant = _make_variant("emoji text")
+        variant = make_variant("emoji text")
         variant_repo.get_variant = AsyncMock(return_value=variant)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -958,13 +990,13 @@ class TestHandleEmojiToggle:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="emoji:42:direction=moderate")
-        update = _make_update(query)
+        query = make_query(data="emoji:42:direction=moderate")
+        update = make_update(query)
         context = MagicMock()
 
         with (
             _default_settings_patch(),
-            patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x),
+            patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x),
             patch("src.bot.callbacks.create_transcription_keyboard"),
         ):
             await handler.handle_emoji_toggle(update, context)
@@ -975,7 +1007,7 @@ class TestHandleEmojiToggle:
     async def test_increase_at_max_boundary(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(emoji_level=3)
+        state = make_state(emoji_level=3)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         handler = CallbackHandlers(
@@ -985,8 +1017,8 @@ class TestHandleEmojiToggle:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="emoji:42:direction=increase")
-        update = _make_update(query)
+        query = make_query(data="emoji:42:direction=increase")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -998,7 +1030,7 @@ class TestHandleEmojiToggle:
     async def test_decrease_at_min_boundary(self, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(emoji_level=0)
+        state = make_state(emoji_level=0)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         handler = CallbackHandlers(
@@ -1008,8 +1040,8 @@ class TestHandleEmojiToggle:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="emoji:42:direction=decrease")
-        update = _make_update(query)
+        query = make_query(data="emoji:42:direction=decrease")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1018,7 +1050,7 @@ class TestHandleEmojiToggle:
         assert any("Смайлы уже убраны" in str(c) for c in query.answer.call_args_list)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_source_variant_prefers_level_0_when_adding(
@@ -1027,11 +1059,11 @@ class TestHandleEmojiToggle:
         """When adding emojis, prefer clean (level 0) text as source."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(emoji_level=0)
+        state = make_state(emoji_level=0)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        clean_variant = _make_variant("clean text")
-        generated_variant = _make_variant("emoji text")
+        clean_variant = make_variant("clean text")
+        generated_variant = make_variant("emoji text")
 
         # Call sequence:
         # 1. get_variant for new emoji level -> None (no cached)
@@ -1040,7 +1072,7 @@ class TestHandleEmojiToggle:
         variant_repo.create = AsyncMock(return_value=generated_variant)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         mock_progress = AsyncMock()
@@ -1057,8 +1089,8 @@ class TestHandleEmojiToggle:
             text_processor=text_processor,
         )
 
-        query = _make_query(data="emoji:42:direction=few")
-        update = _make_update(query)
+        query = make_query(data="emoji:42:direction=few")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1068,7 +1100,7 @@ class TestHandleEmojiToggle:
         text_processor.add_emojis.assert_called_once_with("clean text", 1, current_level=0)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_error_recovery_restores_text(
@@ -1076,10 +1108,10 @@ class TestHandleEmojiToggle:
     ):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(emoji_level=1)
+        state = make_state(emoji_level=1)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        current_variant = _make_variant("current text")
+        current_variant = make_variant("current text")
         # Calls: 1) new level -> None, 2) level 0 source -> None, 3) current level -> current_variant
         # Then during error recovery: 4) current level -> current_variant
         variant_repo.get_variant = AsyncMock(
@@ -1103,8 +1135,8 @@ class TestHandleEmojiToggle:
             text_processor=text_processor,
         )
 
-        query = _make_query(data="emoji:42:direction=increase")
-        update = _make_update(query)
+        query = make_query(data="emoji:42:direction=increase")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1125,8 +1157,8 @@ class TestHandleTimestampsToggle:
 
     @pytest.mark.asyncio
     async def test_feature_disabled(self, handler):
-        query = _make_query(data="timestamps:42")
-        update = _make_update(query)
+        query = make_query(data="timestamps:42")
+        update = make_update(query)
         context = MagicMock()
 
         with patch("src.bot.callbacks.settings") as mock_settings:
@@ -1139,12 +1171,12 @@ class TestHandleTimestampsToggle:
     async def test_no_segments_returns_unavailable(self, handler, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(timestamps_enabled=False)
+        state = make_state(timestamps_enabled=False)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
 
-        query = _make_query(data="timestamps:42")
-        update = _make_update(query)
+        query = make_query(data="timestamps:42")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1153,26 +1185,26 @@ class TestHandleTimestampsToggle:
         assert any("Таймкоды недоступны" in str(c) for c in query.answer.call_args_list)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_enable_timestamps_generates_variant(self, mock_keyboard, mock_sanitize, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(timestamps_enabled=False)
+        state = make_state(timestamps_enabled=False)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         segments = [MagicMock(), MagicMock()]
         segment_repo.get_by_usage_id = AsyncMock(return_value=segments)
 
-        base_variant = _make_variant("base text")
+        base_variant = make_variant("base text")
         # First: get base variant (timestamps_enabled=False) -> base_variant
         # Second: get variant with timestamps=True -> None (cache miss)
         variant_repo.get_variant = AsyncMock(side_effect=[base_variant, None])
 
-        ts_variant = _make_variant("timestamped text")
+        ts_variant = make_variant("timestamped text")
         variant_repo.create = AsyncMock(return_value=ts_variant)
 
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         mock_keyboard.return_value = MagicMock()
@@ -1188,8 +1220,8 @@ class TestHandleTimestampsToggle:
             text_processor=text_processor,
         )
 
-        query = _make_query(data="timestamps:42")
-        update = _make_update(query)
+        query = make_query(data="timestamps:42")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1200,21 +1232,21 @@ class TestHandleTimestampsToggle:
         state_repo.update.assert_called_once_with(state)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_disable_timestamps_uses_base_variant(self, mock_keyboard, mock_sanitize, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(timestamps_enabled=True)
+        state = make_state(timestamps_enabled=True)
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
         segments = [MagicMock()]
         segment_repo.get_by_usage_id = AsyncMock(return_value=segments)
 
-        base_variant = _make_variant("base text without timestamps")
+        base_variant = make_variant("base text without timestamps")
         variant_repo.get_variant = AsyncMock(return_value=base_variant)
 
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         mock_keyboard.return_value = MagicMock()
@@ -1226,8 +1258,8 @@ class TestHandleTimestampsToggle:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="timestamps:42")
-        update = _make_update(query)
+        query = make_query(data="timestamps:42")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1246,20 +1278,20 @@ class TestHandleBack:
     """Tests for handle_back handler."""
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     async def test_back_restores_keyboard(self, mock_keyboard, mock_sanitize, repos):
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(active_mode="structured")
+        state = make_state(active_mode="structured")
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
 
-        variant = _make_variant("some text")
+        variant = make_variant("some text")
         variant_repo.get_variant = AsyncMock(return_value=variant)
 
         segment_repo.get_by_usage_id = AsyncMock(return_value=[])
 
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         expected_keyboard = MagicMock()
@@ -1272,8 +1304,8 @@ class TestHandleBack:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="back:42")
-        update = _make_update(query)
+        query = make_query(data="back:42")
+        update = make_update(query)
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1288,8 +1320,8 @@ class TestHandleBack:
         state_repo = repos[0]
         state_repo.get_by_usage_id = AsyncMock(return_value=None)
 
-        query = _make_query(data="back:42")
-        update = _make_update(query)
+        query = make_query(data="back:42")
+        update = make_update(query)
         context = MagicMock()
 
         await handler.handle_back(update, context)
@@ -1299,15 +1331,15 @@ class TestHandleBack:
     async def test_back_variant_not_found(self, handler, repos):
         state_repo, variant_repo = repos[0], repos[1]
 
-        state = _make_state()
+        state = make_state()
         state_repo.get_by_usage_id = AsyncMock(return_value=state)
         variant_repo.get_variant = AsyncMock(return_value=None)
 
         handler.segment_repo = repos[2]
         repos[2].get_by_usage_id = AsyncMock(return_value=[])
 
-        query = _make_query(data="back:42")
-        update = _make_update(query)
+        query = make_query(data="back:42")
+        update = make_update(query)
         context = MagicMock()
 
         await handler.handle_back(update, context)
@@ -1333,7 +1365,7 @@ class TestGenerateVariant:
         text_processor = AsyncMock()
         text_processor.create_structured = AsyncMock(return_value="structured output")
 
-        generated_variant = _make_variant("structured output")
+        generated_variant = make_variant("structured output")
         variant_repo.get_or_create_variant = AsyncMock(return_value=(generated_variant, True))
         variant_repo.count_by_usage_id = AsyncMock(return_value=1)
 
@@ -1345,8 +1377,8 @@ class TestGenerateVariant:
             text_processor=text_processor,
         )
 
-        state = _make_state()
-        query = _make_query(data="mode:42:mode=structured")
+        state = make_state()
+        query = make_query(data="mode:42:mode=structured")
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1379,7 +1411,7 @@ class TestGenerateVariant:
         text_processor = AsyncMock()
         text_processor.summarize_text = AsyncMock(return_value="summary output")
 
-        generated_variant = _make_variant("summary output")
+        generated_variant = make_variant("summary output")
         variant_repo.get_or_create_variant = AsyncMock(return_value=(generated_variant, True))
         variant_repo.count_by_usage_id = AsyncMock(return_value=1)
 
@@ -1391,8 +1423,8 @@ class TestGenerateVariant:
             text_processor=text_processor,
         )
 
-        state = _make_state()
-        query = _make_query(data="mode:42:mode=summary")
+        state = make_state()
+        query = make_query(data="mode:42:mode=summary")
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1422,7 +1454,7 @@ class TestGenerateVariant:
         text_processor = AsyncMock()
         text_processor.create_magic = AsyncMock(return_value="magic output")
 
-        generated_variant = _make_variant("magic output")
+        generated_variant = make_variant("magic output")
         variant_repo.get_or_create_variant = AsyncMock(return_value=(generated_variant, True))
         variant_repo.count_by_usage_id = AsyncMock(return_value=1)
 
@@ -1434,8 +1466,8 @@ class TestGenerateVariant:
             text_processor=text_processor,
         )
 
-        state = _make_state()
-        query = _make_query(data="mode:42:mode=magic")
+        state = make_state()
+        query = make_query(data="mode:42:mode=magic")
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1455,7 +1487,7 @@ class TestGenerateVariant:
         text_processor.create_magic.assert_called_once_with("original")
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     @patch("src.bot.callbacks.create_transcription_keyboard")
     @patch("src.bot.callbacks.ProgressTracker")
     async def test_error_recovery_restores_original(
@@ -1480,8 +1512,8 @@ class TestGenerateVariant:
             text_processor=text_processor,
         )
 
-        state = _make_state()
-        query = _make_query(data="mode:42:mode=structured")
+        state = make_state()
+        query = make_query(data="mode:42:mode=structured")
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1525,8 +1557,8 @@ class TestGenerateVariant:
             text_processor=text_processor,
         )
 
-        state = _make_state()
-        query = _make_query(data="mode:42:mode=structured")
+        state = make_state()
+        query = make_query(data="mode:42:mode=structured")
         context = MagicMock()
 
         with _default_settings_patch():
@@ -1594,13 +1626,13 @@ class TestUpdateTranscriptionDisplay:
     """Tests for update_transcription_display method."""
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     async def test_text_to_text_short_stays_text(self, mock_sanitize, repos):
         """Short text message stays as text message."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(is_file_message=False, active_mode="original")
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        state = make_state(is_file_message=False, active_mode="original")
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -1610,7 +1642,7 @@ class TestUpdateTranscriptionDisplay:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=original")
+        query = make_query(data="mode:42:mode=original")
         keyboard = MagicMock()
         short_text = "short text"
 
@@ -1620,18 +1652,18 @@ class TestUpdateTranscriptionDisplay:
             )
 
         query.edit_message_text.assert_called_once_with(
-            short_text, reply_markup=keyboard, parse_mode="HTML"
+            short_text, reply_markup=keyboard, parse_mode="MarkdownV2"
         )
 
     @pytest.mark.asyncio
     @patch("src.bot.callbacks.create_file_object")
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     async def test_file_to_file_long_stays_file(self, mock_sanitize, mock_file_obj, repos):
         """Long file message stays as file message."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(is_file_message=True, file_message_id=999, active_mode="structured")
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        state = make_state(is_file_message=True, file_message_id=999, active_mode="structured")
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -1641,7 +1673,7 @@ class TestUpdateTranscriptionDisplay:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
+        query = make_query(data="mode:42:mode=structured")
         keyboard = MagicMock()
         long_text = "x" * 5000  # exceeds file_threshold_chars (4096)
 
@@ -1670,13 +1702,13 @@ class TestUpdateTranscriptionDisplay:
 
     @pytest.mark.asyncio
     @patch("src.bot.callbacks.create_file_object")
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     async def test_text_to_file_conversion(self, mock_sanitize, mock_file_obj, repos):
         """Text message becomes file message when text too long."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(is_file_message=False, active_mode="structured")
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        state = make_state(is_file_message=False, active_mode="structured")
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -1686,7 +1718,7 @@ class TestUpdateTranscriptionDisplay:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=structured")
+        query = make_query(data="mode:42:mode=structured")
         keyboard = MagicMock()
         long_text = "x" * 5000
 
@@ -1709,13 +1741,13 @@ class TestUpdateTranscriptionDisplay:
         state_repo.update.assert_called_once_with(state)
 
     @pytest.mark.asyncio
-    @patch("src.bot.callbacks.sanitize_html", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
     async def test_file_to_text_conversion(self, mock_sanitize, repos):
         """File message becomes text message when text short enough."""
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
-        state = _make_state(is_file_message=True, file_message_id=999, active_mode="original")
-        usage_repo.get_by_id = AsyncMock(return_value=_make_usage())
+        state = make_state(is_file_message=True, file_message_id=999, active_mode="original")
+        usage_repo.get_by_id = AsyncMock(return_value=make_usage())
         usage_repo.count_by_user_id = AsyncMock(return_value=5)
 
         handler = CallbackHandlers(
@@ -1725,7 +1757,7 @@ class TestUpdateTranscriptionDisplay:
             usage_repo=usage_repo,
         )
 
-        query = _make_query(data="mode:42:mode=original")
+        query = make_query(data="mode:42:mode=original")
         keyboard = MagicMock()
         short_text = "now short text"
 
@@ -1741,7 +1773,7 @@ class TestUpdateTranscriptionDisplay:
         context.bot.delete_message.assert_called_once_with(1000, 999)
         # Message updated with text
         query.edit_message_text.assert_called_once_with(
-            short_text, reply_markup=keyboard, parse_mode="HTML"
+            short_text, reply_markup=keyboard, parse_mode="MarkdownV2"
         )
         assert state.is_file_message is False
         assert state.file_message_id is None

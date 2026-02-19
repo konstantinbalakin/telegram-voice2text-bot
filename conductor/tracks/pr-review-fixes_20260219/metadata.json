@@ -1,0 +1,26 @@
+{
+  "id": "pr-review-fixes_20260219",
+  "title": "PR Review Fixes for download-formats & html-to-markdown",
+  "type": "refactor",
+  "status": "complete",
+  "created": "2026-02-19T00:00:00Z",
+  "updated": "2026-02-19T00:00:00Z",
+  "current_phase": 5,
+  "current_task": "5.5",
+  "phases": {
+    "total": 5,
+    "completed": 5
+  },
+  "tasks": {
+    "total": 35,
+    "completed": 35
+  },
+  "commits": [
+    "10ca16f: feat(export): add ExportError and error handling in ExportService (pr-review-fixes_20260219)",
+    "9249c55: fix(callbacks): improve error handling in download handlers (pr-review-fixes_20260219)",
+    "b881acf: docs: update stale comments and docstrings after HTML-to-Markdown migration (pr-review-fixes_20260219)",
+    "0b07230: test: add download routing, error handling, and edge case tests (pr-review-fixes_20260219)",
+    "1b9e8f6: Промежуточный коммит. Фазы 1-4 выполнены по рефакторингу. Осталась фаза 5",
+    "f5ed5ce: refactor: Phase 5 code quality improvements (pr-review-fixes_20260219)"
+  ]
+}

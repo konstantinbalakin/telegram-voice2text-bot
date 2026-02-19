@@ -8,6 +8,7 @@ from telegram.ext import ContextTypes
 from src.services.pdf_generator import create_file_object
 
 from src.bot.keyboards import decode_callback_data, create_transcription_keyboard
+from src.bot.keyboards import create_download_format_keyboard
 from src.storage.models import TranscriptionState, TranscriptionVariant
 from src.storage.repositories import (
     TranscriptionStateRepository,
@@ -20,10 +21,11 @@ from src.services.text_processor import TextProcessor
 from src.services.progress_tracker import ProgressTracker
 from src.config import settings
 from src.bot.retranscribe_handlers import handle_retranscribe_menu, handle_retranscribe
-from src.utils.html_utils import sanitize_html
+from src.utils.markdown_utils import sanitize_markdown, escape_markdownv2
 
 if TYPE_CHECKING:
     from src.bot.handlers import BotHandlers
+    from src.services.export_service import ExportService
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,7 @@ class CallbackHandlers:
         text_processor: Optional[TextProcessor] = None,
         bot_handlers: Optional["BotHandlers"] = None,
         user_repo: Optional["UserRepository"] = None,
+        export_service: Optional["ExportService"] = None,
     ):
         """
         Initialize callback handlers.
@@ -70,6 +73,7 @@ class CallbackHandlers:
             text_processor: Text processor for LLM operations (optional)
             bot_handlers: BotHandlers instance for retranscription (optional, Phase 8)
             user_repo: Repository for user records (optional, for ownership checks)
+            export_service: Export service for file generation (optional)
         """
         self.state_repo = state_repo
         self.variant_repo = variant_repo
@@ -78,6 +82,7 @@ class CallbackHandlers:
         self.text_processor = text_processor
         self.bot_handlers = bot_handlers
         self.user_repo = user_repo
+        self.export_service = export_service
 
     async def _check_variant_limit(self, usage_id: int) -> bool:
         """Check if the variant limit for a transcription has been reached.
@@ -124,7 +129,9 @@ class CallbackHandlers:
         Returns:
             The generated variant, or None on error.
         """
-        assert self.text_processor is not None
+        if not self.text_processor:
+            logger.error("text_processor is None in _generate_variant")
+            return None
 
         # Mode-specific configuration
         mode_config: dict[str, dict[str, str]] = {
@@ -223,12 +230,12 @@ class CallbackHandlers:
                 segments = await self.segment_repo.get_by_usage_id(usage_id)
                 has_segments = len(segments) > 0
                 await query.edit_message_text(
-                    sanitize_html(original_text),
+                    escape_markdownv2(sanitize_markdown(original_text)),
                     reply_markup=create_transcription_keyboard(state, has_segments, settings),
-                    parse_mode="HTML",
+                    parse_mode="MarkdownV2",
                 )
-            except Exception:
-                pass
+            except Exception as restore_err:
+                logger.warning(f"Failed to restore message after error: {restore_err}")
 
             # Try to answer query (may fail if query is too old)
             try:
@@ -265,12 +272,14 @@ class CallbackHandlers:
             file_number = state.usage_id
             logger.warning(f"Usage {state.usage_id} not found, using usage_id as file_number")
 
-        # Sanitize HTML before sending to Telegram (LLM may produce unsupported tags)
-        new_text = sanitize_html(new_text)
+        # Sanitize Markdown before sending to Telegram (LLM may produce HTML tags)
+        new_text = sanitize_markdown(new_text)
 
         if not state.is_file_message and len(new_text) <= settings.file_threshold_chars:
             # Simple case: text message, stays text message
-            await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
+            await query.edit_message_text(
+                escape_markdownv2(new_text), reply_markup=keyboard, parse_mode="MarkdownV2"
+            )
             logger.debug(f"Updated text message: usage_id={state.usage_id}")
 
         elif state.is_file_message and len(new_text) > settings.file_threshold_chars:
@@ -283,9 +292,9 @@ class CallbackHandlers:
 
             # Update main message with keyboard
             await query.edit_message_text(
-                f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}",
+                escape_markdownv2(f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}"),
                 reply_markup=keyboard,
-                parse_mode="HTML",
+                parse_mode="MarkdownV2",
             )
 
             # Delete old file
@@ -305,8 +314,10 @@ class CallbackHandlers:
                 chat_id=chat_id,
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 {mode_label} ({len(new_text)} символов, {file_extension})",
-                parse_mode="HTML",
+                caption=escape_markdownv2(
+                    f"📄 {mode_label} ({len(new_text)} символов, {file_extension})"
+                ),
+                parse_mode="MarkdownV2",
             )
 
             # Update state with new file_message_id
@@ -327,9 +338,9 @@ class CallbackHandlers:
 
             # Update existing message to info message
             await query.edit_message_text(
-                f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}",
+                escape_markdownv2(f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}"),
                 reply_markup=keyboard,
-                parse_mode="HTML",
+                parse_mode="MarkdownV2",
             )
 
             # Send file (PDF if possible, fallback to TXT)
@@ -341,8 +352,10 @@ class CallbackHandlers:
                 chat_id=chat_id,
                 document=file_obj,
                 filename=file_obj.name,
-                caption=f"📄 {mode_label} ({len(new_text)} символов, {file_extension})",
-                parse_mode="HTML",
+                caption=escape_markdownv2(
+                    f"📄 {mode_label} ({len(new_text)} символов, {file_extension})"
+                ),
+                parse_mode="MarkdownV2",
             )
 
             # Update state: now it's a file message
@@ -366,7 +379,9 @@ class CallbackHandlers:
                     logger.warning(f"Could not delete file: {e}")
 
             # Update main message with text
-            await query.edit_message_text(new_text, reply_markup=keyboard, parse_mode="HTML")
+            await query.edit_message_text(
+                escape_markdownv2(new_text), reply_markup=keyboard, parse_mode="MarkdownV2"
+            )
 
             # Update state: no longer file message
             state.is_file_message = False
@@ -389,11 +404,9 @@ class CallbackHandlers:
         if not query or not query.data:
             return
 
-        # Acknowledge callback
-        await query.answer()
-
         # Handle noop (non-interactive buttons)
         if query.data == "noop":
+            await query.answer()
             return
 
         # Decode callback data
@@ -404,6 +417,10 @@ class CallbackHandlers:
             logger.error(f"Failed to decode callback data '{query.data}': {e}")
             await query.answer("Ошибка обработки", show_alert=True)
             return
+
+        # Acknowledge callback (skip for actions that manage their own answer)
+        if action not in ("download", "download_fmt"):
+            await query.answer()
 
         # IDOR protection: verify the user pressing the button owns the transcription
         usage_id = data.get("usage_id")
@@ -442,6 +459,10 @@ class CallbackHandlers:
                 await handle_retranscribe(update, context, self.bot_handlers)
             elif action == "back":
                 await self.handle_back(update, context)
+            elif action == "download":
+                await self.handle_download_menu(update, context)
+            elif action == "download_fmt":
+                await self.handle_download_format(update, context)
             else:
                 logger.warning(f"Unknown callback action: {action}")
                 await query.answer("Функция пока не реализована", show_alert=True)
@@ -451,9 +472,7 @@ class CallbackHandlers:
 
     async def handle_mode_change(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
-        Handle mode change (original/structured/summary).
-
-        Phase 2: Implements "original" and "structured" modes.
+        Handle mode change (original/structured/summary/magic).
 
         Args:
             update: Telegram update
@@ -579,7 +598,7 @@ class CallbackHandlers:
             )
             logger.info(f"Mode changed successfully: usage_id={usage_id}, mode={new_mode}")
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_length_change(
@@ -726,12 +745,12 @@ class CallbackHandlers:
                     segments = await self.segment_repo.get_by_usage_id(usage_id)
                     has_segments = len(segments) > 0
                     await query.edit_message_text(
-                        sanitize_html(current_variant.text_content),
+                        escape_markdownv2(sanitize_markdown(current_variant.text_content)),
                         reply_markup=create_transcription_keyboard(state, has_segments, settings),
-                        parse_mode="HTML",
+                        parse_mode="MarkdownV2",
                     )
-                except Exception:
-                    pass
+                except Exception as restore_err:
+                    logger.warning(f"Failed to restore message after error: {restore_err}")
 
                 await query.answer("Не удалось изменить длину текста", show_alert=True)
                 return
@@ -763,7 +782,7 @@ class CallbackHandlers:
                 f"level={current_level}->{new_level}"
             )
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_emoji_toggle(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -936,14 +955,14 @@ class CallbackHandlers:
                         segments = await self.segment_repo.get_by_usage_id(usage_id)
                         has_segments = len(segments) > 0
                         await query.edit_message_text(
-                            sanitize_html(current_variant.text_content),
+                            escape_markdownv2(sanitize_markdown(current_variant.text_content)),
                             reply_markup=create_transcription_keyboard(
                                 state, has_segments, settings
                             ),
-                            parse_mode="HTML",
+                            parse_mode="MarkdownV2",
                         )
-                except Exception:
-                    pass
+                except Exception as restore_err:
+                    logger.warning(f"Failed to restore message after error: {restore_err}")
 
                 await query.answer("Не удалось добавить смайлы", show_alert=True)
                 return
@@ -975,7 +994,7 @@ class CallbackHandlers:
                 f"level={current_emoji}->{new_emoji}"
             )
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_timestamps_toggle(
@@ -1094,15 +1113,15 @@ class CallbackHandlers:
                 f"enabled={new_timestamps}"
             )
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
 
     async def handle_back(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Handle back button to return to main keyboard from submenus.
 
-        This handler restores the main transcription keyboard without changing
-        the active mode or any parameters. Used when returning from retranscribe menu.
+        Restores the main transcription keyboard without changing the active mode
+        or any parameters. Used when returning from retranscribe or download format menus.
 
         Args:
             update: Telegram update
@@ -1150,5 +1169,142 @@ class CallbackHandlers:
             )
             logger.info(f"Returned to main keyboard: usage_id={usage_id}")
         except Exception as e:
-            logger.error(f"Failed to update message: {e}")
+            logger.error(f"Failed to update message: {e}", exc_info=True)
             await query.answer("Не удалось обновить сообщение", show_alert=True)
+
+    async def handle_download_menu(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """
+        Handle download button press — show format selection submenu.
+
+        Replaces the main keyboard with a download format submenu.
+
+        Args:
+            update: Telegram update
+            context: Bot context
+        """
+        query = update.callback_query
+        if not query or not query.data:
+            return
+
+        data = decode_callback_data(query.data)
+        usage_id = data["usage_id"]
+
+        logger.info(f"Download menu requested: usage_id={usage_id}")
+
+        # Get current state
+        state = await self.state_repo.get_by_usage_id(usage_id)
+        if not state:
+            await query.answer("Состояние не найдено", show_alert=True)
+            return
+
+        await query.answer("Выберите формат")
+
+        # Replace keyboard with format submenu
+        format_keyboard = create_download_format_keyboard(usage_id)
+        try:
+            await query.edit_message_text(
+                "📥 Выберите формат для скачивания:",
+                reply_markup=format_keyboard,
+            )
+        except Exception as e:
+            logger.error(f"Failed to show download menu: {e}", exc_info=True)
+            await query.answer("Не удалось показать меню", show_alert=True)
+
+    async def handle_download_format(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """
+        Handle download format selection — generate and send file.
+
+        Args:
+            update: Telegram update
+            context: Bot context
+        """
+        query = update.callback_query
+        if not query or not query.data:
+            return
+
+        data = decode_callback_data(query.data)
+        usage_id = data["usage_id"]
+        fmt = data.get("fmt", "txt")
+
+        logger.info(f"Download format selected: usage_id={usage_id}, format={fmt}")
+
+        # Get current state
+        state = await self.state_repo.get_by_usage_id(usage_id)
+        if not state:
+            await query.answer("Состояние не найдено", show_alert=True)
+            return
+
+        # Get current active variant
+        variant = await self.variant_repo.get_variant(
+            usage_id=usage_id,
+            mode=state.active_mode,
+            length_level=state.length_level,
+            emoji_level=state.emoji_level,
+            timestamps_enabled=state.timestamps_enabled,
+        )
+
+        if not variant:
+            await query.answer("Текст не найден", show_alert=True)
+            return
+
+        if not self.export_service:
+            await query.answer("Экспорт недоступен", show_alert=True)
+            return
+
+        # Validate format
+        supported_formats = ("md", "txt", "pdf", "docx")
+        if fmt not in supported_formats:
+            logger.warning(f"Unsupported export format requested: {fmt!r}")
+            await query.answer("Неподдерживаемый формат", show_alert=True)
+            return
+
+        # Generate filename
+        usage = await self.usage_repo.get_by_id(usage_id)
+        if usage:
+            file_number = await self.usage_repo.count_by_user_id(usage.user_id)
+        else:
+            logger.warning(f"Usage not found for usage_id={usage_id}, using id as file number")
+            file_number = usage_id
+
+        filename = f"{file_number}_{state.active_mode}"
+
+        # Generate file
+        try:
+            file_obj = self.export_service.export(variant.text_content, fmt, filename)
+        except Exception as e:
+            logger.error(f"Failed to generate file: {e}", exc_info=True)
+            await query.answer("Не удалось создать файл", show_alert=True)
+            return
+
+        # Send file via Telegram
+        try:
+            message = cast(Message, query.message)
+            await context.bot.send_document(
+                chat_id=message.chat_id,
+                document=file_obj,
+                filename=file_obj.name,
+                caption=f"📄 {file_obj.name}",
+            )
+            await query.answer("Файл отправлен!")
+            logger.info(f"File sent: usage_id={usage_id}, format={fmt}")
+        except Exception as e:
+            logger.error(f"Failed to send file: {e}", exc_info=True)
+            await query.answer("Не удалось отправить файл", show_alert=True)
+            return
+        finally:
+            file_obj.close()
+
+        # Restore original text and main keyboard
+        try:
+            segments = await self.segment_repo.get_by_usage_id(usage_id)
+            has_segments = len(segments) > 0
+            keyboard = create_transcription_keyboard(state, has_segments, settings)
+            await self.update_transcription_display(
+                query, context, state, variant.text_content, keyboard, self.state_repo
+            )
+        except Exception as e:
+            logger.warning(f"Failed to restore UI after download: {e}")

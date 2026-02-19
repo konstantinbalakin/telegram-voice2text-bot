@@ -1,0 +1,26 @@
+{
+  "id": "html-to-markdown_20260218",
+  "title": "Переход форматирования с HTML на MarkdownV2",
+  "type": "bug",
+  "status": "complete",
+  "created": "2026-02-18T00:00:00Z",
+  "updated": "2026-02-18T12:30:00Z",
+  "current_phase": 6,
+  "current_task": "6.6",
+  "phases": {
+    "total": 6,
+    "completed": 6
+  },
+  "tasks": {
+    "total": 27,
+    "completed": 27
+  },
+  "commits": [
+    "10eae39: feat(markdown): add markdown_utils with escape_markdownv2, sanitize_markdown, strip_markdown (html-to-markdown_20260218)",
+    "f6f0214: feat(prompts): replace HTML formatting instructions with Markdown in all prompts (html-to-markdown_20260218)",
+    "92af402: refactor(services): replace sanitize_html/escape_html with sanitize_markdown/escape_markdownv2 (html-to-markdown_20260218)",
+    "4b9540e: refactor(bot): switch callbacks and handlers from HTML to MarkdownV2 parse_mode (html-to-markdown_20260218)",
+    "32d6160: feat(pdf): add convert_markdown_to_html and update generate_pdf to accept Markdown input (html-to-markdown_20260218)",
+    "33f102e: refactor(export): use strip_markdown from markdown_utils, deprecate html_utils (html-to-markdown_20260218)"
+  ]
+}

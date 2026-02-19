@@ -1,7 +1,9 @@
 """Unit tests for PDF generator service."""
 
 import pytest
-from src.services.pdf_generator import PDFGenerator
+from unittest.mock import patch
+
+from src.services.pdf_generator import PDFGenerator, convert_markdown_to_html
 
 
 class TestPDFGenerator:
@@ -133,6 +135,15 @@ def hello_world():
         assert len(pdf_bytes) > 0
         assert pdf_bytes[:4] == b"%PDF"
 
+    def test_generate_pdf_from_text_no_double_conversion(self, generator: PDFGenerator) -> None:
+        """generate_pdf_from_text must NOT run text through convert_markdown_to_html."""
+        plain_text = "Paragraph one.\n\nParagraph two."
+        with patch(
+            "src.services.pdf_generator.convert_markdown_to_html", wraps=convert_markdown_to_html
+        ) as mock_convert:
+            generator.generate_pdf_from_text(plain_text, wrap_paragraphs=True)
+            mock_convert.assert_not_called()
+
     def test_special_characters_escaping(self, generator: PDFGenerator) -> None:
         """Test that special characters are handled correctly."""
         html_content = """
@@ -157,24 +168,86 @@ def hello_world():
         assert len(pdf_bytes) > 0
         assert pdf_bytes[:4] == b"%PDF"
 
-    def test_nested_html_structures(self, generator: PDFGenerator) -> None:
-        """Test nested HTML structures."""
-        html_content = """
-        <div>
-            <p><b>Заголовок:</b> <i>Подзаголовок</i></p>
-            <ul>
-                <li>Пункт с <b>жирным</b> текстом
-                    <ul>
-                        <li>Вложенный пункт 1</li>
-                        <li>Вложенный пункт 2</li>
-                    </ul>
-                </li>
-                <li>Еще один пункт</li>
-            </ul>
-        </div>
-        """
-        pdf_bytes = generator.generate_pdf(html_content)
-
         assert isinstance(pdf_bytes, bytes)
         assert len(pdf_bytes) > 0
+        assert pdf_bytes[:4] == b"%PDF"
+
+
+class TestConvertMarkdownToHtml:
+    """Test Markdown to HTML conversion for PDF rendering."""
+
+    def test_empty_string(self) -> None:
+        assert convert_markdown_to_html("") == ""
+
+    def test_bold(self) -> None:
+        result = convert_markdown_to_html("**жирный**")
+        assert "<strong>жирный</strong>" in result
+
+    def test_italic(self) -> None:
+        result = convert_markdown_to_html("*курсив*")
+        assert "<em>курсив</em>" in result
+
+    def test_inline_code(self) -> None:
+        result = convert_markdown_to_html("`код`")
+        assert "<code>код</code>" in result
+
+    def test_code_block(self) -> None:
+        result = convert_markdown_to_html("```\ncode block\n```")
+        assert "<pre><code>" in result
+        assert "code block" in result
+
+    def test_heading_h1(self) -> None:
+        result = convert_markdown_to_html("# Заголовок")
+        assert "<h1>Заголовок</h1>" in result
+
+    def test_heading_h2(self) -> None:
+        result = convert_markdown_to_html("## Подзаголовок")
+        assert "<h2>Подзаголовок</h2>" in result
+
+    def test_heading_h3(self) -> None:
+        result = convert_markdown_to_html("### Третий уровень")
+        assert "<h3>Третий уровень</h3>" in result
+
+    def test_bullet_list_dash(self) -> None:
+        result = convert_markdown_to_html("- пункт 1\n- пункт 2")
+        assert "<ul>" in result
+        assert "<li>" in result
+        assert "пункт 1" in result
+
+    def test_bullet_list_dot(self) -> None:
+        result = convert_markdown_to_html("• пункт 1\n• пункт 2")
+        assert "<ul>" in result
+        assert "пункт 1" in result
+
+    def test_numbered_list(self) -> None:
+        result = convert_markdown_to_html("1. первый\n2. второй")
+        assert "<ol>" in result
+        assert "первый" in result
+
+    def test_link(self) -> None:
+        result = convert_markdown_to_html("[ссылка](https://example.com)")
+        assert '<a href="https://example.com">ссылка</a>' in result
+
+    def test_underline(self) -> None:
+        result = convert_markdown_to_html("__подчёркнутый__")
+        assert "<u>подчёркнутый</u>" in result
+
+    def test_paragraph(self) -> None:
+        result = convert_markdown_to_html("Первый параграф\n\nВторой параграф")
+        assert "<p>Первый параграф</p>" in result
+        assert "<p>Второй параграф</p>" in result
+
+    def test_mixed_markdown(self) -> None:
+        text = "# Заголовок\n\n**Жирный** и *курсив*.\n\n- Пункт 1\n- Пункт 2"
+        result = convert_markdown_to_html(text)
+        assert "<h1>Заголовок</h1>" in result
+        assert "<strong>Жирный</strong>" in result
+        assert "<em>курсив</em>" in result
+        assert "<ul>" in result
+
+    def test_markdown_generates_valid_pdf(self) -> None:
+        """End-to-end: Markdown text produces valid PDF."""
+        gen = PDFGenerator()
+        text = "# Заголовок\n\n**Жирный** и *курсив*.\n\n- Пункт 1\n- Пункт 2"
+        pdf_bytes = gen.generate_pdf(text)
         assert pdf_bytes[:4] == b"%PDF"

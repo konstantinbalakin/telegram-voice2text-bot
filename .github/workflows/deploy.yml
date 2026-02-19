@@ -340,6 +340,7 @@ jobs:
             ENABLE_VIDEO_HANDLER=true     # Извлечение аудио из видеофайлов
 
             ENABLE_RETRANSCRIBE=false #повторная транскрибация в лучшем качестве
+            ENABLE_DOWNLOAD_BUTTON=true #скачивание транскрипции в MD, TXT, PDF, DOCX
             PERSISTENT_AUDIO_DIR=./data/audio_files
             PERSISTENT_AUDIO_TTL_DAYS=1
             RETRANSCRIBE_FREE_MODEL=medium

@@ -39,6 +39,8 @@ from src.services.llm_service import LLMFactory, LLMService
 from src.services.text_processor import TextProcessor
 from src.services.telegram_client import TelegramClientService
 from src.services.transcription_orchestrator import TranscriptionOrchestrator
+from src.services.export_service import ExportService
+from src.services.pdf_generator import PDFGenerator
 from src.utils.logging_config import setup_logging, log_deployment_event, get_config_summary
 
 # Setup centralized logging
@@ -227,6 +229,14 @@ async def main() -> None:
 
     # Register callback query handler for interactive transcription
     if settings.interactive_mode_enabled:
+        # Create export service for download feature
+        pdf_generator = PDFGenerator() if settings.enable_download_button else None
+        export_service = (
+            ExportService(pdf_generator=pdf_generator) if settings.enable_download_button else None
+        )
+        if export_service:
+            logger.info("ExportService created for download feature (with PDFGenerator DI)")
+
         # Create callback handlers with repositories (they need session, created on-demand)
         async def callback_query_wrapper(
             update: object, context: ContextTypes.DEFAULT_TYPE
@@ -249,6 +259,7 @@ async def main() -> None:
                     text_processor,
                     bot_handlers,
                     user_repo=user_repo,
+                    export_service=export_service,
                 )
                 await callback_handlers.handle_callback_query(update, context)  # type: ignore[arg-type]
 
