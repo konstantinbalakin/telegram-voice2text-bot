@@ -1047,6 +1047,7 @@ class TestSendResultAndUpdateState:
         mock_state.id = 1
         mock_state_repo = MagicMock()
         mock_state_repo.get_by_usage_id = AsyncMock(return_value=None)
+        mock_state_repo.get_by_message = AsyncMock(return_value=None)
         mock_state_repo.create = AsyncMock(return_value=mock_state)
         mock_state_repo.update = AsyncMock()
 
