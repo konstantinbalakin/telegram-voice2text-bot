@@ -1,9 +1,11 @@
 """Tests for src/services/export_service.py — ExportService for MD, TXT, PDF, DOCX."""
 
 import io
+from unittest.mock import patch
 
 import pytest
 
+from src.exceptions import ExportError
 from src.services.export_service import ExportService
 
 
@@ -207,3 +209,23 @@ class TestStripMarkdown:
         content = result.read().decode("utf-8")
         assert "first" in content
         assert "second" in content
+
+
+class TestExportErrorHandling:
+    """ExportService methods raise ExportError on internal failures."""
+
+    def test_export_pdf_raises_export_error(self, export_service: ExportService) -> None:
+        with patch.object(
+            export_service._pdf_generator, "generate_pdf", side_effect=RuntimeError("weasyprint")
+        ):
+            with pytest.raises(ExportError, match="PDF"):
+                export_service.export_pdf("text", "file")
+
+    def test_export_docx_raises_export_error(self, export_service: ExportService) -> None:
+        with patch.object(export_service, "_markdown_to_docx", side_effect=RuntimeError("docx")):
+            with pytest.raises(ExportError, match="DOCX"):
+                export_service.export_docx("text", "file")
+
+    def test_export_error_has_user_message(self) -> None:
+        err = ExportError("internal", user_message="Ошибка экспорта")
+        assert err.user_message == "Ошибка экспорта"

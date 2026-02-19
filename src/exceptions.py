@@ -49,3 +49,9 @@ class StateNotFoundError(BotError):
     """Transcription state not found."""
 
     pass
+
+
+class ExportError(BotError):
+    """Error during file export (PDF, DOCX, etc.)."""
+
+    pass

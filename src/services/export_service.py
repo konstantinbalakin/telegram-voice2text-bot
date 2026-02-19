@@ -8,6 +8,7 @@ from typing import Any
 from docx import Document  # type: ignore[import-untyped]
 from docx.shared import Pt  # type: ignore[import-untyped]
 
+from src.exceptions import ExportError
 from src.services.pdf_generator import PDFGenerator
 from src.utils.markdown_utils import strip_markdown
 
@@ -78,16 +79,27 @@ class ExportService:
         """Export text as PDF using the existing PDFGenerator.
 
         Args:
-            text: Text content (may contain markdown/HTML formatting)
+            text: Text content (may contain Markdown formatting)
             filename: Base filename without extension
 
         Returns:
             BytesIO with .name set to {filename}.pdf
+
+        Raises:
+            ExportError: If PDF generation fails
         """
-        pdf_bytes = self._pdf_generator.generate_pdf(text)
-        buf = io.BytesIO(pdf_bytes)
-        buf.name = f"{filename}.pdf"
-        return buf
+        try:
+            logger.info(f"Exporting PDF: {filename}")
+            pdf_bytes = self._pdf_generator.generate_pdf(text)
+            buf = io.BytesIO(pdf_bytes)
+            buf.name = f"{filename}.pdf"
+            logger.info(f"PDF export complete: {filename}.pdf ({len(pdf_bytes)} bytes)")
+            return buf
+        except Exception as e:
+            logger.error(f"PDF export failed: {e}", exc_info=True)
+            raise ExportError(
+                f"PDF export failed: {e}", user_message="Не удалось создать PDF"
+            ) from e
 
     def export_docx(self, text: str, filename: str) -> io.BytesIO:
         """Export text as DOCX with basic markdown formatting.
@@ -98,9 +110,20 @@ class ExportService:
 
         Returns:
             BytesIO with .name set to {filename}.docx
+
+        Raises:
+            ExportError: If DOCX generation fails
         """
-        buf = self._markdown_to_docx(text, filename)
-        return buf
+        try:
+            logger.info(f"Exporting DOCX: {filename}")
+            buf = self._markdown_to_docx(text, filename)
+            logger.info(f"DOCX export complete: {filename}.docx")
+            return buf
+        except Exception as e:
+            logger.error(f"DOCX export failed: {e}", exc_info=True)
+            raise ExportError(
+                f"DOCX export failed: {e}", user_message="Не удалось создать DOCX"
+            ) from e
 
     def _markdown_to_docx(self, text: str, filename: str) -> io.BytesIO:
         """Convert markdown text to DOCX with basic formatting.
