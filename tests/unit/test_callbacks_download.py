@@ -1,7 +1,7 @@
 """Tests for download callback handlers in src/bot/callbacks.py."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.bot.callbacks import CallbackHandlers
 from src.services.export_service import ExportService
@@ -249,10 +249,20 @@ class TestHandleDownloadFormat:
         sent_doc = call_kwargs.kwargs["document"]
         assert sent_doc.name.endswith(".docx")
 
+    @patch("src.bot.callbacks.settings")
     async def test_restores_text_and_keyboard_after_send(
-        self, handler: CallbackHandlers, repos: tuple
+        self, mock_settings: MagicMock, handler: CallbackHandlers, repos: tuple
     ) -> None:
         """After sending file, should restore both text and main keyboard."""
+        mock_settings.interactive_mode_enabled = True
+        mock_settings.enable_structured_mode = True
+        mock_settings.enable_beautify_mode = True
+        mock_settings.enable_summary_mode = True
+        mock_settings.enable_length_variations = False
+        mock_settings.enable_emoji_control = False
+        mock_settings.enable_timestamps_option = False
+        mock_settings.enable_download_option = True
+        mock_settings.file_threshold_chars = 10000
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
         query = _make_query("download_fmt:42:fmt=txt")
         update = _make_update(query)
