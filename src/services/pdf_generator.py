@@ -355,4 +355,4 @@ def create_file_object(
         logger.warning(f"PDF generation failed, falling back to TXT: {e}")
         file_obj = io.BytesIO(text.encode("utf-8"))
         file_obj.name = f"{filename_prefix}.txt"
-        return file_obj, "TXT"
+        return file_obj, "TXT (PDF недоступен)"
