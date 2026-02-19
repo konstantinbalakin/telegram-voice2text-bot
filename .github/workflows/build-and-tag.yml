@@ -177,6 +177,10 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Create empty .corp-ca-cert.pem for CI
+        if: steps.changed-files.outputs.any_changed == 'true'
+        run: touch .corp-ca-cert.pem
+
       - name: Build and push Docker image
         if: steps.changed-files.outputs.any_changed == 'true'
         uses: docker/build-push-action@v5
