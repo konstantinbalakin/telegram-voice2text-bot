@@ -232,8 +232,8 @@ class CallbackHandlers:
                     reply_markup=create_transcription_keyboard(state, has_segments, settings),
                     parse_mode="MarkdownV2",
                 )
-            except Exception:
-                pass
+            except Exception as restore_err:
+                logger.warning(f"Failed to restore message after error: {restore_err}")
 
             # Try to answer query (may fail if query is too old)
             try:
@@ -747,8 +747,8 @@ class CallbackHandlers:
                         reply_markup=create_transcription_keyboard(state, has_segments, settings),
                         parse_mode="MarkdownV2",
                     )
-                except Exception:
-                    pass
+                except Exception as restore_err:
+                    logger.warning(f"Failed to restore message after error: {restore_err}")
 
                 await query.answer("Не удалось изменить длину текста", show_alert=True)
                 return
@@ -959,8 +959,8 @@ class CallbackHandlers:
                             ),
                             parse_mode="MarkdownV2",
                         )
-                except Exception:
-                    pass
+                except Exception as restore_err:
+                    logger.warning(f"Failed to restore message after error: {restore_err}")
 
                 await query.answer("Не удалось добавить смайлы", show_alert=True)
                 return

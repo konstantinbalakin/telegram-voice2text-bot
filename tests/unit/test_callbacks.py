@@ -858,7 +858,55 @@ class TestHandleLengthChange:
         state_repo.update.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_no_text_processor(self, repos):
+    @patch("src.bot.callbacks.sanitize_markdown", side_effect=lambda x: x)
+    @patch("src.bot.callbacks.create_transcription_keyboard")
+    @patch("src.bot.callbacks.ProgressTracker")
+    async def test_error_recovery_logs_warning_on_restore_failure(
+        self, mock_progress_cls, mock_keyboard, mock_sanitize, repos, caplog
+    ):
+        """When UI restore also fails, a warning must be logged (not silently swallowed)."""
+        import logging
+
+        state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
+
+        state = _make_state(length_level="default", active_mode="structured")
+        state_repo.get_by_usage_id = AsyncMock(return_value=state)
+
+        current_variant = _make_variant("current text")
+        variant_repo.get_variant = AsyncMock(side_effect=[None, current_variant])
+
+        segment_repo.get_by_usage_id = AsyncMock(return_value=[])
+        mock_keyboard.return_value = MagicMock()
+
+        mock_progress = AsyncMock()
+        mock_progress_cls.return_value = mock_progress
+
+        text_processor = AsyncMock()
+        text_processor.adjust_length = AsyncMock(side_effect=Exception("LLM error"))
+
+        handler = CallbackHandlers(
+            state_repo=state_repo,
+            variant_repo=variant_repo,
+            segment_repo=segment_repo,
+            usage_repo=usage_repo,
+            text_processor=text_processor,
+        )
+
+        query = _make_query(data="length:42:direction=shorter")
+        # Make UI restore fail
+        query.edit_message_text = AsyncMock(side_effect=Exception("Telegram API error"))
+        update = _make_update(query)
+        context = MagicMock()
+
+        with (
+            _default_settings_patch(),
+            caplog.at_level(logging.WARNING, logger="src.bot.callbacks"),
+        ):
+            await handler.handle_length_change(update, context)
+
+        assert any(
+            "Failed to restore" in record.message for record in caplog.records
+        ), "Expected warning log when UI restore fails"
         state_repo, variant_repo, segment_repo, usage_repo, user_repo = repos
 
         state = _make_state(length_level="default")
