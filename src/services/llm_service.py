@@ -230,13 +230,21 @@ class LLMFactory:
         provider_name = settings.llm_provider.lower()
 
         if provider_name == "deepseek":
-            logger.info("Creating DeepSeek provider")
+            # Use reasoner-specific max_tokens for deepseek-reasoner model
+            if settings.llm_model == "deepseek-reasoner":
+                max_tokens = settings.llm_max_tokens_reasoner
+            else:
+                max_tokens = settings.llm_max_tokens
+
+            logger.info(
+                f"Creating DeepSeek provider: model={settings.llm_model}, max_tokens={max_tokens}"
+            )
             return DeepSeekProvider(
                 api_key=settings.llm_api_key,
                 model=settings.llm_model,
                 base_url=settings.llm_base_url,
                 timeout=settings.llm_timeout,
-                max_tokens=settings.llm_max_tokens,
+                max_tokens=max_tokens,
             )
 
         # Future providers: openai, gigachat

@@ -299,6 +299,7 @@ jobs:
             LLM_PROVIDER=deepseek #deepseek, openai, gigachat
             LLM_MODEL=deepseek-chat
             LLM_BASE_URL=https://api.deepseek.com
+            LLM_MAX_TOKENS_REASONER=64000
             LLM_TIMEOUT=240
             LLM_DEBUG_MODE=false #true = sends comparison message (draft vs refined)
 

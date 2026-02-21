@@ -356,3 +356,61 @@ class TestFinishReasonHandling:
         assert isinstance(result, LLMResult)
         assert result.text == "Result."
         assert result.truncated is False
+
+
+class TestModelConfiguration:
+    """Tests for model-dependent max_tokens configuration."""
+
+    def test_deepseek_chat_uses_default_max_tokens(self):
+        """Test: deepseek-chat uses llm_max_tokens from config."""
+        provider = DeepSeekProvider(
+            api_key="test-key",
+            model="deepseek-chat",
+            max_tokens=8192,
+        )
+        assert provider.max_tokens == 8192
+
+    def test_deepseek_reasoner_uses_reasoner_max_tokens(self):
+        """Test: deepseek-reasoner uses llm_max_tokens_reasoner from config."""
+        provider = DeepSeekProvider(
+            api_key="test-key",
+            model="deepseek-reasoner",
+            max_tokens=64000,
+        )
+        assert provider.max_tokens == 64000
+
+    def test_factory_uses_reasoner_max_tokens_for_reasoner_model(self):
+        """Test: LLMFactory passes correct max_tokens for deepseek-reasoner."""
+        settings = Mock(spec=Settings)
+        settings.llm_refinement_enabled = True
+        settings.llm_api_key = "test-key"
+        settings.llm_provider = "deepseek"
+        settings.llm_model = "deepseek-reasoner"
+        settings.llm_base_url = "https://api.deepseek.com"
+        settings.llm_timeout = 30
+        settings.llm_max_tokens = 8192
+        settings.llm_max_tokens_reasoner = 64000
+
+        provider = LLMFactory.create_provider(settings)
+
+        assert isinstance(provider, DeepSeekProvider)
+        assert provider.model == "deepseek-reasoner"
+        assert provider.max_tokens == 64000
+
+    def test_factory_uses_default_max_tokens_for_chat_model(self):
+        """Test: LLMFactory passes correct max_tokens for deepseek-chat."""
+        settings = Mock(spec=Settings)
+        settings.llm_refinement_enabled = True
+        settings.llm_api_key = "test-key"
+        settings.llm_provider = "deepseek"
+        settings.llm_model = "deepseek-chat"
+        settings.llm_base_url = "https://api.deepseek.com"
+        settings.llm_timeout = 30
+        settings.llm_max_tokens = 8192
+        settings.llm_max_tokens_reasoner = 64000
+
+        provider = LLMFactory.create_provider(settings)
+
+        assert isinstance(provider, DeepSeekProvider)
+        assert provider.model == "deepseek-chat"
+        assert provider.max_tokens == 8192
