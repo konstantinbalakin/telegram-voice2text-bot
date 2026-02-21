@@ -1,0 +1,24 @@
+{
+  "id": "llm-output-truncation_20260221",
+  "title": "Обрезка ответа DeepSeek при обработке длинных текстов",
+  "type": "bug",
+  "status": "complete",
+  "created": "2026-02-21T00:00:00Z",
+  "updated": "2026-02-21T23:59:00Z",
+  "current_phase": 4,
+  "current_task": "4.1",
+  "phases": {
+    "total": 4,
+    "completed": 4
+  },
+  "tasks": {
+    "total": 16,
+    "completed": 16
+  },
+  "commits": [
+    "91d9f04: fix: add finish_reason detection and increase max_tokens to 8192 (llm-output-truncation)",
+    "cfe46ff: feat: add deepseek-reasoner model support with 64K output tokens (llm-output-truncation)",
+    "dce3585: feat: add long text strategies (reasoner auto-switch + chunking) (llm-output-truncation)",
+    "5386843: docs: add ENV variable checklist to CLAUDE.md (llm-output-truncation_20260221)"
+  ]
+}

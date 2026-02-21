@@ -186,7 +186,17 @@ class Settings(BaseSettings):
     llm_model: str = Field(default="deepseek-chat", description="LLM model name")
     llm_base_url: str = Field(default="https://api.deepseek.com", description="LLM API base URL")
     llm_timeout: int = Field(default=30, description="LLM request timeout in seconds")
-    llm_max_tokens: int = Field(default=4000, description="LLM max tokens for response")
+    llm_max_tokens: int = Field(default=8192, description="LLM max tokens for response")
+    llm_max_tokens_reasoner: int = Field(
+        default=64000, description="LLM max tokens for deepseek-reasoner model"
+    )
+    llm_long_text_strategy: str = Field(
+        default="reasoner",
+        description="Strategy for long texts exceeding output limit: reasoner, chunking",
+    )
+    llm_chunk_max_chars: int = Field(
+        default=8000, description="Max chars per chunk for chunking strategy"
+    )
     llm_debug_mode: bool = Field(
         default=False,
         description="Send draft and refined text comparison in separate message for debugging",

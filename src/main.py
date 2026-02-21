@@ -161,7 +161,11 @@ async def main() -> None:
     # Create text processor for interactive modes and StructureStrategy
     text_processor = None
     if llm_service:
-        text_processor = TextProcessor(llm_service)
+        text_processor = TextProcessor(
+            llm_service,
+            long_text_strategy=settings.llm_long_text_strategy,
+            chunk_max_chars=settings.llm_chunk_max_chars,
+        )
         logger.info("TextProcessor created for interactive modes")
     else:
         logger.warning(

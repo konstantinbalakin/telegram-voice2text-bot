@@ -146,6 +146,10 @@ src/
 - **Logging**: `logger = logging.getLogger(__name__)` in every module
 - **Async**: all I/O is async (`async def`, `await`, `asyncio` primitives)
 - **Config**: all settings via `.env` → `config.py` (Pydantic Settings)
+- **ENV variables**: when adding new environment variables, update **all three** locations:
+  1. `.env.example` — full example with comments
+  2. `.env.example.short` — short example
+  3. `.github/workflows/deploy.yml` — production deployment workflow
 
 ## Testing Patterns
 

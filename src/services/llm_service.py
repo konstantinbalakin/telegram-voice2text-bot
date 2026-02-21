@@ -2,6 +2,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Optional
 
 import httpx
@@ -17,11 +18,19 @@ from src.config import Settings
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class LLMResult:
+    """Result from LLM text refinement."""
+
+    text: str
+    truncated: bool = False
+
+
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
 
     @abstractmethod
-    async def refine_text(self, text: str, prompt: str) -> str:
+    async def refine_text(self, text: str, prompt: str) -> LLMResult:
         """
         Refine transcribed text.
 
@@ -30,7 +39,7 @@ class LLMProvider(ABC):
             prompt: System prompt for refinement
 
         Returns:
-            Refined text
+            LLMResult with refined text and truncation info
 
         Raises:
             LLMError: If refinement fails
@@ -88,6 +97,13 @@ class DeepSeekProvider(LLMProvider):
         self.timeout = timeout
         self.max_tokens = max_tokens
 
+        event_hooks: dict = {}
+        if logger.isEnabledFor(logging.DEBUG):
+            event_hooks = {
+                "request": [self._log_request],
+                "response": [self._log_response],
+            }
+
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(timeout),
@@ -95,6 +111,23 @@ class DeepSeekProvider(LLMProvider):
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
+            event_hooks=event_hooks,
+        )
+
+    @staticmethod
+    async def _log_request(request: httpx.Request) -> None:
+        """Log outgoing HTTP request body at DEBUG level."""
+        body = request.content.decode("utf-8", errors="replace") if request.content else ""
+        logger.debug(f"[HTTPX REQUEST] {request.method} {request.url}\n{body}")
+
+    @staticmethod
+    async def _log_response(response: httpx.Response) -> None:
+        """Log incoming HTTP response body at DEBUG level."""
+        await response.aread()
+        body = response.text
+        logger.debug(
+            f"[HTTPX RESPONSE] {response.status_code} {response.request.method} "
+            f"{response.request.url}\n{body}"
         )
 
     @retry(
@@ -103,7 +136,7 @@ class DeepSeekProvider(LLMProvider):
         retry=retry_if_exception_type((httpx.TimeoutException, httpx.NetworkError)),
         reraise=True,
     )
-    async def refine_text(self, text: str, prompt: str) -> str:
+    async def refine_text(self, text: str, prompt: str) -> LLMResult:
         """
         Refine text using DeepSeek API.
 
@@ -112,7 +145,7 @@ class DeepSeekProvider(LLMProvider):
             prompt: System prompt
 
         Returns:
-            Refined text
+            LLMResult with refined text and truncation flag
 
         Raises:
             LLMTimeoutError: Request timeout
@@ -120,13 +153,15 @@ class DeepSeekProvider(LLMProvider):
         """
         if not text or not text.strip():
             logger.debug("refine_text: empty text, returning as-is")
-            return text
+            return LLMResult(text=text)
 
         api_key_masked = self.api_key[:4] + "..." if self.api_key else "None"
         logger.debug(
             f"refine_text: model={self.model}, text_length={len(text)}, "
             f"prompt_length={len(prompt)}, api_key={api_key_masked}"
         )
+        logger.debug(f"[LLM REQUEST] system_prompt:\n{prompt}")
+        logger.debug(f"[LLM REQUEST] user_text:\n{text}")
 
         try:
             logger.debug(f"Sending request to {self.base_url}/v1/chat/completions")
@@ -147,6 +182,8 @@ class DeepSeekProvider(LLMProvider):
             data = response.json()
 
             refined: str = data["choices"][0]["message"]["content"]
+            finish_reason = data["choices"][0].get("finish_reason", "stop")
+            truncated = finish_reason == "length"
 
             # Log token usage
             usage = data.get("usage", {})
@@ -156,6 +193,7 @@ class DeepSeekProvider(LLMProvider):
                 f"completion_tokens={usage.get('completion_tokens', 0)}, "
                 f"total_tokens={usage.get('total_tokens', 0)}"
             )
+            logger.debug(f"[LLM RESPONSE] finish_reason={finish_reason}, text:\n{refined}")
             logger.info(
                 f"DeepSeek refinement: "
                 f"input={usage.get('prompt_tokens', 0)} tokens, "
@@ -163,7 +201,16 @@ class DeepSeekProvider(LLMProvider):
                 f"total={usage.get('total_tokens', 0)} tokens"
             )
 
-            return refined.strip()
+            if truncated:
+                logger.warning(
+                    f"DeepSeek output truncated (finish_reason=length): "
+                    f"text_length={len(text)}, "
+                    f"output_tokens={usage.get('completion_tokens', 0)}, "
+                    f"max_tokens={self.max_tokens}, "
+                    f"model={self.model}"
+                )
+
+            return LLMResult(text=refined.strip(), truncated=truncated)
 
         except httpx.TimeoutException as e:
             logger.error(f"DeepSeek timeout: {e}")
@@ -210,13 +257,21 @@ class LLMFactory:
         provider_name = settings.llm_provider.lower()
 
         if provider_name == "deepseek":
-            logger.info("Creating DeepSeek provider")
+            # Use reasoner-specific max_tokens for deepseek-reasoner model
+            if settings.llm_model == "deepseek-reasoner":
+                max_tokens = settings.llm_max_tokens_reasoner
+            else:
+                max_tokens = settings.llm_max_tokens
+
+            logger.info(
+                f"Creating DeepSeek provider: model={settings.llm_model}, max_tokens={max_tokens}"
+            )
             return DeepSeekProvider(
                 api_key=settings.llm_api_key,
                 model=settings.llm_model,
                 base_url=settings.llm_base_url,
                 timeout=settings.llm_timeout,
-                max_tokens=settings.llm_max_tokens,
+                max_tokens=max_tokens,
             )
 
         # Future providers: openai, gigachat
@@ -254,10 +309,10 @@ class LLMService:
         try:
             logger.debug(f"refine_transcription: draft_length={len(draft_text)}")
             logger.info(f"Refining text ({len(draft_text)} chars)...")
-            refined = await self.provider.refine_text(draft_text, self.prompt)
-            logger.debug(f"Refinement result: refined_length={len(refined)}")
+            result = await self.provider.refine_text(draft_text, self.prompt)
+            logger.debug(f"Refinement result: refined_length={len(result.text)}")
             logger.info("Text refinement successful")
-            return refined
+            return result.text
 
         except LLMTimeoutError:
             logger.warning("LLM timeout, using draft as final")
