@@ -97,6 +97,13 @@ class DeepSeekProvider(LLMProvider):
         self.timeout = timeout
         self.max_tokens = max_tokens
 
+        event_hooks: dict = {}
+        if logger.isEnabledFor(logging.DEBUG):
+            event_hooks = {
+                "request": [self._log_request],
+                "response": [self._log_response],
+            }
+
         self.client = httpx.AsyncClient(
             base_url=self.base_url,
             timeout=httpx.Timeout(timeout),
@@ -104,6 +111,23 @@ class DeepSeekProvider(LLMProvider):
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
+            event_hooks=event_hooks,
+        )
+
+    @staticmethod
+    async def _log_request(request: httpx.Request) -> None:
+        """Log outgoing HTTP request body at DEBUG level."""
+        body = request.content.decode("utf-8", errors="replace") if request.content else ""
+        logger.debug(f"[HTTPX REQUEST] {request.method} {request.url}\n{body}")
+
+    @staticmethod
+    async def _log_response(response: httpx.Response) -> None:
+        """Log incoming HTTP response body at DEBUG level."""
+        await response.aread()
+        body = response.text
+        logger.debug(
+            f"[HTTPX RESPONSE] {response.status_code} {response.request.method} "
+            f"{response.request.url}\n{body}"
         )
 
     @retry(
