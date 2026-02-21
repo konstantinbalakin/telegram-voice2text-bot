@@ -190,6 +190,13 @@ class Settings(BaseSettings):
     llm_max_tokens_reasoner: int = Field(
         default=64000, description="LLM max tokens for deepseek-reasoner model"
     )
+    llm_long_text_strategy: str = Field(
+        default="reasoner",
+        description="Strategy for long texts exceeding output limit: reasoner, chunking",
+    )
+    llm_chunk_max_chars: int = Field(
+        default=8000, description="Max chars per chunk for chunking strategy"
+    )
     llm_debug_mode: bool = Field(
         default=False,
         description="Send draft and refined text comparison in separate message for debugging",

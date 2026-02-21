@@ -2,8 +2,10 @@
 
 import logging
 
-from src.services.llm_service import LLMResult, LLMService, LLMError
+from src.services.llm_service import DeepSeekProvider, LLMResult, LLMService, LLMError
 from src.services.prompt_loader import load_prompt
+from src.services.text_chunking import merge_processed_chunks, split_text_into_chunks
+from src.services.token_estimator import will_exceed_output_limit
 from src.utils.markdown_utils import sanitize_markdown
 
 logger = logging.getLogger(__name__)
@@ -12,14 +14,23 @@ logger = logging.getLogger(__name__)
 class TextProcessor:
     """Process transcription text using LLM for different modes."""
 
-    def __init__(self, llm_service: LLMService):
+    def __init__(
+        self,
+        llm_service: LLMService,
+        long_text_strategy: str = "reasoner",
+        chunk_max_chars: int = 8000,
+    ):
         """
         Initialize text processor.
 
         Args:
             llm_service: LLM service for text processing
+            long_text_strategy: Strategy for long texts (reasoner, chunking)
+            chunk_max_chars: Max chars per chunk for chunking strategy
         """
         self.llm_service = llm_service
+        self.long_text_strategy = long_text_strategy
+        self.chunk_max_chars = chunk_max_chars
 
     async def create_structured(
         self, original_text: str, length_level: str = "default", emoji_level: int = 0
@@ -94,8 +105,8 @@ class TextProcessor:
         )
 
         try:
-            # Use custom prompt for structuring
-            result = await self._refine_with_custom_prompt(original_text, prompt)
+            # Use strategy-aware processing for structuring
+            result = await self._process_with_strategy(original_text, prompt, prompt)
             structured_text = result.text
 
             if result.truncated:
@@ -385,8 +396,8 @@ class TextProcessor:
         logger.info(f"Creating magic text ({len(original_text)} chars)...")
 
         try:
-            # Use custom prompt for magic transformation
-            result = await self._refine_with_custom_prompt(original_text, prompt)
+            # Use strategy-aware processing for magic transformation
+            result = await self._process_with_strategy(original_text, prompt, prompt)
             magic_text = result.text
 
             if result.truncated:
@@ -597,3 +608,98 @@ class TextProcessor:
 
         # Use the provider directly for custom prompts
         return await self.llm_service.provider.refine_text(text, prompt)
+
+    def _needs_long_text_strategy(self, text: str) -> bool:
+        """Check if text needs a long-text strategy based on model and text size."""
+        if not self.llm_service.provider:
+            return False
+
+        model = getattr(self.llm_service.provider, "model", "")
+        max_tokens = getattr(self.llm_service.provider, "max_tokens", 8192)
+
+        # Reasoner model has 64K output — no strategy needed
+        if model == "deepseek-reasoner":
+            return False
+
+        return will_exceed_output_limit(text, max_output_tokens=max_tokens)
+
+    async def _process_with_strategy(
+        self, text: str, prompt_template: str, prompt: str
+    ) -> LLMResult:
+        """
+        Process text with long-text strategy if needed.
+
+        For texts that exceed the model's output limit:
+        - Strategy "reasoner": Create a temporary deepseek-reasoner provider
+        - Strategy "chunking": Split text into chunks, process each, merge
+
+        Args:
+            text: Text to process
+            prompt_template: Original prompt template (for chunking — reformat per chunk)
+            prompt: Formatted prompt for single-call processing
+
+        Returns:
+            LLMResult with processed text
+        """
+        if not self._needs_long_text_strategy(text):
+            return await self._refine_with_custom_prompt(text, prompt)
+
+        strategy = self.long_text_strategy
+
+        if strategy == "reasoner":
+            return await self._process_with_reasoner(text, prompt)
+        elif strategy == "chunking":
+            return await self._process_with_chunking(text, prompt)
+        else:
+            logger.warning(f"Unknown long_text_strategy: {strategy}, falling back to direct call")
+            return await self._refine_with_custom_prompt(text, prompt)
+
+    async def _process_with_reasoner(self, text: str, prompt: str) -> LLMResult:
+        """Process text using a temporary deepseek-reasoner provider."""
+        provider = self.llm_service.provider
+        if not provider:
+            return LLMResult(text=text)
+
+        api_key = getattr(provider, "api_key", "")
+        base_url = getattr(provider, "base_url", "https://api.deepseek.com")
+        timeout = getattr(provider, "timeout", 120)
+
+        logger.info(
+            f"Switching to deepseek-reasoner for long text "
+            f"(text_length={len(text)}, strategy=reasoner)"
+        )
+
+        reasoner = DeepSeekProvider(
+            api_key=api_key,
+            model="deepseek-reasoner",
+            base_url=base_url,
+            timeout=timeout,
+            max_tokens=64000,
+        )
+
+        try:
+            return await reasoner.refine_text(text, prompt)
+        finally:
+            await reasoner.close()
+
+    async def _process_with_chunking(self, text: str, prompt: str) -> LLMResult:
+        """Process text by splitting into chunks."""
+        logger.info(
+            f"Using chunking strategy for long text "
+            f"(text_length={len(text)}, chunk_max_chars={self.chunk_max_chars})"
+        )
+
+        chunks = split_text_into_chunks(text, max_chars=self.chunk_max_chars)
+
+        processed_chunks: list[str] = []
+        any_truncated = False
+
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Processing chunk {i + 1}/{len(chunks)} ({len(chunk)} chars)")
+            result = await self._refine_with_custom_prompt(chunk, prompt)
+            processed_chunks.append(result.text)
+            if result.truncated:
+                any_truncated = True
+
+        merged = merge_processed_chunks(processed_chunks)
+        return LLMResult(text=merged, truncated=any_truncated)

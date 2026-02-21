@@ -300,6 +300,8 @@ jobs:
             LLM_MODEL=deepseek-chat
             LLM_BASE_URL=https://api.deepseek.com
             LLM_MAX_TOKENS_REASONER=64000
+            LLM_LONG_TEXT_STRATEGY=reasoner
+            LLM_CHUNK_MAX_CHARS=8000
             LLM_TIMEOUT=240
             LLM_DEBUG_MODE=false #true = sends comparison message (draft vs refined)
 

@@ -12,6 +12,8 @@ def mock_llm_service():
     """Create a mock LLM service."""
     service = MagicMock(spec=LLMService)
     service.provider = MagicMock()
+    service.provider.model = "deepseek-chat"
+    service.provider.max_tokens = 8192
     return service
 
 
