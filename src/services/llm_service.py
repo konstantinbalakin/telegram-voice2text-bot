@@ -136,6 +136,8 @@ class DeepSeekProvider(LLMProvider):
             f"refine_text: model={self.model}, text_length={len(text)}, "
             f"prompt_length={len(prompt)}, api_key={api_key_masked}"
         )
+        logger.debug(f"[LLM REQUEST] system_prompt:\n{prompt}")
+        logger.debug(f"[LLM REQUEST] user_text:\n{text}")
 
         try:
             logger.debug(f"Sending request to {self.base_url}/v1/chat/completions")
@@ -167,6 +169,7 @@ class DeepSeekProvider(LLMProvider):
                 f"completion_tokens={usage.get('completion_tokens', 0)}, "
                 f"total_tokens={usage.get('total_tokens', 0)}"
             )
+            logger.debug(f"[LLM RESPONSE] finish_reason={finish_reason}, text:\n{refined}")
             logger.info(
                 f"DeepSeek refinement: "
                 f"input={usage.get('prompt_tokens', 0)} tokens, "

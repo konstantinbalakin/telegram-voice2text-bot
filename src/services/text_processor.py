@@ -696,7 +696,9 @@ class TextProcessor:
 
         for i, chunk in enumerate(chunks):
             logger.info(f"Processing chunk {i + 1}/{len(chunks)} ({len(chunk)} chars)")
+            logger.debug(f"[CHUNK {i + 1}/{len(chunks)}] input:\n{chunk}")
             result = await self._refine_with_custom_prompt(chunk, prompt)
+            logger.debug(f"[CHUNK {i + 1}/{len(chunks)}] output:\n{result.text}")
             processed_chunks.append(result.text)
             if result.truncated:
                 any_truncated = True
