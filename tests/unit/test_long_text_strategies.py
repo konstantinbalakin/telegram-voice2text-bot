@@ -94,6 +94,30 @@ class TestLongTextStrategy:
         assert "Chunk 1 processed." in result
 
     @pytest.mark.asyncio
+    async def test_chunking_prompt_contains_chunk_not_full_text(
+        self, text_processor, mock_llm_service
+    ):
+        """Test: when chunking, the system prompt contains chunk text, not full text."""
+        text_processor.long_text_strategy = "chunking"
+        text_processor.chunk_max_chars = 8000
+
+        long_text = "Первое предложение. " * 1000 + "Второе предложение. " * 1000
+
+        prompts_received: list[str] = []
+
+        async def mock_refine(text: str, prompt: str) -> LLMResult:
+            prompts_received.append(prompt)
+            return LLMResult(text=text)
+
+        mock_llm_service.provider.refine_text = mock_refine
+
+        await text_processor.create_structured(long_text, emoji_level=0)
+
+        # Each prompt should NOT contain the full original text
+        for prompt in prompts_received:
+            assert long_text not in prompt, "Chunk prompt should not contain full original text"
+
+    @pytest.mark.asyncio
     async def test_reasoner_strategy_for_long_text(self, text_processor, mock_llm_service):
         """Test: reasoner strategy switches to deepseek-reasoner for long texts."""
         text_processor.long_text_strategy = "reasoner"

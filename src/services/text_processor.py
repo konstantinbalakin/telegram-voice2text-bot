@@ -695,9 +695,12 @@ class TextProcessor:
         any_truncated = False
 
         for i, chunk in enumerate(chunks):
+            # Replace the full text in the prompt with just this chunk,
+            # so DeepSeek sees only the chunk in the system prompt too
+            chunk_prompt = prompt.replace(text, chunk)
             logger.info(f"Processing chunk {i + 1}/{len(chunks)} ({len(chunk)} chars)")
             logger.debug(f"[CHUNK {i + 1}/{len(chunks)}] input:\n{chunk}")
-            result = await self._refine_with_custom_prompt(chunk, prompt)
+            result = await self._refine_with_custom_prompt(chunk, chunk_prompt)
             logger.debug(f"[CHUNK {i + 1}/{len(chunks)}] output:\n{result.text}")
             processed_chunks.append(result.text)
             if result.truncated:
