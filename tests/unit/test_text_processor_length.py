@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from src.services.text_processor import TextProcessor
-from src.services.llm_service import LLMService, LLMError
+from src.services.llm_service import LLMResult, LLMService, LLMError
 
 
 @pytest.fixture
@@ -30,7 +30,9 @@ class TestAdjustLength:
         original_text = "This is a longer text that needs to be shortened."
         expected_shortened = "This is shorter text."
 
-        mock_llm_service.provider.refine_text = AsyncMock(return_value=expected_shortened)
+        mock_llm_service.provider.refine_text = AsyncMock(
+            return_value=LLMResult(text=expected_shortened)
+        )
 
         result = await text_processor.adjust_length(
             current_text=original_text,
@@ -48,7 +50,9 @@ class TestAdjustLength:
         original_text = "Short text."
         expected_longer = "This is a much longer and more detailed text."
 
-        mock_llm_service.provider.refine_text = AsyncMock(return_value=expected_longer)
+        mock_llm_service.provider.refine_text = AsyncMock(
+            return_value=LLMResult(text=expected_longer)
+        )
 
         result = await text_processor.adjust_length(
             current_text=original_text,
@@ -97,7 +101,9 @@ class TestMakeShorter:
         original_text = "Long text to shorten"
         expected_shortened = "Short text"
 
-        mock_llm_service.provider.refine_text = AsyncMock(return_value=expected_shortened)
+        mock_llm_service.provider.refine_text = AsyncMock(
+            return_value=LLMResult(text=expected_shortened)
+        )
 
         result = await text_processor.make_shorter(
             current_text=original_text, current_level="default", mode="structured"
@@ -116,7 +122,9 @@ class TestMakeLonger:
         original_text = "Short text"
         expected_longer = "Much longer and more detailed text"
 
-        mock_llm_service.provider.refine_text = AsyncMock(return_value=expected_longer)
+        mock_llm_service.provider.refine_text = AsyncMock(
+            return_value=LLMResult(text=expected_longer)
+        )
 
         result = await text_processor.make_longer(
             current_text=original_text, current_level="default", mode="structured"
@@ -146,7 +154,7 @@ class TestLengthLevels:
         original_text = "Test text for level transitions"
         result_text = f"Adjusted text from {level} going {direction}"
 
-        mock_llm_service.provider.refine_text = AsyncMock(return_value=result_text)
+        mock_llm_service.provider.refine_text = AsyncMock(return_value=LLMResult(text=result_text))
 
         result = await text_processor.adjust_length(
             current_text=original_text,
@@ -172,7 +180,9 @@ class TestModeSupport:
         original_text = "Text in mode"
         adjusted_text = f"Adjusted text for {mode} mode"
 
-        mock_llm_service.provider.refine_text = AsyncMock(return_value=adjusted_text)
+        mock_llm_service.provider.refine_text = AsyncMock(
+            return_value=LLMResult(text=adjusted_text)
+        )
 
         result = await text_processor.adjust_length(
             current_text=original_text,
@@ -198,7 +208,9 @@ class TestPromptLoading:
         original_text = "Text to adjust"
         adjusted_text = "Adjusted text"
 
-        mock_llm_service.provider.refine_text = AsyncMock(return_value=adjusted_text)
+        mock_llm_service.provider.refine_text = AsyncMock(
+            return_value=LLMResult(text=adjusted_text)
+        )
 
         result = await text_processor.adjust_length(
             current_text=original_text,

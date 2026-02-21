@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.services.text_processor import TextProcessor
-from src.services.llm_service import LLMService
+from src.services.llm_service import LLMResult, LLMService
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ class TestCreateMagicFallbackPrompt:
         self, text_processor: TextProcessor, mock_llm_service: MagicMock
     ) -> None:
         """When prompt file fails to load, fallback must use Markdown instructions."""
-        mock_llm_service.provider.refine_text = AsyncMock(return_value="result")
+        mock_llm_service.provider.refine_text = AsyncMock(return_value=LLMResult(text="result"))
 
         with patch(
             "src.services.text_processor.load_prompt", side_effect=FileNotFoundError("not found")

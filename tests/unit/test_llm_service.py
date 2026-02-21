@@ -7,6 +7,7 @@ import httpx
 from src.services.llm_service import (
     DeepSeekProvider,
     LLMFactory,
+    LLMResult,
     LLMService,
     LLMTimeoutError,
     LLMAPIError,
@@ -40,10 +41,14 @@ class TestDeepSeekProvider:
     async def test_refine_empty_text(self, deepseek_provider):
         """Test refinement with empty text returns unchanged."""
         result = await deepseek_provider.refine_text("", "test prompt")
-        assert result == ""
+        assert isinstance(result, LLMResult)
+        assert result.text == ""
+        assert result.truncated is False
 
         result = await deepseek_provider.refine_text("   ", "test prompt")
-        assert result == "   "
+        assert isinstance(result, LLMResult)
+        assert result.text == "   "
+        assert result.truncated is False
 
     @pytest.mark.asyncio
     async def test_refine_text_success(self, deepseek_provider):
@@ -51,7 +56,12 @@ class TestDeepSeekProvider:
         mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "choices": [{"message": {"content": "Refined text here."}}],
+            "choices": [
+                {
+                    "message": {"content": "Refined text here."},
+                    "finish_reason": "stop",
+                }
+            ],
             "usage": {
                 "prompt_tokens": 10,
                 "completion_tokens": 5,
@@ -64,7 +74,9 @@ class TestDeepSeekProvider:
 
             result = await deepseek_provider.refine_text("draft text here", "Improve this text")
 
-            assert result == "Refined text here."
+            assert isinstance(result, LLMResult)
+            assert result.text == "Refined text here."
+            assert result.truncated is False
             mock_post.assert_called_once()
 
             # Verify API request structure
@@ -166,7 +178,7 @@ class TestLLMFactory:
         settings.llm_model = "deepseek-chat"
         settings.llm_base_url = "https://api.deepseek.com"
         settings.llm_timeout = 30
-        settings.llm_max_tokens = 4000
+        settings.llm_max_tokens = 8192
 
         provider = LLMFactory.create_provider(settings)
 
@@ -200,7 +212,7 @@ class TestLLMService:
     async def test_refine_success(self):
         """Test successful refinement."""
         mock_provider = AsyncMock()
-        mock_provider.refine_text.return_value = "refined text"
+        mock_provider.refine_text.return_value = LLMResult(text="refined text")
 
         service = LLMService(provider=mock_provider, prompt="test prompt")
 
@@ -255,3 +267,92 @@ class TestLLMService:
         """Test service cleanup without provider."""
         service = LLMService(provider=None, prompt="test prompt")
         await service.close()  # Should not raise
+
+
+class TestFinishReasonHandling:
+    """Tests for finish_reason detection in DeepSeekProvider."""
+
+    @pytest.fixture
+    def provider(self):
+        """Create DeepSeekProvider instance."""
+        return DeepSeekProvider(
+            api_key="test-api-key",
+            model="deepseek-chat",
+            base_url="https://api.deepseek.com",
+            timeout=30,
+            max_tokens=8192,
+        )
+
+    @pytest.mark.asyncio
+    async def test_finish_reason_stop_returns_result_not_truncated(self, provider):
+        """Test: finish_reason='stop' returns LLMResult with truncated=False."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [
+                {
+                    "message": {"content": "Complete text."},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "total_tokens": 150,
+            },
+        }
+
+        with patch.object(provider.client, "post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await provider.refine_text("some text", "prompt")
+
+        assert isinstance(result, LLMResult)
+        assert result.text == "Complete text."
+        assert result.truncated is False
+
+    @pytest.mark.asyncio
+    async def test_finish_reason_length_returns_result_truncated(self, provider):
+        """Test: finish_reason='length' returns LLMResult with truncated=True and logs warning."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [
+                {
+                    "message": {"content": "Truncated text..."},
+                    "finish_reason": "length",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 16000,
+                "completion_tokens": 8192,
+                "total_tokens": 24192,
+            },
+        }
+
+        with patch.object(provider.client, "post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            with patch("src.services.llm_service.logger") as mock_logger:
+                result = await provider.refine_text("long text " * 5000, "prompt")
+
+        assert isinstance(result, LLMResult)
+        assert result.text == "Truncated text..."
+        assert result.truncated is True
+        mock_logger.warning.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_finish_reason_missing_treated_as_stop(self, provider):
+        """Test: missing finish_reason treated as not truncated (backward compat)."""
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": "Result."}}],
+            "usage": {"total_tokens": 50},
+        }
+
+        with patch.object(provider.client, "post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await provider.refine_text("some text", "prompt")
+
+        assert isinstance(result, LLMResult)
+        assert result.text == "Result."
+        assert result.truncated is False

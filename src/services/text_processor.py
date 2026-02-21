@@ -2,7 +2,7 @@
 
 import logging
 
-from src.services.llm_service import LLMService, LLMError
+from src.services.llm_service import LLMResult, LLMService, LLMError
 from src.services.prompt_loader import load_prompt
 from src.utils.markdown_utils import sanitize_markdown
 
@@ -95,7 +95,11 @@ class TextProcessor:
 
         try:
             # Use custom prompt for structuring
-            structured_text = await self._refine_with_custom_prompt(original_text, prompt)
+            result = await self._refine_with_custom_prompt(original_text, prompt)
+            structured_text = result.text
+
+            if result.truncated:
+                structured_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
 
             # Sanitize to remove any HTML tags LLM may have inserted
             structured_text = sanitize_markdown(structured_text)
@@ -187,7 +191,8 @@ class TextProcessor:
         )
 
         try:
-            adjusted_text = await self._refine_with_custom_prompt(current_text, prompt)
+            result = await self._refine_with_custom_prompt(current_text, prompt)
+            adjusted_text = result.text
 
             # Sanitize markdown formatting
             adjusted_text = sanitize_markdown(adjusted_text)
@@ -291,7 +296,8 @@ class TextProcessor:
 
         try:
             # Use custom prompt for summarization
-            summary_text = await self._refine_with_custom_prompt(original_text, prompt)
+            result = await self._refine_with_custom_prompt(original_text, prompt)
+            summary_text = result.text
 
             # Sanitize markdown formatting
             summary_text = sanitize_markdown(summary_text)
@@ -380,7 +386,11 @@ class TextProcessor:
 
         try:
             # Use custom prompt for magic transformation
-            magic_text = await self._refine_with_custom_prompt(original_text, prompt)
+            result = await self._refine_with_custom_prompt(original_text, prompt)
+            magic_text = result.text
+
+            if result.truncated:
+                magic_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
 
             # Sanitize markdown formatting
             magic_text = sanitize_markdown(magic_text)
@@ -436,8 +446,8 @@ class TextProcessor:
 
             try:
                 result = await self._refine_with_custom_prompt(text, prompt)
-                logger.info(f"Emojis removed: {len(text)} → {len(result)} chars")
-                return result
+                logger.info(f"Emojis removed: {len(text)} → {len(result.text)} chars")
+                return result.text
             except Exception as e:
                 logger.error(f"Failed to remove emojis: {e}")
                 raise LLMError(f"Failed to remove emojis: {e}") from e
@@ -478,7 +488,8 @@ class TextProcessor:
         )
 
         try:
-            text_with_emojis = await self._refine_with_custom_prompt(text, prompt)
+            result = await self._refine_with_custom_prompt(text, prompt)
+            text_with_emojis = result.text
 
             # Sanitize markdown formatting
             text_with_emojis = sanitize_markdown(text_with_emojis)
@@ -566,7 +577,7 @@ class TextProcessor:
         first_timestamp = self._format_time(segments[0].start_time)
         return f"[{first_timestamp}] {summary_text}"
 
-    async def _refine_with_custom_prompt(self, text: str, prompt: str) -> str:
+    async def _refine_with_custom_prompt(self, text: str, prompt: str) -> LLMResult:
         """
         Refine text with a custom prompt.
 
@@ -575,15 +586,14 @@ class TextProcessor:
             prompt: Custom system prompt
 
         Returns:
-            Refined text
+            LLMResult with refined text and truncation info
 
         Raises:
             LLMError: If refinement fails
         """
         if not self.llm_service.provider:
             logger.debug("LLM provider not available, returning original text")
-            return text
+            return LLMResult(text=text)
 
         # Use the provider directly for custom prompts
-        refined = await self.llm_service.provider.refine_text(text, prompt)
-        return refined
+        return await self.llm_service.provider.refine_text(text, prompt)

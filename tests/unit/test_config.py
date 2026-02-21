@@ -147,7 +147,7 @@ class TestSettingsDefaults:
         assert Settings().llm_timeout == 30
 
     def test_default_llm_max_tokens(self):
-        assert Settings().llm_max_tokens == 4000
+        assert Settings().llm_max_tokens == 8192
 
     def test_default_llm_debug_mode(self):
         assert Settings().llm_debug_mode is False
