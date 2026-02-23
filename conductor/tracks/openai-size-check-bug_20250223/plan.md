@@ -21,7 +21,7 @@ Understand current behavior and create failing test.
 
 ### Verification
 
-- [ ] Test reproduces the bug: ValueError before chunking
+- [x] Test reproduces the bug: ValueError before chunking
 
 ## Phase 2: Fix Implementation
 
