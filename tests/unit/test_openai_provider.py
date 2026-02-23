@@ -105,6 +105,41 @@ class TestOpenAIProviderTranscribe:
         assert result.model_name == "whisper-1"
         assert result.processing_time > 0
 
+    @pytest.mark.asyncio
+    async def test_transcribe_large_file_triggers_chunking(self, initialized_provider, tmp_path):
+        """Test large file (>25MB) with chunking enabled triggers chunking instead of ValueError."""
+        from unittest.mock import MagicMock, patch
+
+        test_file = tmp_path / "large.mp3"
+
+        file_size_30mb = 30 * 1024 * 1024
+        test_file.write_bytes(b"x" * file_size_30mb)
+
+        context = TranscriptionContext(
+            user_id=123, duration_seconds=500.0, file_size_bytes=file_size_30mb
+        )
+
+        mock_chunk_paths = [tmp_path / "chunk_0.mp3"]
+        mock_chunk_paths[0].write_bytes(b"fake chunk data")
+
+        with patch.object(
+            initialized_provider,
+            "_handle_long_audio",
+            new_callable=AsyncMock,
+            return_value=MagicMock(
+                text="transcribed text",
+                language="en",
+                processing_time=10.0,
+                audio_duration=500.0,
+                provider_used="openai",
+                model_name="gpt-4o-transcribe (chunked)",
+            ),
+        ):
+            result = await initialized_provider.transcribe(test_file, context)
+
+        assert result.text == "transcribed text"
+        assert result.provider_used == "openai"
+
 
 class TestOpenAIProviderShutdown:
     """Tests for provider shutdown."""
