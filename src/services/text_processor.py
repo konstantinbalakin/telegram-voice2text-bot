@@ -1,5 +1,6 @@
 """Text processing service for interactive transcription modes."""
 
+import asyncio
 import logging
 
 from src.services.llm_service import DeepSeekProvider, LLMResult, LLMService, LLMError
@@ -19,6 +20,8 @@ class TextProcessor:
         llm_service: LLMService,
         long_text_strategy: str = "reasoner",
         chunk_max_chars: int = 8000,
+        parallel_chunks: bool = True,
+        max_parallel_chunks: int = 3,
     ):
         """
         Initialize text processor.
@@ -27,10 +30,14 @@ class TextProcessor:
             llm_service: LLM service for text processing
             long_text_strategy: Strategy for long texts (reasoner, chunking)
             chunk_max_chars: Max chars per chunk for chunking strategy
+            parallel_chunks: Process LLM chunks in parallel
+            max_parallel_chunks: Max concurrent LLM chunk requests
         """
         self.llm_service = llm_service
         self.long_text_strategy = long_text_strategy
         self.chunk_max_chars = chunk_max_chars
+        self.parallel_chunks = parallel_chunks
+        self.max_parallel_chunks = max_parallel_chunks
 
     async def create_structured(
         self, original_text: str, length_level: str = "default", emoji_level: int = 0
@@ -396,12 +403,9 @@ class TextProcessor:
         logger.info(f"Creating magic text ({len(original_text)} chars)...")
 
         try:
-            # Use strategy-aware processing for magic transformation
-            result = await self._process_with_strategy(original_text, prompt, prompt)
+            # Process full text without chunking — magic mode needs full context
+            result = await self._refine_with_custom_prompt(original_text, prompt)
             magic_text = result.text
-
-            if result.truncated:
-                magic_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
 
             # Sanitize markdown formatting
             magic_text = sanitize_markdown(magic_text)
@@ -615,13 +619,18 @@ class TextProcessor:
             return False
 
         model = getattr(self.llm_service.provider, "model", "")
-        max_tokens = getattr(self.llm_service.provider, "max_tokens", 8192)
+        # Use output_capacity (chunking threshold) instead of max_tokens (API limit)
+        raw_capacity = getattr(self.llm_service.provider, "output_capacity", None)
+        output_capacity: int = raw_capacity if isinstance(raw_capacity, int) else 0
+        if not output_capacity:
+            raw_max = getattr(self.llm_service.provider, "max_tokens", 8192)
+            output_capacity = raw_max if isinstance(raw_max, int) else 8192
 
         # Reasoner model has 64K output — no strategy needed
         if model == "deepseek-reasoner":
             return False
 
-        return will_exceed_output_limit(text, max_output_tokens=max_tokens)
+        return will_exceed_output_limit(text, max_output_tokens=output_capacity)
 
     async def _process_with_strategy(
         self, text: str, prompt_template: str, prompt: str
@@ -691,13 +700,20 @@ class TextProcessor:
 
         chunks = split_text_into_chunks(text, max_chars=self.chunk_max_chars)
 
+        if self.parallel_chunks and len(chunks) > 1:
+            return await self._process_chunks_parallel(chunks, text, prompt)
+        else:
+            return await self._process_chunks_sequential(chunks, text, prompt)
+
+    async def _process_chunks_sequential(
+        self, chunks: list[str], original_text: str, prompt: str
+    ) -> LLMResult:
+        """Process text chunks sequentially."""
         processed_chunks: list[str] = []
         any_truncated = False
 
         for i, chunk in enumerate(chunks):
-            # Replace the full text in the prompt with just this chunk,
-            # so DeepSeek sees only the chunk in the system prompt too
-            chunk_prompt = prompt.replace(text, chunk)
+            chunk_prompt = prompt.replace(original_text, chunk)
             logger.info(f"Processing chunk {i + 1}/{len(chunks)} ({len(chunk)} chars)")
             logger.debug(f"[CHUNK {i + 1}/{len(chunks)}] input:\n{chunk}")
             result = await self._refine_with_custom_prompt(chunk, chunk_prompt)
@@ -707,4 +723,60 @@ class TextProcessor:
                 any_truncated = True
 
         merged = merge_processed_chunks(processed_chunks)
+        return LLMResult(text=merged, truncated=any_truncated)
+
+    async def _process_chunks_parallel(
+        self, chunks: list[str], original_text: str, prompt: str
+    ) -> LLMResult:
+        """Process text chunks in parallel using semaphore for rate limiting."""
+        logger.info(
+            f"Starting parallel LLM processing of {len(chunks)} chunks, "
+            f"max_parallel={self.max_parallel_chunks}"
+        )
+
+        semaphore = asyncio.Semaphore(self.max_parallel_chunks)
+
+        async def process_one_chunk(chunk: str, chunk_index: int) -> tuple[int, str, bool]:
+            """Process one chunk with semaphore limiting."""
+            async with semaphore:
+                try:
+                    chunk_prompt = prompt.replace(original_text, chunk)
+                    logger.info(
+                        f"Processing chunk {chunk_index + 1}/{len(chunks)} " f"({len(chunk)} chars)"
+                    )
+                    logger.debug(f"[CHUNK {chunk_index + 1}/{len(chunks)}] input:\n{chunk}")
+                    result = await self._refine_with_custom_prompt(chunk, chunk_prompt)
+                    logger.debug(f"[CHUNK {chunk_index + 1}/{len(chunks)}] output:\n{result.text}")
+                    return (chunk_index, result.text, result.truncated)
+                except Exception as e:
+                    logger.error(f"Chunk {chunk_index + 1} failed: {e}")
+                    # Retry once
+                    try:
+                        logger.warning(f"Retrying chunk {chunk_index + 1}")
+                        chunk_prompt = prompt.replace(original_text, chunk)
+                        result = await self._refine_with_custom_prompt(chunk, chunk_prompt)
+                        logger.info(
+                            f"Chunk {chunk_index + 1} retry succeeded: " f"{len(result.text)} chars"
+                        )
+                        return (chunk_index, result.text, result.truncated)
+                    except Exception as retry_error:
+                        logger.error(f"Chunk {chunk_index + 1} retry failed: {retry_error}")
+                        raise RuntimeError(
+                            f"LLM chunk {chunk_index + 1} failed after retry: " f"{retry_error}"
+                        ) from retry_error
+
+        tasks = [process_one_chunk(chunk, i) for i, chunk in enumerate(chunks)]
+        results = await asyncio.gather(*tasks)
+
+        # Sort by index to preserve original order
+        results_sorted = sorted(results, key=lambda x: x[0])
+
+        processed_chunks = [text for _, text, _ in results_sorted]
+        any_truncated = any(truncated for _, _, truncated in results_sorted)
+
+        merged = merge_processed_chunks(processed_chunks)
+        logger.info(
+            f"Parallel LLM processing complete: {len(merged)} chars total "
+            f"from {len(chunks)} chunks"
+        )
         return LLMResult(text=merged, truncated=any_truncated)

@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     # Telegram Bot API
     telegram_bot_token: str = Field(..., description="Telegram Bot API token")
     bot_mode: str = Field(default="polling", description="Bot mode: polling or webhook")
+    telegram_timeout: int = Field(
+        default=30, description="Telegram API timeout in seconds (read, write, connect)"
+    )
 
     # Telegram Client API (MTProto) - for large files >20 MB
     telegram_api_id: int | None = Field(
@@ -88,7 +91,7 @@ class Settings(BaseSettings):
 
     # OpenAI Long Audio Handling
     openai_gpt4o_max_duration: int = Field(
-        default=1400,
+        default=420,
         description="Maximum audio duration in seconds for gpt-4o models before chunking/switching",
     )
     openai_change_model: bool = Field(
@@ -190,12 +193,27 @@ class Settings(BaseSettings):
     llm_max_tokens_reasoner: int = Field(
         default=64000, description="LLM max tokens for deepseek-reasoner model"
     )
+    llm_chunking_threshold: int | None = Field(
+        default=None,
+        description="Token threshold for triggering chunking strategy. "
+        "Defaults to llm_max_tokens if not set.",
+    )
     llm_long_text_strategy: str = Field(
         default="reasoner",
         description="Strategy for long texts exceeding output limit: reasoner, chunking",
     )
     llm_chunk_max_chars: int = Field(
         default=8000, description="Max chars per chunk for chunking strategy"
+    )
+    llm_parallel_chunks: bool = Field(
+        default=True,
+        description="Process LLM text chunks in parallel for faster processing",
+    )
+    llm_max_parallel_chunks: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of LLM chunks to process simultaneously",
     )
     llm_debug_mode: bool = Field(
         default=False,

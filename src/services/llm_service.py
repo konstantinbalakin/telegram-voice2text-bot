@@ -80,6 +80,7 @@ class DeepSeekProvider(LLMProvider):
         base_url: str = "https://api.deepseek.com",
         timeout: int = 30,
         max_tokens: int = 4000,
+        output_capacity: int | None = None,
     ):
         """
         Initialize DeepSeek provider.
@@ -89,13 +90,16 @@ class DeepSeekProvider(LLMProvider):
             model: Model name (e.g., deepseek-chat)
             base_url: API base URL
             timeout: Request timeout in seconds
-            max_tokens: Maximum tokens for response
+            max_tokens: Maximum tokens for response (API limit per request)
+            output_capacity: Token threshold for chunking decisions.
+                Defaults to max_tokens if not set.
         """
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.max_tokens = max_tokens
+        self.output_capacity = output_capacity or max_tokens
 
         event_hooks: dict = {}
         if logger.isEnabledFor(logging.DEBUG):
@@ -263,8 +267,12 @@ class LLMFactory:
             else:
                 max_tokens = settings.llm_max_tokens
 
+            # Chunking threshold: separate from API max_tokens
+            output_capacity = settings.llm_chunking_threshold or max_tokens
+
             logger.info(
-                f"Creating DeepSeek provider: model={settings.llm_model}, max_tokens={max_tokens}"
+                f"Creating DeepSeek provider: model={settings.llm_model}, "
+                f"max_tokens={max_tokens}, output_capacity={output_capacity}"
             )
             return DeepSeekProvider(
                 api_key=settings.llm_api_key,
@@ -272,6 +280,7 @@ class LLMFactory:
                 base_url=settings.llm_base_url,
                 timeout=settings.llm_timeout,
                 max_tokens=max_tokens,
+                output_capacity=output_capacity,
             )
 
         # Future providers: openai, gigachat

@@ -269,45 +269,8 @@ class OpenAIProvider(TranscriptionProvider):
             f"ChangeModel={settings.openai_change_model}"
         )
 
-        if settings.openai_chunking:
-            # Determine target model for chunks
-            target_model = "whisper-1" if settings.openai_change_model else self.model
-
-            logger.info(f"Splitting audio into chunks and transcribing with {target_model}")
-
-            start_time = time.time()
-
-            # Split into chunks
-            chunk_paths = await self._split_audio_into_chunks(audio_path, context)
-
-            try:
-                # Transcribe chunks
-                if settings.openai_parallel_chunks:
-                    text = await self._transcribe_chunks_parallel(
-                        chunk_paths, context, target_model
-                    )
-                else:
-                    text = await self._transcribe_chunks_sequential(
-                        chunk_paths, context, target_model
-                    )
-
-                processing_time = time.time() - start_time
-
-                return TranscriptionResult(
-                    text=text,
-                    language=context.language or "unknown",
-                    processing_time=processing_time,
-                    audio_duration=context.duration_seconds,
-                    provider_used="openai",
-                    model_name=f"{target_model} (chunked)",
-                )
-
-            finally:
-                # Cleanup chunk files
-                self._cleanup_chunks(chunk_paths)
-
-        elif settings.openai_change_model:
-            # Switch model to whisper-1 for entire file
+        if settings.openai_change_model:
+            # Switch model to whisper-1 for entire file (no chunking needed)
             logger.info(f"Switching model from {self.model} to whisper-1")
 
             original_model = self.model
@@ -319,6 +282,39 @@ class OpenAIProvider(TranscriptionProvider):
                 return result
             finally:
                 self.model = original_model
+
+        elif settings.openai_chunking:
+            # Chunking with current model (no model switch)
+            logger.info(f"Splitting audio into chunks and transcribing with {self.model}")
+
+            start_time = time.time()
+
+            # Split into chunks
+            chunk_paths = await self._split_audio_into_chunks(audio_path, context)
+
+            try:
+                # Transcribe chunks
+                if settings.openai_parallel_chunks:
+                    text = await self._transcribe_chunks_parallel(chunk_paths, context, self.model)
+                else:
+                    text = await self._transcribe_chunks_sequential(
+                        chunk_paths, context, self.model
+                    )
+
+                processing_time = time.time() - start_time
+
+                return TranscriptionResult(
+                    text=text,
+                    language=context.language or "unknown",
+                    processing_time=processing_time,
+                    audio_duration=context.duration_seconds,
+                    provider_used="openai",
+                    model_name=f"{self.model} (chunked)",
+                )
+
+            finally:
+                # Cleanup chunk files
+                self._cleanup_chunks(chunk_paths)
 
         else:
             raise ValueError(
@@ -516,6 +512,9 @@ class OpenAIProvider(TranscriptionProvider):
                         result = await self._transcribe_single_file(
                             chunk_path, chunk_context, model
                         )
+                        logger.info(
+                            f"Chunk {chunk_index + 1} retry succeeded: {len(result.text)} chars"
+                        )
                         return (chunk_index, result.text)
                     except Exception as retry_error:
                         logger.error(f"Chunk {chunk_index + 1} retry failed: {retry_error}")
@@ -597,6 +596,7 @@ class OpenAIProvider(TranscriptionProvider):
                 try:
                     logger.warning(f"Retrying chunk {i + 1} without context")
                     result = await self._transcribe_single_file(chunk_path, chunk_context, model)
+                    logger.info(f"Chunk {i + 1} retry succeeded: {len(result.text)} chars")
                     transcriptions.append(result.text)
                 except Exception as retry_error:
                     logger.error(f"Chunk {i + 1} retry failed: {retry_error}")

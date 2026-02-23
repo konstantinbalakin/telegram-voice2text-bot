@@ -149,6 +149,9 @@ class TestSettingsDefaults:
     def test_default_llm_max_tokens(self):
         assert Settings().llm_max_tokens == 8192
 
+    def test_default_llm_chunking_threshold(self):
+        assert Settings().llm_chunking_threshold is None
+
     def test_default_llm_debug_mode(self):
         assert Settings().llm_debug_mode is False
 
@@ -194,7 +197,7 @@ class TestSettingsDefaults:
 
     # --- OpenAI Long Audio ---
     def test_default_openai_gpt4o_max_duration(self):
-        assert Settings().openai_gpt4o_max_duration == 1400
+        assert Settings().openai_gpt4o_max_duration == 420
 
     def test_default_openai_change_model(self):
         assert Settings().openai_change_model is True
@@ -349,6 +352,16 @@ class TestSettingsFieldConstraints:
 
     def test_openai_max_parallel_chunks_max(self, monkeypatch):
         monkeypatch.setenv("OPENAI_MAX_PARALLEL_CHUNKS", "20")
+        with pytest.raises(Exception):
+            Settings()
+
+    def test_llm_max_parallel_chunks_min(self, monkeypatch):
+        monkeypatch.setenv("LLM_MAX_PARALLEL_CHUNKS", "0")
+        with pytest.raises(Exception):
+            Settings()
+
+    def test_llm_max_parallel_chunks_max(self, monkeypatch):
+        monkeypatch.setenv("LLM_MAX_PARALLEL_CHUNKS", "20")
         with pytest.raises(Exception):
             Settings()
 

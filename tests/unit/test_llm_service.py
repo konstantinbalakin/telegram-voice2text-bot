@@ -179,6 +179,7 @@ class TestLLMFactory:
         settings.llm_base_url = "https://api.deepseek.com"
         settings.llm_timeout = 30
         settings.llm_max_tokens = 8192
+        settings.llm_chunking_threshold = None
 
         provider = LLMFactory.create_provider(settings)
 
@@ -390,6 +391,7 @@ class TestModelConfiguration:
         settings.llm_timeout = 30
         settings.llm_max_tokens = 8192
         settings.llm_max_tokens_reasoner = 64000
+        settings.llm_chunking_threshold = None
 
         provider = LLMFactory.create_provider(settings)
 
@@ -408,6 +410,7 @@ class TestModelConfiguration:
         settings.llm_timeout = 30
         settings.llm_max_tokens = 8192
         settings.llm_max_tokens_reasoner = 64000
+        settings.llm_chunking_threshold = None
 
         provider = LLMFactory.create_provider(settings)
 
