@@ -1678,8 +1678,8 @@ class TestUpdateTranscriptionDisplay:
         long_text = "x" * 5000  # exceeds file_threshold_chars (4096)
 
         mock_file = MagicMock()
-        mock_file.name = "test.pdf"
-        mock_file_obj.return_value = (mock_file, "PDF")
+        mock_file.name = "test.txt"
+        mock_file_obj.return_value = (mock_file, "TXT")
 
         context = MagicMock()
         new_msg = MagicMock()

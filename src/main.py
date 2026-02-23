@@ -161,7 +161,13 @@ async def main() -> None:
     # Create text processor for interactive modes and StructureStrategy
     text_processor = None
     if llm_service:
-        text_processor = TextProcessor(llm_service)
+        text_processor = TextProcessor(
+            llm_service,
+            long_text_strategy=settings.llm_long_text_strategy,
+            chunk_max_chars=settings.llm_chunk_max_chars,
+            parallel_chunks=settings.llm_parallel_chunks,
+            max_parallel_chunks=settings.llm_max_parallel_chunks,
+        )
         logger.info("TextProcessor created for interactive modes")
     else:
         logger.warning(
@@ -187,7 +193,14 @@ async def main() -> None:
     )
 
     # Build telegram bot application
-    application = Application.builder().token(settings.telegram_bot_token).build()
+    application = (
+        Application.builder()
+        .token(settings.telegram_bot_token)
+        .read_timeout(settings.telegram_timeout)
+        .write_timeout(settings.telegram_timeout)
+        .connect_timeout(settings.telegram_timeout)
+        .build()
+    )
 
     # Debug: Log all incoming updates
     async def debug_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -228,6 +228,7 @@ class TranscriptionOrchestrator:
         keyboard: Optional[InlineKeyboardMarkup],
         usage_id: int,
         prefix: str = "",
+        active_mode: str = "original",
     ) -> tuple[Message, Optional[Message]]:
         """Send transcription result as text message or file based on length.
 
@@ -237,6 +238,7 @@ class TranscriptionOrchestrator:
             keyboard: Inline keyboard markup (optional)
             usage_id: Usage record ID
             prefix: Optional prefix for short messages
+            active_mode: Active mode for filename (e.g. "original", "structured")
 
         Returns:
             (main_message, file_message)
@@ -267,7 +269,9 @@ class TranscriptionOrchestrator:
                 "📝 Транскрипция готова! Файл ниже ↓", reply_markup=keyboard
             )
 
-            file_obj, file_extension = create_file_object(cleaned_text, f"{file_number}_original")
+            file_obj, file_extension = create_file_object(
+                cleaned_text, f"{file_number}_{active_mode}"
+            )
 
             file_msg = await request.user_message.reply_document(
                 document=file_obj,
@@ -330,7 +334,7 @@ class TranscriptionOrchestrator:
             )
             request.draft_messages.append(info_msg)
 
-            file_obj, file_extension = create_file_object(draft_text, f"{file_number}_draft")
+            file_obj, file_extension = create_file_object(draft_text, f"{file_number}_original")
 
             file_msg = await request.user_message.reply_document(
                 document=file_obj,
@@ -627,6 +631,7 @@ class TranscriptionOrchestrator:
             keyboard=keyboard,
             usage_id=request.usage_id,
             prefix="",
+            active_mode=active_mode,
         )
 
         if keyboard:

@@ -1280,7 +1280,32 @@ class CallbackHandlers:
             await query.answer("Не удалось создать файл", show_alert=True)
             return
 
-        # Send file via Telegram
+        # Restore main message with keyboard first (keep mode file in place)
+        try:
+            segments = await self.segment_repo.get_by_usage_id(usage_id)
+            has_segments = len(segments) > 0
+            keyboard = create_transcription_keyboard(state, has_segments, settings)
+
+            if state.is_file_message:
+                mode_label = MODE_LABELS.get(state.active_mode, state.active_mode)
+                await query.edit_message_text(
+                    escape_markdownv2(
+                        f"📝 Транскрипция готова! Файл ниже ↓\n\nРежим: {mode_label}"
+                    ),
+                    reply_markup=keyboard,
+                    parse_mode="MarkdownV2",
+                )
+            else:
+                display_text = sanitize_markdown(variant.text_content)
+                await query.edit_message_text(
+                    escape_markdownv2(display_text),
+                    reply_markup=keyboard,
+                    parse_mode="MarkdownV2",
+                )
+        except Exception as e:
+            logger.warning(f"Failed to restore UI after download: {e}")
+
+        # Send downloaded file LAST so it appears below the mode file
         try:
             message = cast(Message, query.message)
             await context.bot.send_document(
@@ -1297,14 +1322,3 @@ class CallbackHandlers:
             return
         finally:
             file_obj.close()
-
-        # Restore original text and main keyboard
-        try:
-            segments = await self.segment_repo.get_by_usage_id(usage_id)
-            has_segments = len(segments) > 0
-            keyboard = create_transcription_keyboard(state, has_segments, settings)
-            await self.update_transcription_display(
-                query, context, state, variant.text_content, keyboard, self.state_repo
-            )
-        except Exception as e:
-            logger.warning(f"Failed to restore UI after download: {e}")

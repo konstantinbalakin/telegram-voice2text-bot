@@ -1,9 +1,12 @@
 """Text processing service for interactive transcription modes."""
 
+import asyncio
 import logging
 
-from src.services.llm_service import LLMService, LLMError
+from src.services.llm_service import DeepSeekProvider, LLMResult, LLMService, LLMError
 from src.services.prompt_loader import load_prompt
+from src.services.text_chunking import merge_processed_chunks, split_text_into_chunks
+from src.services.token_estimator import will_exceed_output_limit
 from src.utils.markdown_utils import sanitize_markdown
 
 logger = logging.getLogger(__name__)
@@ -12,14 +15,29 @@ logger = logging.getLogger(__name__)
 class TextProcessor:
     """Process transcription text using LLM for different modes."""
 
-    def __init__(self, llm_service: LLMService):
+    def __init__(
+        self,
+        llm_service: LLMService,
+        long_text_strategy: str = "reasoner",
+        chunk_max_chars: int = 8000,
+        parallel_chunks: bool = True,
+        max_parallel_chunks: int = 3,
+    ):
         """
         Initialize text processor.
 
         Args:
             llm_service: LLM service for text processing
+            long_text_strategy: Strategy for long texts (reasoner, chunking)
+            chunk_max_chars: Max chars per chunk for chunking strategy
+            parallel_chunks: Process LLM chunks in parallel
+            max_parallel_chunks: Max concurrent LLM chunk requests
         """
         self.llm_service = llm_service
+        self.long_text_strategy = long_text_strategy
+        self.chunk_max_chars = chunk_max_chars
+        self.parallel_chunks = parallel_chunks
+        self.max_parallel_chunks = max_parallel_chunks
 
     async def create_structured(
         self, original_text: str, length_level: str = "default", emoji_level: int = 0
@@ -32,7 +50,7 @@ class TextProcessor:
 
         Args:
             original_text: Raw transcription text
-            length_level: Length level (Phase 3 - not yet implemented)
+            length_level: Length level
             emoji_level: Emoji level (0=none, 1=few, 2=moderate, 3=many)
 
         Returns:
@@ -93,23 +111,18 @@ class TextProcessor:
             f"Creating structured text ({len(original_text)} chars, emoji_level={emoji_level})..."
         )
 
-        try:
-            # Use custom prompt for structuring
-            structured_text = await self._refine_with_custom_prompt(original_text, prompt)
+        # Use strategy-aware processing for structuring
+        result = await self._process_with_strategy(original_text, prompt)
+        structured_text = result.text
 
-            # Sanitize to remove any HTML tags LLM may have inserted
-            structured_text = sanitize_markdown(structured_text)
+        if result.truncated:
+            structured_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
 
-            logger.info(
-                f"Structured text created: {len(original_text)} → {len(structured_text)} chars"
-            )
-            return structured_text
+        # Sanitize to remove any HTML tags LLM may have inserted
+        structured_text = sanitize_markdown(structured_text)
 
-        except LLMError as e:
-            logger.error(f"Failed to create structured text: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return original_text
+        logger.info(f"Structured text created: {len(original_text)} → {len(structured_text)} chars")
+        return structured_text
 
     async def adjust_length(
         self,
@@ -186,23 +199,17 @@ class TextProcessor:
             f"({len(current_text)} chars)..."
         )
 
-        try:
-            adjusted_text = await self._refine_with_custom_prompt(current_text, prompt)
+        result = await self._refine_with_custom_prompt(current_text, prompt)
+        adjusted_text = result.text
 
-            # Sanitize markdown formatting
-            adjusted_text = sanitize_markdown(adjusted_text)
+        # Sanitize markdown formatting
+        adjusted_text = sanitize_markdown(adjusted_text)
 
-            logger.info(
-                f"Length adjusted: {len(current_text)} → {len(adjusted_text)} chars "
-                f"(direction={direction})"
-            )
-            return adjusted_text
-
-        except LLMError as e:
-            logger.error(f"Failed to adjust text length: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return current_text
+        logger.info(
+            f"Length adjusted: {len(current_text)} → {len(adjusted_text)} chars "
+            f"(direction={direction})"
+        )
+        return adjusted_text
 
     async def make_shorter(
         self, current_text: str, current_level: str, mode: str = "structured"
@@ -289,53 +296,48 @@ class TextProcessor:
         prompt = prompt_template.format(text=original_text)
         logger.info(f"Creating summary text ({len(original_text)} chars)...")
 
-        try:
-            # Use custom prompt for summarization
-            summary_text = await self._refine_with_custom_prompt(original_text, prompt)
+        # Use custom prompt for summarization
+        result = await self._refine_with_custom_prompt(original_text, prompt)
+        summary_text = result.text
 
-            # Sanitize markdown formatting
-            summary_text = sanitize_markdown(summary_text)
+        if result.truncated:
+            summary_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
 
-            logger.info(f"Summary created: {len(original_text)} → {len(summary_text)} chars")
+        # Sanitize markdown formatting
+        summary_text = sanitize_markdown(summary_text)
 
-            # If length level is not default, apply length adjustment
-            if length_level != "default":
-                logger.info(f"Adjusting summary to length level: {length_level}")
-                # Determine direction based on level
-                if length_level in ["short", "shorter"]:
-                    # Make shorter from default
-                    if length_level == "short":
-                        summary_text = await self.adjust_length(
-                            summary_text, "shorter", "default", mode="summary"
-                        )
-                    else:  # shorter
-                        temp = await self.adjust_length(
-                            summary_text, "shorter", "default", mode="summary"
-                        )
-                        summary_text = await self.adjust_length(
-                            temp, "shorter", "short", mode="summary"
-                        )
-                else:  # long or longer
-                    # Make longer from default
-                    if length_level == "long":
-                        summary_text = await self.adjust_length(
-                            summary_text, "longer", "default", mode="summary"
-                        )
-                    else:  # longer
-                        temp = await self.adjust_length(
-                            summary_text, "longer", "default", mode="summary"
-                        )
-                        summary_text = await self.adjust_length(
-                            temp, "longer", "long", mode="summary"
-                        )
+        logger.info(f"Summary created: {len(original_text)} → {len(summary_text)} chars")
 
-            return summary_text
+        # If length level is not default, apply length adjustment
+        if length_level != "default":
+            logger.info(f"Adjusting summary to length level: {length_level}")
+            # Determine direction based on level
+            if length_level in ["short", "shorter"]:
+                # Make shorter from default
+                if length_level == "short":
+                    summary_text = await self.adjust_length(
+                        summary_text, "shorter", "default", mode="summary"
+                    )
+                else:  # shorter
+                    temp = await self.adjust_length(
+                        summary_text, "shorter", "default", mode="summary"
+                    )
+                    summary_text = await self.adjust_length(
+                        temp, "shorter", "short", mode="summary"
+                    )
+            else:  # long or longer
+                # Make longer from default
+                if length_level == "long":
+                    summary_text = await self.adjust_length(
+                        summary_text, "longer", "default", mode="summary"
+                    )
+                else:  # longer
+                    temp = await self.adjust_length(
+                        summary_text, "longer", "default", mode="summary"
+                    )
+                    summary_text = await self.adjust_length(temp, "longer", "long", mode="summary")
 
-        except LLMError as e:
-            logger.error(f"Failed to create summary: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return original_text
+        return summary_text
 
     async def create_magic(self, original_text: str) -> str:
         """
@@ -378,21 +380,18 @@ class TextProcessor:
         prompt = prompt_template.format(text=original_text)
         logger.info(f"Creating magic text ({len(original_text)} chars)...")
 
-        try:
-            # Use custom prompt for magic transformation
-            magic_text = await self._refine_with_custom_prompt(original_text, prompt)
+        # Process full text without chunking — magic mode needs full context
+        result = await self._refine_with_custom_prompt(original_text, prompt)
+        magic_text = result.text
 
-            # Sanitize markdown formatting
-            magic_text = sanitize_markdown(magic_text)
+        if result.truncated:
+            magic_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
 
-            logger.info(f"Magic text created: {len(original_text)} → {len(magic_text)} chars")
-            return magic_text
+        # Sanitize markdown formatting
+        magic_text = sanitize_markdown(magic_text)
 
-        except LLMError as e:
-            logger.error(f"Failed to create magic text: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return original_text
+        logger.info(f"Magic text created: {len(original_text)} → {len(magic_text)} chars")
+        return magic_text
 
     async def add_emojis(self, text: str, emoji_level: int, current_level: int = 0) -> str:
         """
@@ -436,8 +435,8 @@ class TextProcessor:
 
             try:
                 result = await self._refine_with_custom_prompt(text, prompt)
-                logger.info(f"Emojis removed: {len(text)} → {len(result)} chars")
-                return result
+                logger.info(f"Emojis removed: {len(text)} → {len(result.text)} chars")
+                return result.text
             except Exception as e:
                 logger.error(f"Failed to remove emojis: {e}")
                 raise LLMError(f"Failed to remove emojis: {e}") from e
@@ -477,23 +476,17 @@ class TextProcessor:
             f"{len(text)} chars..."
         )
 
-        try:
-            text_with_emojis = await self._refine_with_custom_prompt(text, prompt)
+        result = await self._refine_with_custom_prompt(text, prompt)
+        text_with_emojis = result.text
 
-            # Sanitize markdown formatting
-            text_with_emojis = sanitize_markdown(text_with_emojis)
+        # Sanitize markdown formatting
+        text_with_emojis = sanitize_markdown(text_with_emojis)
 
-            logger.info(
-                f"Emojis adjusted: {len(text)} → {len(text_with_emojis)} chars "
-                f"(level={emoji_level})"
-            )
-            return text_with_emojis
-
-        except LLMError as e:
-            logger.error(f"Failed to add emojis: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return text
+        logger.info(
+            f"Emojis adjusted: {len(text)} → {len(text_with_emojis)} chars "
+            f"(level={emoji_level})"
+        )
+        return text_with_emojis
 
     def format_with_timestamps(self, segments: list, base_text: str, mode: str = "original") -> str:
         """
@@ -566,7 +559,7 @@ class TextProcessor:
         first_timestamp = self._format_time(segments[0].start_time)
         return f"[{first_timestamp}] {summary_text}"
 
-    async def _refine_with_custom_prompt(self, text: str, prompt: str) -> str:
+    async def _refine_with_custom_prompt(self, text: str, prompt: str) -> LLMResult:
         """
         Refine text with a custom prompt.
 
@@ -575,15 +568,184 @@ class TextProcessor:
             prompt: Custom system prompt
 
         Returns:
-            Refined text
+            LLMResult with refined text and truncation info
 
         Raises:
             LLMError: If refinement fails
         """
         if not self.llm_service.provider:
-            logger.debug("LLM provider not available, returning original text")
-            return text
+            logger.warning("LLM provider not available, returning original text")
+            return LLMResult(text=text)
 
         # Use the provider directly for custom prompts
-        refined = await self.llm_service.provider.refine_text(text, prompt)
-        return refined
+        return await self.llm_service.provider.refine_text(text, prompt)
+
+    def _needs_long_text_strategy(self, text: str) -> bool:
+        """Check if text needs a long-text strategy based on model and text size."""
+        provider = self.llm_service.provider
+        if not provider:
+            return False
+
+        if not isinstance(provider, DeepSeekProvider):
+            logger.warning(
+                f"_needs_long_text_strategy: unsupported provider type {type(provider).__name__}, "
+                "skipping long-text strategy"
+            )
+            return False
+
+        # Reasoner model has 64K output — no strategy needed
+        if provider.model == "deepseek-reasoner":
+            return False
+
+        # Use output_capacity (chunking threshold) instead of max_tokens (API limit)
+        output_capacity = provider.output_capacity
+
+        return will_exceed_output_limit(text, max_output_tokens=output_capacity)
+
+    async def _process_with_strategy(self, text: str, prompt: str) -> LLMResult:
+        """
+        Process text with long-text strategy if needed.
+
+        For texts that exceed the model's output limit:
+        - Strategy "reasoner": Create a temporary deepseek-reasoner provider
+        - Strategy "chunking": Split text into chunks, process each, merge
+
+        Args:
+            text: Text to process
+            prompt: Formatted prompt for single-call processing
+
+        Returns:
+            LLMResult with processed text
+        """
+        if not self._needs_long_text_strategy(text):
+            return await self._refine_with_custom_prompt(text, prompt)
+
+        strategy = self.long_text_strategy
+
+        if strategy == "reasoner":
+            return await self._process_with_reasoner(text, prompt)
+        elif strategy == "chunking":
+            return await self._process_with_chunking(text, prompt)
+        else:
+            raise ValueError(f"Unknown long_text_strategy: {strategy}")
+
+    async def _process_with_reasoner(self, text: str, prompt: str) -> LLMResult:
+        """Process text using a temporary deepseek-reasoner provider."""
+        provider = self.llm_service.provider
+        if not provider:
+            return LLMResult(text=text)
+
+        if not isinstance(provider, DeepSeekProvider):
+            logger.warning(
+                f"_process_with_reasoner: unsupported provider type {type(provider).__name__}, "
+                "falling back to _refine_with_custom_prompt"
+            )
+            return await self._refine_with_custom_prompt(text, prompt)
+
+        logger.info(
+            f"Switching to deepseek-reasoner for long text "
+            f"(text_length={len(text)}, strategy=reasoner)"
+        )
+
+        reasoner = DeepSeekProvider(
+            api_key=provider.api_key,
+            model="deepseek-reasoner",
+            base_url=provider.base_url,
+            timeout=provider.timeout,
+            max_tokens=64000,
+        )
+
+        try:
+            return await reasoner.refine_text(text, prompt)
+        finally:
+            await reasoner.close()
+
+    async def _process_with_chunking(self, text: str, prompt: str) -> LLMResult:
+        """Process text by splitting into chunks."""
+        logger.info(
+            f"Using chunking strategy for long text "
+            f"(text_length={len(text)}, chunk_max_chars={self.chunk_max_chars})"
+        )
+
+        chunks = split_text_into_chunks(text, max_chars=self.chunk_max_chars)
+
+        if self.parallel_chunks and len(chunks) > 1:
+            return await self._process_chunks_parallel(chunks, text, prompt)
+        else:
+            return await self._process_chunks_sequential(chunks, text, prompt)
+
+    async def _process_chunks_sequential(
+        self, chunks: list[str], original_text: str, prompt: str
+    ) -> LLMResult:
+        """Process text chunks sequentially."""
+        processed_chunks: list[str] = []
+        any_truncated = False
+
+        for i, chunk in enumerate(chunks):
+            chunk_prompt = prompt.replace(original_text, chunk)
+            logger.info(f"Processing chunk {i + 1}/{len(chunks)} ({len(chunk)} chars)")
+            logger.debug(f"[CHUNK {i + 1}/{len(chunks)}] input:\n{chunk}")
+            result = await self._refine_with_custom_prompt(chunk, chunk_prompt)
+            logger.debug(f"[CHUNK {i + 1}/{len(chunks)}] output:\n{result.text}")
+            processed_chunks.append(result.text)
+            if result.truncated:
+                any_truncated = True
+
+        merged = merge_processed_chunks(processed_chunks)
+        return LLMResult(text=merged, truncated=any_truncated)
+
+    async def _process_chunks_parallel(
+        self, chunks: list[str], original_text: str, prompt: str
+    ) -> LLMResult:
+        """Process text chunks in parallel using semaphore for rate limiting."""
+        logger.info(
+            f"Starting parallel LLM processing of {len(chunks)} chunks, "
+            f"max_parallel={self.max_parallel_chunks}"
+        )
+
+        semaphore = asyncio.Semaphore(self.max_parallel_chunks)
+
+        async def process_one_chunk(chunk: str, chunk_index: int) -> tuple[int, str, bool]:
+            """Process one chunk with semaphore limiting."""
+            async with semaphore:
+                try:
+                    chunk_prompt = prompt.replace(original_text, chunk)
+                    logger.info(
+                        f"Processing chunk {chunk_index + 1}/{len(chunks)} " f"({len(chunk)} chars)"
+                    )
+                    logger.debug(f"[CHUNK {chunk_index + 1}/{len(chunks)}] input:\n{chunk}")
+                    result = await self._refine_with_custom_prompt(chunk, chunk_prompt)
+                    logger.debug(f"[CHUNK {chunk_index + 1}/{len(chunks)}] output:\n{result.text}")
+                    return (chunk_index, result.text, result.truncated)
+                except LLMError as e:
+                    logger.error(f"Chunk {chunk_index + 1} failed: {e}")
+                    # Retry once
+                    try:
+                        logger.warning(f"Retrying chunk {chunk_index + 1}")
+                        chunk_prompt = prompt.replace(original_text, chunk)
+                        result = await self._refine_with_custom_prompt(chunk, chunk_prompt)
+                        logger.info(
+                            f"Chunk {chunk_index + 1} retry succeeded: " f"{len(result.text)} chars"
+                        )
+                        return (chunk_index, result.text, result.truncated)
+                    except LLMError as retry_error:
+                        logger.error(f"Chunk {chunk_index + 1} retry failed: {retry_error}")
+                        raise LLMError(
+                            f"LLM chunk {chunk_index + 1} failed after retry: " f"{retry_error}"
+                        ) from retry_error
+
+        tasks = [process_one_chunk(chunk, i) for i, chunk in enumerate(chunks)]
+        results = await asyncio.gather(*tasks)
+
+        # Sort by index to preserve original order
+        results_sorted = sorted(results, key=lambda x: x[0])
+
+        processed_chunks = [text for _, text, _ in results_sorted]
+        any_truncated = any(truncated for _, _, truncated in results_sorted)
+
+        merged = merge_processed_chunks(processed_chunks)
+        logger.info(
+            f"Parallel LLM processing complete: {len(merged)} chars total "
+            f"from {len(chunks)} chunks"
+        )
+        return LLMResult(text=merged, truncated=any_truncated)

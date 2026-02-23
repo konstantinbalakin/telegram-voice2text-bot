@@ -878,8 +878,8 @@ class TestSendTranscriptionResult:
         mock_usage_repo.count_by_user_id = AsyncMock(return_value=2)
 
         mock_file_obj = MagicMock()
-        mock_file_obj.name = "2_original.pdf"
-        mock_create_file.return_value = (mock_file_obj, "PDF")
+        mock_file_obj.name = "2_original.txt"
+        mock_create_file.return_value = (mock_file_obj, "TXT")
 
         with patch(
             "src.services.transcription_orchestrator.UsageRepository",
@@ -977,8 +977,8 @@ class TestSendDraftMessages:
         mock_usage_repo.count_by_user_id = AsyncMock(return_value=1)
 
         mock_file_obj = MagicMock()
-        mock_file_obj.name = "1_draft.pdf"
-        mock_create_file.return_value = (mock_file_obj, "PDF")
+        mock_file_obj.name = "1_original.txt"
+        mock_create_file.return_value = (mock_file_obj, "TXT")
 
         with patch(
             "src.services.transcription_orchestrator.UsageRepository",

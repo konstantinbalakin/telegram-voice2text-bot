@@ -192,7 +192,7 @@ ENABLE_RETRANSCRIBE=true
 FILE_THRESHOLD_CHARS=3000  # Text >3000 chars sent as file
 
 # OpenAI Long Audio Handling
-OPENAI_GPT4O_MAX_DURATION=1400
+OPENAI_GPT4O_MAX_DURATION=420
 OPENAI_CHANGE_MODEL=true  # Auto-switch to whisper-1 for long audio
 OPENAI_CHUNKING=false  # Enable manual chunking if needed
 ```
