@@ -35,11 +35,11 @@ The bot supports large audio file transcription via chunking (OPENAI_CHUNKING=tr
 
 ## Acceptance Criteria
 
-- [ ] Files > 25MB with OPENAI_CHUNKING=true trigger chunking
-- [ ] File size check is moved inside chunking logic or removed
-- [ ] Each chunk is < 25MB and transcribed successfully
-- [ ] Test added for 30MB file with chunking enabled
-- [ ] No regression for files < 25MB
+- [x] Files > 25MB with OPENAI_CHUNKING=true trigger chunking
+- [x] File size check is moved inside chunking logic or removed
+- [x] Each chunk is < 25MB and transcribed successfully
+- [x] Test added for 30MB file with chunking enabled
+- [x] No regression for files < 25MB
 
 ## Dependencies
 
