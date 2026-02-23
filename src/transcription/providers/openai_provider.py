@@ -124,12 +124,7 @@ class OpenAIProvider(TranscriptionProvider):
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-        # Check file size (OpenAI limit is 25 MB)
         file_size_mb = audio_path.stat().st_size / 1024 / 1024
-        if file_size_mb > OPENAI_MAX_FILE_SIZE_MB:
-            raise ValueError(
-                f"Audio file too large: {file_size_mb:.1f}MB (max {OPENAI_MAX_FILE_SIZE_MB}MB)"
-            )
 
         # Check duration limit for gpt-4o models
         if context.duration_seconds > settings.openai_gpt4o_max_duration:

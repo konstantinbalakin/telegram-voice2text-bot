@@ -29,7 +29,7 @@ Remove the blocking file size check and ensure chunks are safe.
 
 ### Tasks
 
-- [ ] Task 2.1: Remove file size check from transcribe() (lines 127-132)
+- [~] Task 2.1: Remove file size check from transcribe() (lines 127-132)
 - [ ] Task 2.2: Verify _transcribe_single_file() has no size limit
 - [ ] Task 2.3: Add warning log if chunk exceeds 25MB (graceful degradation)
 - [ ] Task 2.4: Run test to confirm fix works
