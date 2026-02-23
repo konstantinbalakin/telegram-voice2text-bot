@@ -635,6 +635,13 @@ class OpenAIProvider(TranscriptionProvider):
         if not self._client:
             raise RuntimeError("OpenAI client not initialized")
 
+        file_size_mb = audio_path.stat().st_size / 1024 / 1024
+        if file_size_mb > OPENAI_MAX_FILE_SIZE_MB:
+            logger.warning(
+                f"Chunk size {file_size_mb:.1f}MB exceeds OpenAI limit {OPENAI_MAX_FILE_SIZE_MB}MB. "
+                "This may cause API errors. Consider reducing chunk size."
+            )
+
         start_time = time.time()
 
         try:
