@@ -1,0 +1,18 @@
+{
+  "id": "openai-size-check-bug_20250223",
+  "title": "OpenAI File Size Check Blocks Chunking",
+  "type": "bug",
+  "status": "in_progress",
+  "created": "2026-02-23T00:00:00Z",
+  "updated": "2026-02-23T00:00:00Z",
+  "current_phase": 1,
+  "current_task": "1.1",
+  "phases": {
+    "total": 3,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 12,
+    "completed": 0
+  }
+}
