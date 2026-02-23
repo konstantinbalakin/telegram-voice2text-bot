@@ -37,9 +37,9 @@ Remove the blocking file size check and ensure chunks are safe.
 
 ### Verification
 
-- [ ] 30MB test passes without ValueError
-- [ ] Chunks transcribed successfully via OpenAI API
-- [ ] No regression for small files (< 25MB)
+- [x] 30MB test passes without ValueError
+- [x] Chunks transcribed successfully via OpenAI API
+- [x] No regression for small files (< 25MB)
 
 ## Phase 3: Regression Testing
 
