@@ -17,6 +17,7 @@ Navigation hub for project context.
 - [ ] [html-to-markdown_20260218](./tracks/html-to-markdown_20260218/index.md) — Переход форматирования с HTML на MarkdownV2
 - [ ] [pr-review-fixes_20260219](./tracks/pr-review-fixes_20260219/index.md) — PR Review Fixes for download-formats & html-to-markdown
 - [ ] [llm-output-truncation_20260221](./tracks/llm-output-truncation_20260221/index.md) — Обрезка ответа DeepSeek при обработке длинных текстов
+- [ ] [openai-size-check-bug_20250223](./tracks/openai-size-check-bug_20250223/index.md) — OpenAI File Size Check Blocks Chunking
 
 <!-- Auto-populated by /conductor:new-track -->
 
