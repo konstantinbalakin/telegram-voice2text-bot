@@ -111,27 +111,18 @@ class TextProcessor:
             f"Creating structured text ({len(original_text)} chars, emoji_level={emoji_level})..."
         )
 
-        try:
-            # Use strategy-aware processing for structuring
-            result = await self._process_with_strategy(original_text, prompt, prompt)
-            structured_text = result.text
+        # Use strategy-aware processing for structuring
+        result = await self._process_with_strategy(original_text, prompt, prompt)
+        structured_text = result.text
 
-            if result.truncated:
-                structured_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
+        if result.truncated:
+            structured_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
 
-            # Sanitize to remove any HTML tags LLM may have inserted
-            structured_text = sanitize_markdown(structured_text)
+        # Sanitize to remove any HTML tags LLM may have inserted
+        structured_text = sanitize_markdown(structured_text)
 
-            logger.info(
-                f"Structured text created: {len(original_text)} → {len(structured_text)} chars"
-            )
-            return structured_text
-
-        except LLMError as e:
-            logger.error(f"Failed to create structured text: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return original_text
+        logger.info(f"Structured text created: {len(original_text)} → {len(structured_text)} chars")
+        return structured_text
 
     async def adjust_length(
         self,
@@ -208,24 +199,17 @@ class TextProcessor:
             f"({len(current_text)} chars)..."
         )
 
-        try:
-            result = await self._refine_with_custom_prompt(current_text, prompt)
-            adjusted_text = result.text
+        result = await self._refine_with_custom_prompt(current_text, prompt)
+        adjusted_text = result.text
 
-            # Sanitize markdown formatting
-            adjusted_text = sanitize_markdown(adjusted_text)
+        # Sanitize markdown formatting
+        adjusted_text = sanitize_markdown(adjusted_text)
 
-            logger.info(
-                f"Length adjusted: {len(current_text)} → {len(adjusted_text)} chars "
-                f"(direction={direction})"
-            )
-            return adjusted_text
-
-        except LLMError as e:
-            logger.error(f"Failed to adjust text length: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return current_text
+        logger.info(
+            f"Length adjusted: {len(current_text)} → {len(adjusted_text)} chars "
+            f"(direction={direction})"
+        )
+        return adjusted_text
 
     async def make_shorter(
         self, current_text: str, current_level: str, mode: str = "structured"
@@ -312,54 +296,45 @@ class TextProcessor:
         prompt = prompt_template.format(text=original_text)
         logger.info(f"Creating summary text ({len(original_text)} chars)...")
 
-        try:
-            # Use custom prompt for summarization
-            result = await self._refine_with_custom_prompt(original_text, prompt)
-            summary_text = result.text
+        # Use custom prompt for summarization
+        result = await self._refine_with_custom_prompt(original_text, prompt)
+        summary_text = result.text
 
-            # Sanitize markdown formatting
-            summary_text = sanitize_markdown(summary_text)
+        # Sanitize markdown formatting
+        summary_text = sanitize_markdown(summary_text)
 
-            logger.info(f"Summary created: {len(original_text)} → {len(summary_text)} chars")
+        logger.info(f"Summary created: {len(original_text)} → {len(summary_text)} chars")
 
-            # If length level is not default, apply length adjustment
-            if length_level != "default":
-                logger.info(f"Adjusting summary to length level: {length_level}")
-                # Determine direction based on level
-                if length_level in ["short", "shorter"]:
-                    # Make shorter from default
-                    if length_level == "short":
-                        summary_text = await self.adjust_length(
-                            summary_text, "shorter", "default", mode="summary"
-                        )
-                    else:  # shorter
-                        temp = await self.adjust_length(
-                            summary_text, "shorter", "default", mode="summary"
-                        )
-                        summary_text = await self.adjust_length(
-                            temp, "shorter", "short", mode="summary"
-                        )
-                else:  # long or longer
-                    # Make longer from default
-                    if length_level == "long":
-                        summary_text = await self.adjust_length(
-                            summary_text, "longer", "default", mode="summary"
-                        )
-                    else:  # longer
-                        temp = await self.adjust_length(
-                            summary_text, "longer", "default", mode="summary"
-                        )
-                        summary_text = await self.adjust_length(
-                            temp, "longer", "long", mode="summary"
-                        )
+        # If length level is not default, apply length adjustment
+        if length_level != "default":
+            logger.info(f"Adjusting summary to length level: {length_level}")
+            # Determine direction based on level
+            if length_level in ["short", "shorter"]:
+                # Make shorter from default
+                if length_level == "short":
+                    summary_text = await self.adjust_length(
+                        summary_text, "shorter", "default", mode="summary"
+                    )
+                else:  # shorter
+                    temp = await self.adjust_length(
+                        summary_text, "shorter", "default", mode="summary"
+                    )
+                    summary_text = await self.adjust_length(
+                        temp, "shorter", "short", mode="summary"
+                    )
+            else:  # long or longer
+                # Make longer from default
+                if length_level == "long":
+                    summary_text = await self.adjust_length(
+                        summary_text, "longer", "default", mode="summary"
+                    )
+                else:  # longer
+                    temp = await self.adjust_length(
+                        summary_text, "longer", "default", mode="summary"
+                    )
+                    summary_text = await self.adjust_length(temp, "longer", "long", mode="summary")
 
-            return summary_text
-
-        except LLMError as e:
-            logger.error(f"Failed to create summary: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return original_text
+        return summary_text
 
     async def create_magic(self, original_text: str) -> str:
         """
@@ -402,22 +377,15 @@ class TextProcessor:
         prompt = prompt_template.format(text=original_text)
         logger.info(f"Creating magic text ({len(original_text)} chars)...")
 
-        try:
-            # Process full text without chunking — magic mode needs full context
-            result = await self._refine_with_custom_prompt(original_text, prompt)
-            magic_text = result.text
+        # Process full text without chunking — magic mode needs full context
+        result = await self._refine_with_custom_prompt(original_text, prompt)
+        magic_text = result.text
 
-            # Sanitize markdown formatting
-            magic_text = sanitize_markdown(magic_text)
+        # Sanitize markdown formatting
+        magic_text = sanitize_markdown(magic_text)
 
-            logger.info(f"Magic text created: {len(original_text)} → {len(magic_text)} chars")
-            return magic_text
-
-        except LLMError as e:
-            logger.error(f"Failed to create magic text: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return original_text
+        logger.info(f"Magic text created: {len(original_text)} → {len(magic_text)} chars")
+        return magic_text
 
     async def add_emojis(self, text: str, emoji_level: int, current_level: int = 0) -> str:
         """
@@ -502,24 +470,17 @@ class TextProcessor:
             f"{len(text)} chars..."
         )
 
-        try:
-            result = await self._refine_with_custom_prompt(text, prompt)
-            text_with_emojis = result.text
+        result = await self._refine_with_custom_prompt(text, prompt)
+        text_with_emojis = result.text
 
-            # Sanitize markdown formatting
-            text_with_emojis = sanitize_markdown(text_with_emojis)
+        # Sanitize markdown formatting
+        text_with_emojis = sanitize_markdown(text_with_emojis)
 
-            logger.info(
-                f"Emojis adjusted: {len(text)} → {len(text_with_emojis)} chars "
-                f"(level={emoji_level})"
-            )
-            return text_with_emojis
-
-        except LLMError as e:
-            logger.error(f"Failed to add emojis: {e}")
-            # Fallback: return original text
-            logger.warning("Falling back to original text")
-            return text
+        logger.info(
+            f"Emojis adjusted: {len(text)} → {len(text_with_emojis)} chars "
+            f"(level={emoji_level})"
+        )
+        return text_with_emojis
 
     def format_with_timestamps(self, segments: list, base_text: str, mode: str = "original") -> str:
         """

@@ -78,20 +78,17 @@ class TestAdjustLength:
             )
 
     @pytest.mark.asyncio
-    async def test_adjust_length_llm_error_fallback(self, text_processor, mock_llm_service):
-        """Test fallback to original text on LLM error."""
-        original_text = "Text to adjust"
+    async def test_adjust_length_llm_error_propagates(self, text_processor, mock_llm_service):
+        """Test that LLM error propagates to caller."""
         mock_llm_service.provider.refine_text = AsyncMock(side_effect=LLMError("API Error"))
 
-        result = await text_processor.adjust_length(
-            current_text=original_text,
-            direction="shorter",
-            current_level="default",
-            mode="structured",
-        )
-
-        # Should fallback to original text
-        assert result == original_text
+        with pytest.raises(LLMError, match="API Error"):
+            await text_processor.adjust_length(
+                current_text="Text to adjust",
+                direction="shorter",
+                current_level="default",
+                mode="structured",
+            )
 
 
 class TestMakeShorter:
