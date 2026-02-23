@@ -16,8 +16,8 @@ Understand current behavior and create failing test.
 ### Tasks
 
 - [x] Task 1.1: Analyze _transcribe_single_file() - confirm chunks will be < 25MB
-- [ ] Task 1.2: Create test for 30MB file with OPENAI_CHUNKING=true
-- [ ] Task 1.3: Verify test fails with current code (ValueError at size check)
+- [x] Task 1.2: Create test for 30MB file with OPENAI_CHUNKING=true
+- [x] Task 1.3: Verify test fails with current code (ValueError at size check)
 
 ### Verification
 
