@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 # Mixed: ~3.5 chars per token
 # We use a conservative estimate (lower chars/token = more tokens estimated)
 CHARS_PER_TOKEN_RUSSIAN = 3
-CHARS_PER_TOKEN_DEFAULT = 3.5
 
 
 def estimate_tokens(text: str) -> int:
@@ -37,9 +36,8 @@ def will_exceed_output_limit(text: str, max_output_tokens: int) -> bool:
     """
     Check if processing a text will likely exceed the model's output token limit.
 
-    The output of structured/magic processing is typically similar in size to input
-    (or slightly larger for structured mode). We estimate output tokens as roughly
-    equal to input text tokens.
+    The output of structured processing is typically similar in size to input
+    (or slightly larger). We estimate output tokens as roughly equal to input text tokens.
 
     Args:
         text: Input text that will be processed by LLM

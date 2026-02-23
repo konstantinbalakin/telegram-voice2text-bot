@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import logging
 import re
-from typing import Optional
 
 from weasyprint import HTML  # type: ignore[import-untyped]
 from weasyprint.text.fonts import FontConfiguration  # type: ignore[import-untyped]
@@ -333,14 +332,12 @@ class PDFGenerator:
 def create_file_object(
     text: str,
     filename_prefix: str,
-    pdf_generator: Optional[PDFGenerator] = None,
 ) -> tuple[io.BytesIO, str]:
     """Create a TXT file object for sending via Telegram.
 
     Args:
         text: Text content for the file
         filename_prefix: Prefix for the filename (e.g. "1_original")
-        pdf_generator: Unused, kept for signature compatibility
 
     Returns:
         Tuple of (file BytesIO object with .name set, file extension string "TXT")

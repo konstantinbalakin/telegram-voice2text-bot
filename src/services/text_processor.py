@@ -50,7 +50,7 @@ class TextProcessor:
 
         Args:
             original_text: Raw transcription text
-            length_level: Length level (Phase 3 - not yet implemented)
+            length_level: Length level
             emoji_level: Emoji level (0=none, 1=few, 2=moderate, 3=many)
 
         Returns:
@@ -112,7 +112,7 @@ class TextProcessor:
         )
 
         # Use strategy-aware processing for structuring
-        result = await self._process_with_strategy(original_text, prompt, prompt)
+        result = await self._process_with_strategy(original_text, prompt)
         structured_text = result.text
 
         if result.truncated:
@@ -602,9 +602,7 @@ class TextProcessor:
 
         return will_exceed_output_limit(text, max_output_tokens=output_capacity)
 
-    async def _process_with_strategy(
-        self, text: str, prompt_template: str, prompt: str
-    ) -> LLMResult:
+    async def _process_with_strategy(self, text: str, prompt: str) -> LLMResult:
         """
         Process text with long-text strategy if needed.
 
@@ -614,7 +612,6 @@ class TextProcessor:
 
         Args:
             text: Text to process
-            prompt_template: Original prompt template (for chunking — reformat per chunk)
             prompt: Formatted prompt for single-call processing
 
         Returns:

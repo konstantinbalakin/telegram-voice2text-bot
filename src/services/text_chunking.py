@@ -46,7 +46,6 @@ def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
             else:
                 current_chunk = sentence
 
-    # Don't forget the last chunk
     if current_chunk:
         chunks.append(current_chunk)
 
