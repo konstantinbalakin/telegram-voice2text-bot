@@ -300,6 +300,9 @@ class TextProcessor:
         result = await self._refine_with_custom_prompt(original_text, prompt)
         summary_text = result.text
 
+        if result.truncated:
+            summary_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
+
         # Sanitize markdown formatting
         summary_text = sanitize_markdown(summary_text)
 
@@ -380,6 +383,9 @@ class TextProcessor:
         # Process full text without chunking — magic mode needs full context
         result = await self._refine_with_custom_prompt(original_text, prompt)
         magic_text = result.text
+
+        if result.truncated:
+            magic_text += "\n\n⚠️ Текст был обрезан из-за ограничений модели"
 
         # Sanitize markdown formatting
         magic_text = sanitize_markdown(magic_text)
