@@ -31,8 +31,9 @@ Remove the blocking file size check and ensure chunks are safe.
 
 - [x] Task 2.1: Remove file size check from transcribe() (lines 127-132)
 - [x] Task 2.2: Verify _transcribe_single_file() has no size limit
+- [x] Task 2.3: Add warning log if chunk exceeds 25MB (graceful degradation)
 - [~] Task 2.3: Add warning log if chunk exceeds 25MB (graceful degradation)
-- [ ] Task 2.4: Run test to confirm fix works
+- [x] Task 2.4: Run test to confirm fix works
 
 ### Verification
 
