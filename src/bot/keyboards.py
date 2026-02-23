@@ -368,7 +368,7 @@ def create_transcription_keyboard(
         keyboard.append(
             [
                 InlineKeyboardButton(
-                    "📥 Скачать",
+                    "📥 Скачать (txt, md, pdf, docx)",
                     callback_data=encode_callback_data("download", state.usage_id),
                 )
             ]
