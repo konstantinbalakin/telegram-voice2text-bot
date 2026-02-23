@@ -139,6 +139,72 @@ class TestOpenAIProviderTranscribe:
         assert result.provider_used == "openai"
         initialized_provider._handle_long_audio.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_transcribe_10mb_file_no_chunking(self, initialized_provider, tmp_path):
+        """Test 10MB file (< 25MB) transcribes directly without chunking."""
+        import httpx
+        from src.config import settings
+
+        test_file = tmp_path / "medium.mp3"
+
+        file_size_10mb = 10 * 1024 * 1024
+        test_file.write_bytes(b"x" * file_size_10mb)
+
+        context = TranscriptionContext(
+            user_id=123, duration_seconds=300.0, file_size_bytes=file_size_10mb
+        )
+
+        mock_response = httpx.Response(
+            status_code=200,
+            json={"text": "10MB transcription", "language": "en"},
+            request=httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions"),
+        )
+
+        with patch.object(
+            initialized_provider._client,
+            "post",
+            new_callable=AsyncMock,
+            return_value=mock_response,
+        ):
+            result = await initialized_provider.transcribe(test_file, context)
+
+        assert result.text == "10MB transcription"
+        assert result.provider_used == "openai"
+
+    @pytest.mark.asyncio
+    async def test_transcribe_100mb_file_multiple_chunks(self, initialized_provider, tmp_path):
+        """Test 100MB file (> 25MB) triggers chunking path."""
+        from unittest.mock import AsyncMock, MagicMock
+        from src.config import settings
+
+        test_file = tmp_path / "large.mp3"
+
+        file_size_100mb = 100 * 1024 * 1024
+        test_file.write_bytes(b"x" * file_size_100mb)
+
+        context = TranscriptionContext(
+            user_id=123,
+            duration_seconds=settings.openai_gpt4o_max_duration + 500,
+            file_size_bytes=file_size_100mb,
+        )
+
+        mock_result = MagicMock(
+            text="chunked transcription from multiple segments",
+            language="en",
+            processing_time=20.0,
+            audio_duration=settings.openai_gpt4o_max_duration + 500,
+            provider_used="openai",
+            model_name="gpt-4o-transcribe (chunked)",
+        )
+
+        initialized_provider._handle_long_audio = AsyncMock(return_value=mock_result)
+
+        result = await initialized_provider.transcribe(test_file, context)
+
+        assert result.text == "chunked transcription from multiple segments"
+        assert result.provider_used == "openai"
+        initialized_provider._handle_long_audio.assert_called_once()
+
 
 class TestOpenAIProviderShutdown:
     """Tests for provider shutdown."""
