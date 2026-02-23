@@ -621,8 +621,7 @@ class TextProcessor:
         elif strategy == "chunking":
             return await self._process_with_chunking(text, prompt)
         else:
-            logger.warning(f"Unknown long_text_strategy: {strategy}, falling back to direct call")
-            return await self._refine_with_custom_prompt(text, prompt)
+            raise ValueError(f"Unknown long_text_strategy: {strategy}")
 
     async def _process_with_reasoner(self, text: str, prompt: str) -> LLMResult:
         """Process text using a temporary deepseek-reasoner provider."""
@@ -709,7 +708,7 @@ class TextProcessor:
                     result = await self._refine_with_custom_prompt(chunk, chunk_prompt)
                     logger.debug(f"[CHUNK {chunk_index + 1}/{len(chunks)}] output:\n{result.text}")
                     return (chunk_index, result.text, result.truncated)
-                except Exception as e:
+                except LLMError as e:
                     logger.error(f"Chunk {chunk_index + 1} failed: {e}")
                     # Retry once
                     try:
@@ -720,9 +719,9 @@ class TextProcessor:
                             f"Chunk {chunk_index + 1} retry succeeded: " f"{len(result.text)} chars"
                         )
                         return (chunk_index, result.text, result.truncated)
-                    except Exception as retry_error:
+                    except LLMError as retry_error:
                         logger.error(f"Chunk {chunk_index + 1} retry failed: {retry_error}")
-                        raise RuntimeError(
+                        raise LLMError(
                             f"LLM chunk {chunk_index + 1} failed after retry: " f"{retry_error}"
                         ) from retry_error
 

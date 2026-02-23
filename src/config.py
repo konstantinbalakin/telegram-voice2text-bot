@@ -1,6 +1,6 @@
 # Configuration module
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,20 +45,21 @@ class Settings(BaseSettings):
         default="bot_client", description="Telethon session file name"
     )
     telethon_enabled: bool = Field(
-        default=False, description="Enable Telethon Client API for files >20 MB"
+        default=True, description="Enable Telethon Client API for files >20 MB"
     )
 
     # Transcription Provider Configuration
     whisper_providers: list[str] = Field(
-        default=["faster-whisper"],
-        description="Enabled providers: faster-whisper, openai",
+        default=["openai", "faster-whisper"],
+        description="Enabled providers: openai, faster-whisper",
     )
     whisper_routing_strategy: str = Field(
-        default="single", description="Routing strategy: single, fallback, benchmark"
+        default="structure",
+        description="Routing strategy: structure, single, fallback, hybrid, benchmark",
     )
 
     # Strategy Configuration
-    primary_provider: str = Field(default="faster-whisper", description="Primary provider name")
+    primary_provider: str = Field(default="openai", description="Primary provider name")
     fallback_provider: str = Field(default="openai", description="Fallback provider name")
     duration_threshold_seconds: int = Field(
         default=30, description="Duration threshold for routing"
@@ -66,7 +67,7 @@ class Settings(BaseSettings):
 
     # FasterWhisper Configuration
     faster_whisper_model_size: str = Field(
-        default="medium",
+        default="base",
         description="FasterWhisper model size: tiny, base, small, medium, large-v2, large-v3",
     )
     faster_whisper_device: str = Field(default="cpu", description="Device: cpu or cuda")
@@ -82,8 +83,8 @@ class Settings(BaseSettings):
 
     # OpenAI API Configuration
     openai_api_key: str | None = Field(default=None, description="OpenAI API key")
-    openai_model: str = Field(default="whisper-1", description="OpenAI model name")
-    openai_timeout: int = Field(default=60, description="OpenAI API timeout in seconds")
+    openai_model: str = Field(default="gpt-4o-transcribe", description="OpenAI model name")
+    openai_timeout: int = Field(default=90, description="OpenAI API timeout in seconds")
     openai_4o_transcribe_preferred_format: str = Field(
         default="mp3",
         description="Preferred audio format for OpenAI gpt-4o-* models (mp3, wav)",
@@ -95,17 +96,17 @@ class Settings(BaseSettings):
         description="Maximum audio duration in seconds for gpt-4o models before chunking/switching",
     )
     openai_change_model: bool = Field(
-        default=True,
+        default=False,
         description="Automatically switch to whisper-1 for audio exceeding max duration",
     )
     openai_chunking: bool = Field(
-        default=False, description="Enable audio chunking for long files (splits into segments)"
+        default=True, description="Enable audio chunking for long files (splits into segments)"
     )
     openai_chunk_size_seconds: int = Field(
-        default=1200,
+        default=420,
         ge=5,
         le=1400,
-        description="Size of each audio chunk in seconds (default: 20 minutes)",
+        description="Size of each audio chunk in seconds (default: 7 minutes)",
     )
     openai_chunk_overlap_seconds: int = Field(
         default=2,
@@ -118,7 +119,7 @@ class Settings(BaseSettings):
         description="Process chunks in parallel for faster transcription (disables context passing)",
     )
     openai_max_parallel_chunks: int = Field(
-        default=3,
+        default=8,
         ge=1,
         le=10,
         description="Maximum number of chunks to process simultaneously (rate limiting)",
@@ -148,19 +149,19 @@ class Settings(BaseSettings):
     )
 
     # Queue Configuration
-    max_queue_size: int = Field(default=50, description="Maximum queue size")
-    max_concurrent_workers: int = Field(default=1, description="Max concurrent transcriptions")
-    transcription_timeout: int = Field(default=120, description="Transcription timeout (seconds)")
+    max_queue_size: int = Field(default=10, description="Maximum queue size")
+    max_concurrent_workers: int = Field(default=5, description="Max concurrent transcriptions")
+    transcription_timeout: int = Field(default=3600, description="Transcription timeout (seconds)")
 
     # Progress Tracking
     progress_update_interval: int = Field(
-        default=10, description="Progress bar update interval (seconds)"
+        default=3, description="Progress bar update interval (seconds)"
     )
     progress_global_rate_limit: float = Field(
         default=0.5,
         description="Minimum interval between progress bar edit_message_text calls globally (seconds)",
     )
-    progress_rtf: float = Field(default=0.3, description="Estimated RTF for progress calculation")
+    progress_rtf: float = Field(default=0.05, description="Estimated RTF for progress calculation")
     llm_processing_duration: int = Field(
         default=30, description="Estimated LLM processing duration in seconds (for progress bar)"
     )
@@ -173,7 +174,7 @@ class Settings(BaseSettings):
         default=60, description="Default daily quota in seconds"
     )
     max_voice_duration_seconds: int = Field(
-        default=300, description="Maximum voice message duration (5 minutes)"
+        default=10800, description="Maximum voice message duration (3 hours)"
     )
     max_file_size_bytes: int = Field(
         default=20 * 1024 * 1024,
@@ -181,36 +182,36 @@ class Settings(BaseSettings):
     )
 
     # LLM Refinement Configuration
-    llm_refinement_enabled: bool = Field(default=False, description="Enable LLM text refinement")
+    llm_refinement_enabled: bool = Field(default=True, description="Enable LLM text refinement")
     llm_provider: str = Field(
         default="deepseek", description="LLM provider: deepseek, openai, gigachat"
     )
     llm_api_key: str | None = Field(default=None, description="LLM API key")
     llm_model: str = Field(default="deepseek-chat", description="LLM model name")
     llm_base_url: str = Field(default="https://api.deepseek.com", description="LLM API base URL")
-    llm_timeout: int = Field(default=30, description="LLM request timeout in seconds")
+    llm_timeout: int = Field(default=300, description="LLM request timeout in seconds")
     llm_max_tokens: int = Field(default=8192, description="LLM max tokens for response")
     llm_max_tokens_reasoner: int = Field(
         default=64000, description="LLM max tokens for deepseek-reasoner model"
     )
     llm_chunking_threshold: int | None = Field(
-        default=None,
+        default=1300,
         description="Token threshold for triggering chunking strategy. "
         "Defaults to llm_max_tokens if not set.",
     )
-    llm_long_text_strategy: str = Field(
-        default="reasoner",
-        description="Strategy for long texts exceeding output limit: reasoner, chunking",
+    llm_long_text_strategy: Literal["reasoner", "chunking"] = Field(
+        default="chunking",
+        description="Strategy for long texts exceeding output limit: chunking, reasoner",
     )
     llm_chunk_max_chars: int = Field(
-        default=8000, description="Max chars per chunk for chunking strategy"
+        default=4096, description="Max chars per chunk for chunking strategy"
     )
     llm_parallel_chunks: bool = Field(
         default=True,
         description="Process LLM text chunks in parallel for faster processing",
     )
     llm_max_parallel_chunks: int = Field(
-        default=3,
+        default=8,
         ge=1,
         le=10,
         description="Maximum number of LLM chunks to process simultaneously",
@@ -222,7 +223,7 @@ class Settings(BaseSettings):
 
     # Hybrid Strategy Configuration
     hybrid_short_threshold: int = Field(
-        default=20, description="Duration threshold for hybrid strategy (seconds)"
+        default=0, description="Duration threshold for hybrid strategy (seconds)"
     )
     hybrid_draft_provider: str = Field(
         default="faster-whisper", description="Provider for draft: faster-whisper, openai"
@@ -231,19 +232,19 @@ class Settings(BaseSettings):
         default="small", description="Model for draft (e.g., tiny, small)"
     )
     hybrid_quality_provider: str = Field(
-        default="faster-whisper", description="Provider for quality transcription"
+        default="openai", description="Provider for quality transcription"
     )
     hybrid_quality_model: str = Field(
-        default="medium", description="Model for quality transcription"
+        default="gpt-4o-transcribe", description="Model for quality transcription"
     )
 
     # Structure Strategy Configuration (WHISPER_ROUTING_STRATEGY=structure)
     structure_provider: str = Field(
-        default="faster-whisper",
-        description="Provider for structure strategy (faster-whisper, openai)",
+        default="openai",
+        description="Provider for structure strategy (openai, faster-whisper)",
     )
     structure_model: str = Field(
-        default="medium", description="Model for structure strategy transcription"
+        default="gpt-4o-transcribe", description="Model for structure strategy transcription"
     )
     structure_draft_threshold: int = Field(
         default=20,
@@ -260,7 +261,7 @@ class Settings(BaseSettings):
 
     # Audio Preprocessing Configuration
     audio_convert_to_mono: bool = Field(
-        default=False, description="Convert audio to mono before transcription"
+        default=True, description="Convert audio to mono before transcription"
     )
     audio_target_sample_rate: int = Field(
         default=16000, description="Target sample rate for mono conversion (Hz)"
@@ -271,27 +272,27 @@ class Settings(BaseSettings):
 
     # Interactive Transcription Features (Phase 1-8)
     interactive_mode_enabled: bool = Field(
-        default=False, description="Enable interactive transcription mode with inline buttons"
+        default=True, description="Enable interactive transcription mode with inline buttons"
     )
     enable_structured_mode: bool = Field(
-        default=False, description="Enable 'Structured' text mode (Phase 2)"
+        default=True, description="Enable 'Structured' text mode (Phase 2)"
     )
     enable_summary_mode: bool = Field(default=False, description="Enable 'Summary' mode (Phase 4)")
     enable_magic_mode: bool = Field(
         default=True, description="Enable magic mode ('Make it beautiful') - publication-ready text"
     )
-    enable_emoji_option: bool = Field(default=False, description="Enable emoji option (Phase 5)")
+    enable_emoji_option: bool = Field(default=True, description="Enable emoji option (Phase 5)")
     enable_timestamps_option: bool = Field(
         default=False, description="Enable timestamps option (Phase 6)"
     )
     enable_length_variations: bool = Field(
-        default=False, description="Enable length variations (shorter/longer) (Phase 3)"
+        default=True, description="Enable length variations (shorter/longer) (Phase 3)"
     )
     enable_retranscribe: bool = Field(
         default=False, description="Enable retranscription option (Phase 8)"
     )
     enable_download_button: bool = Field(
-        default=False, description="Enable download button for exporting transcriptions"
+        default=True, description="Enable download button for exporting transcriptions"
     )
 
     # Interactive Transcription Limits
@@ -311,12 +312,14 @@ class Settings(BaseSettings):
         description="Directory for storing audio files for retranscription",
     )
     persistent_audio_ttl_days: int = Field(
-        default=7, description="How long to keep audio files (days)"
+        default=1, description="How long to keep audio files (days)"
     )
     retranscribe_free_model: str = Field(
         default="medium", description="Model for free retranscription (higher quality)"
     )
-    retranscribe_free_model_rtf: float = Field(default=0.5, description="RTF 0.5 for medium model")
+    retranscribe_free_model_rtf: float = Field(
+        default=0.6, description="RTF for free retranscription model"
+    )
     retranscribe_paid_provider: str = Field(
         default="openai", description="Provider for paid retranscription"
     )
@@ -326,7 +329,7 @@ class Settings(BaseSettings):
 
     # File Handling (Phase 7)
     file_threshold_chars: int = Field(
-        default=3000, description="Text longer than this is sent as .txt file instead of message"
+        default=3900, description="Text longer than this is sent as file instead of message"
     )
 
     # Document and Video Support

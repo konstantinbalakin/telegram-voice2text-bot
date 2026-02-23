@@ -127,12 +127,15 @@ class DeepSeekProvider(LLMProvider):
     @staticmethod
     async def _log_response(response: httpx.Response) -> None:
         """Log incoming HTTP response body at DEBUG level."""
-        await response.aread()
-        body = response.text
-        logger.debug(
-            f"[HTTPX RESPONSE] {response.status_code} {response.request.method} "
-            f"{response.request.url}\n{body}"
-        )
+        try:
+            await response.aread()
+            body = response.text
+            logger.debug(
+                f"[HTTPX RESPONSE] {response.status_code} {response.request.method} "
+                f"{response.request.url}\n{body}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to log HTTP response: {e}")
 
     @retry(
         stop=stop_after_attempt(3),
@@ -225,7 +228,7 @@ class DeepSeekProvider(LLMProvider):
             raise LLMAPIError(f"DeepSeek API error: {e.response.status_code}") from e
 
         except Exception as e:
-            logger.error(f"DeepSeek unexpected error: {e}")
+            logger.error(f"DeepSeek unexpected error: {e}", exc_info=True)
             raise LLMAPIError(f"DeepSeek error: {e}") from e
 
     async def close(self) -> None:
@@ -332,7 +335,7 @@ class LLMService:
             return draft_text
 
         except Exception as e:
-            logger.error(f"Unexpected LLM error: {e}, using draft as final")
+            logger.error(f"Unexpected LLM error: {e}, using draft as final", exc_info=True)
             return draft_text
 
     async def close(self) -> None:

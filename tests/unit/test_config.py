@@ -49,24 +49,24 @@ class TestSettingsDefaults:
         assert Settings().telethon_session_name == "bot_client"
 
     def test_default_telethon_enabled(self):
-        assert Settings().telethon_enabled is False
+        assert Settings().telethon_enabled is True
 
     # --- Transcription Provider ---
     def test_default_whisper_providers(self):
-        assert Settings().whisper_providers == ["faster-whisper"]
+        assert Settings().whisper_providers == ["openai", "faster-whisper"]
 
     def test_default_whisper_routing_strategy(self):
-        assert Settings().whisper_routing_strategy == "single"
+        assert Settings().whisper_routing_strategy == "structure"
 
     def test_default_primary_provider(self):
-        assert Settings().primary_provider == "faster-whisper"
+        assert Settings().primary_provider == "openai"
 
     def test_default_fallback_provider(self):
         assert Settings().fallback_provider == "openai"
 
     # --- FasterWhisper ---
     def test_default_faster_whisper_model_size(self):
-        assert Settings().faster_whisper_model_size == "medium"
+        assert Settings().faster_whisper_model_size == "base"
 
     def test_default_faster_whisper_device(self):
         assert Settings().faster_whisper_device == "cpu"
@@ -85,10 +85,10 @@ class TestSettingsDefaults:
         assert Settings().openai_api_key is None
 
     def test_default_openai_model(self):
-        assert Settings().openai_model == "whisper-1"
+        assert Settings().openai_model == "gpt-4o-transcribe"
 
     def test_default_openai_timeout(self):
-        assert Settings().openai_timeout == 60
+        assert Settings().openai_timeout == 90
 
     def test_default_openai_4o_transcribe_preferred_format(self):
         assert Settings().openai_4o_transcribe_preferred_format == "mp3"
@@ -99,20 +99,20 @@ class TestSettingsDefaults:
 
     # --- Queue ---
     def test_default_max_queue_size(self):
-        assert Settings().max_queue_size == 50
+        assert Settings().max_queue_size == 10
 
     def test_default_max_concurrent_workers(self):
-        assert Settings().max_concurrent_workers == 1
+        assert Settings().max_concurrent_workers == 5
 
     def test_default_transcription_timeout(self):
-        assert Settings().transcription_timeout == 120
+        assert Settings().transcription_timeout == 3600
 
     # --- Progress ---
     def test_default_progress_update_interval(self):
-        assert Settings().progress_update_interval == 10
+        assert Settings().progress_update_interval == 3
 
     def test_default_progress_rtf(self):
-        assert Settings().progress_rtf == pytest.approx(0.3)
+        assert Settings().progress_rtf == pytest.approx(0.05)
 
     # --- Quotas ---
     def test_default_enable_quota_check(self):
@@ -122,14 +122,14 @@ class TestSettingsDefaults:
         assert Settings().default_daily_quota_seconds == 60
 
     def test_default_max_voice_duration_seconds(self):
-        assert Settings().max_voice_duration_seconds == 300
+        assert Settings().max_voice_duration_seconds == 10800
 
     def test_default_max_file_size_bytes(self):
         assert Settings().max_file_size_bytes == 20 * 1024 * 1024
 
     # --- LLM ---
     def test_default_llm_refinement_enabled(self):
-        assert Settings().llm_refinement_enabled is False
+        assert Settings().llm_refinement_enabled is True
 
     def test_default_llm_provider(self):
         assert Settings().llm_provider == "deepseek"
@@ -144,13 +144,13 @@ class TestSettingsDefaults:
         assert Settings().llm_base_url == "https://api.deepseek.com"
 
     def test_default_llm_timeout(self):
-        assert Settings().llm_timeout == 30
+        assert Settings().llm_timeout == 300
 
     def test_default_llm_max_tokens(self):
         assert Settings().llm_max_tokens == 8192
 
     def test_default_llm_chunking_threshold(self):
-        assert Settings().llm_chunking_threshold is None
+        assert Settings().llm_chunking_threshold == 1300
 
     def test_default_llm_debug_mode(self):
         assert Settings().llm_debug_mode is False
@@ -161,13 +161,13 @@ class TestSettingsDefaults:
 
     # --- Interactive ---
     def test_default_interactive_mode_enabled(self):
-        assert Settings().interactive_mode_enabled is False
+        assert Settings().interactive_mode_enabled is True
 
     def test_default_enable_magic_mode(self):
         assert Settings().enable_magic_mode is True
 
     def test_default_enable_structured_mode(self):
-        assert Settings().enable_structured_mode is False
+        assert Settings().enable_structured_mode is True
 
     def test_default_enable_summary_mode(self):
         assert Settings().enable_summary_mode is False
@@ -180,7 +180,7 @@ class TestSettingsDefaults:
 
     # --- Audio Preprocessing ---
     def test_default_audio_convert_to_mono(self):
-        assert Settings().audio_convert_to_mono is False
+        assert Settings().audio_convert_to_mono is True
 
     def test_default_audio_target_sample_rate(self):
         assert Settings().audio_target_sample_rate == 16000
@@ -200,13 +200,13 @@ class TestSettingsDefaults:
         assert Settings().openai_gpt4o_max_duration == 420
 
     def test_default_openai_change_model(self):
-        assert Settings().openai_change_model is True
+        assert Settings().openai_change_model is False
 
     def test_default_openai_chunking(self):
-        assert Settings().openai_chunking is False
+        assert Settings().openai_chunking is True
 
     def test_default_openai_chunk_size_seconds(self):
-        assert Settings().openai_chunk_size_seconds == 1200
+        assert Settings().openai_chunk_size_seconds == 420
 
     def test_default_openai_parallel_chunks(self):
         assert Settings().openai_parallel_chunks is True
@@ -364,6 +364,19 @@ class TestSettingsFieldConstraints:
         monkeypatch.setenv("LLM_MAX_PARALLEL_CHUNKS", "20")
         with pytest.raises(Exception):
             Settings()
+
+    def test_llm_long_text_strategy_invalid(self, monkeypatch):
+        monkeypatch.setenv("LLM_LONG_TEXT_STRATEGY", "invalid")
+        with pytest.raises(Exception):
+            Settings()
+
+    def test_llm_long_text_strategy_valid_reasoner(self, monkeypatch):
+        monkeypatch.setenv("LLM_LONG_TEXT_STRATEGY", "reasoner")
+        assert Settings().llm_long_text_strategy == "reasoner"
+
+    def test_llm_long_text_strategy_valid_chunking(self, monkeypatch):
+        monkeypatch.setenv("LLM_LONG_TEXT_STRATEGY", "chunking")
+        assert Settings().llm_long_text_strategy == "chunking"
 
 
 class TestSettingsModelConfig:

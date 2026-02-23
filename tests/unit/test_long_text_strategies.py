@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.services.text_processor import TextProcessor
-from src.services.llm_service import LLMResult, LLMService
+from src.services.llm_service import LLMError, LLMResult, LLMService
 
 
 @pytest.fixture
@@ -285,7 +285,7 @@ class TestParallelChunking:
             nonlocal attempt_count
             attempt_count += 1
             if attempt_count == 1:
-                raise Exception("Temporary API error")
+                raise LLMError("Temporary API error")
             return LLMResult(text="OK")
 
         mock_llm_service.provider.refine_text = mock_refine
