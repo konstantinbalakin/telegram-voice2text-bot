@@ -59,5 +59,12 @@ def will_exceed_output_limit(text: str, max_output_tokens: int) -> bool:
             f"max_output_tokens={max_output_tokens}, "
             f"text_length={len(text)}"
         )
+    else:
+        logger.debug(
+            f"Text within output limit: "
+            f"estimated_tokens={estimated_output_tokens}, "
+            f"max_output_tokens={max_output_tokens}, "
+            f"text_length={len(text)}"
+        )
 
     return exceeds

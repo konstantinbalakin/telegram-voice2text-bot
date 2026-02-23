@@ -574,7 +574,7 @@ class TextProcessor:
             LLMError: If refinement fails
         """
         if not self.llm_service.provider:
-            logger.debug("LLM provider not available, returning original text")
+            logger.warning("LLM provider not available, returning original text")
             return LLMResult(text=text)
 
         # Use the provider directly for custom prompts
@@ -582,20 +582,23 @@ class TextProcessor:
 
     def _needs_long_text_strategy(self, text: str) -> bool:
         """Check if text needs a long-text strategy based on model and text size."""
-        if not self.llm_service.provider:
+        provider = self.llm_service.provider
+        if not provider:
             return False
 
-        model = getattr(self.llm_service.provider, "model", "")
-        # Use output_capacity (chunking threshold) instead of max_tokens (API limit)
-        raw_capacity = getattr(self.llm_service.provider, "output_capacity", None)
-        output_capacity: int = raw_capacity if isinstance(raw_capacity, int) else 0
-        if not output_capacity:
-            raw_max = getattr(self.llm_service.provider, "max_tokens", 8192)
-            output_capacity = raw_max if isinstance(raw_max, int) else 8192
+        if not isinstance(provider, DeepSeekProvider):
+            logger.warning(
+                f"_needs_long_text_strategy: unsupported provider type {type(provider).__name__}, "
+                "skipping long-text strategy"
+            )
+            return False
 
         # Reasoner model has 64K output — no strategy needed
-        if model == "deepseek-reasoner":
+        if provider.model == "deepseek-reasoner":
             return False
+
+        # Use output_capacity (chunking threshold) instead of max_tokens (API limit)
+        output_capacity = provider.output_capacity
 
         return will_exceed_output_limit(text, max_output_tokens=output_capacity)
 
@@ -635,9 +638,12 @@ class TextProcessor:
         if not provider:
             return LLMResult(text=text)
 
-        api_key = getattr(provider, "api_key", "")
-        base_url = getattr(provider, "base_url", "https://api.deepseek.com")
-        timeout = getattr(provider, "timeout", 120)
+        if not isinstance(provider, DeepSeekProvider):
+            logger.warning(
+                f"_process_with_reasoner: unsupported provider type {type(provider).__name__}, "
+                "falling back to _refine_with_custom_prompt"
+            )
+            return await self._refine_with_custom_prompt(text, prompt)
 
         logger.info(
             f"Switching to deepseek-reasoner for long text "
@@ -645,10 +651,10 @@ class TextProcessor:
         )
 
         reasoner = DeepSeekProvider(
-            api_key=api_key,
+            api_key=provider.api_key,
             model="deepseek-reasoner",
-            base_url=base_url,
-            timeout=timeout,
+            base_url=provider.base_url,
+            timeout=provider.timeout,
             max_tokens=64000,
         )
 

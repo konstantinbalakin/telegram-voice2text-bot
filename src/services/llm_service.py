@@ -3,7 +3,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 from tenacity import (
@@ -79,7 +79,7 @@ class DeepSeekProvider(LLMProvider):
         model: str = "deepseek-chat",
         base_url: str = "https://api.deepseek.com",
         timeout: int = 30,
-        max_tokens: int = 4000,
+        max_tokens: int = 8192,
         output_capacity: int | None = None,
     ):
         """
@@ -101,7 +101,7 @@ class DeepSeekProvider(LLMProvider):
         self.max_tokens = max_tokens
         self.output_capacity = output_capacity or max_tokens
 
-        event_hooks: dict = {}
+        event_hooks: dict[str, list[Any]] = {}
         if logger.isEnabledFor(logging.DEBUG):
             event_hooks = {
                 "request": [self._log_request],
