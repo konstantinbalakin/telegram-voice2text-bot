@@ -6,14 +6,14 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.services.text_processor import TextProcessor
-from src.services.llm_service import LLMError, LLMResult, LLMService
+from src.services.llm_service import DeepSeekProvider, LLMError, LLMResult, LLMService
 
 
 @pytest.fixture
 def mock_llm_service():
     """Create a mock LLM service with deepseek-chat provider."""
     service = MagicMock(spec=LLMService)
-    service.provider = MagicMock()
+    service.provider = MagicMock(spec=DeepSeekProvider)
     service.provider.model = "deepseek-chat"
     service.provider.max_tokens = 8192
     service.provider.output_capacity = 8192
@@ -161,22 +161,16 @@ class TestLongTextStrategy:
 
     @pytest.mark.asyncio
     async def test_reasoner_strategy_for_long_text(self, text_processor, mock_llm_service):
-        """Test: reasoner strategy switches to deepseek-reasoner for long texts."""
+        """Test: reasoner strategy routes long texts to _process_with_reasoner."""
         text_processor.long_text_strategy = "reasoner"
 
         long_text = "Предложение для теста. " * 3000  # ~66000 chars
 
-        original_refine = AsyncMock(return_value=LLMResult(text="Reasoner result."))
-        mock_llm_service.provider.refine_text = original_refine
-
-        with patch("src.services.text_processor.DeepSeekProvider") as mock_provider_class:
-            reasoner_provider = AsyncMock()
-            reasoner_provider.refine_text = AsyncMock(
-                return_value=LLMResult(text="Reasoner result.")
-            )
-            reasoner_provider.close = AsyncMock()
-            mock_provider_class.return_value = reasoner_provider
-
+        with patch.object(
+            text_processor,
+            "_process_with_reasoner",
+            new=AsyncMock(return_value=LLMResult(text="Reasoner result.")),
+        ):
             result = await text_processor.create_structured(long_text, emoji_level=0)
 
         assert "Reasoner result." in result
