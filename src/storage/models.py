@@ -5,7 +5,7 @@ Database models for Telegram Voice2Text Bot
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Date, ForeignKey
+from sqlalchemy import String, Integer, Boolean, DateTime, Date, Float, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -296,3 +296,265 @@ class TranscriptionSegment(Base):
             f"<TranscriptionSegment(id={self.id}, usage_id={self.usage_id}, "
             f"index={self.segment_index}, start={self.start_time:.2f})>"
         )
+
+
+# =============================================================================
+# Billing System Models
+# =============================================================================
+
+
+class BillingCondition(Base):
+    """General and individual billing conditions (key-value with optional user override)."""
+
+    __tablename__ = "billing_conditions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    value: Mapped[str] = mapped_column(String(500), nullable=False)
+    user_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True, index=True
+    )
+    valid_from: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    valid_to: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<BillingCondition(id={self.id}, key={self.key}, user_id={self.user_id})>"
+
+
+class SubscriptionTier(Base):
+    """Subscription levels (e.g. Pro)."""
+
+    __tablename__ = "subscription_tiers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    daily_limit_minutes: Mapped[float] = mapped_column(Float, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    # Relationships
+    prices: Mapped[list["SubscriptionPrice"]] = relationship(
+        "SubscriptionPrice", back_populates="tier", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return f"<SubscriptionTier(id={self.id}, name={self.name})>"
+
+
+class SubscriptionPrice(Base):
+    """Prices for subscription tiers by period."""
+
+    __tablename__ = "subscription_prices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tier_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("subscription_tiers.id"), nullable=False, index=True
+    )
+    period: Mapped[str] = mapped_column(String(20), nullable=False)  # week, month, year
+    amount_rub: Mapped[float] = mapped_column(Float, nullable=False)
+    amount_stars: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    # Relationships
+    tier: Mapped["SubscriptionTier"] = relationship("SubscriptionTier", back_populates="prices")
+
+    def __repr__(self) -> str:
+        return f"<SubscriptionPrice(id={self.id}, tier_id={self.tier_id}, period={self.period})>"
+
+
+class UserSubscription(Base):
+    """Active user subscriptions."""
+
+    __tablename__ = "user_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    tier_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("subscription_tiers.id"), nullable=False
+    )
+    period: Mapped[str] = mapped_column(String(20), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    auto_renew: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    payment_provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    next_subscription_tier_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("subscription_tiers.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), default="active", nullable=False
+    )  # active, cancelled, expired
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    # Relationships
+    tier: Mapped["SubscriptionTier"] = relationship("SubscriptionTier", foreign_keys=[tier_id])
+    next_tier: Mapped[Optional["SubscriptionTier"]] = relationship(
+        "SubscriptionTier", foreign_keys=[next_subscription_tier_id]
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<UserSubscription(id={self.id}, user_id={self.user_id}, "
+            f"tier_id={self.tier_id}, status={self.status})>"
+        )
+
+
+class MinutePackage(Base):
+    """Minute packages catalog."""
+
+    __tablename__ = "minute_packages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    minutes: Mapped[float] = mapped_column(Float, nullable=False)
+    price_rub: Mapped[float] = mapped_column(Float, nullable=False)
+    price_stars: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<MinutePackage(id={self.id}, name={self.name}, minutes={self.minutes})>"
+
+
+class UserMinuteBalance(Base):
+    """User minute balances (bonus and package)."""
+
+    __tablename__ = "user_minute_balances"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    balance_type: Mapped[str] = mapped_column(String(20), nullable=False)  # bonus, package
+    minutes_remaining: Mapped[float] = mapped_column(Float, nullable=False)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    source_description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<UserMinuteBalance(id={self.id}, user_id={self.user_id}, "
+            f"type={self.balance_type}, remaining={self.minutes_remaining})>"
+        )
+
+
+class DailyUsage(Base):
+    """Daily usage tracking per user."""
+
+    __tablename__ = "daily_usage"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    minutes_used: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    minutes_from_daily: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    minutes_from_bonus: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    minutes_from_package: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<DailyUsage(id={self.id}, user_id={self.user_id}, "
+            f"date={self.date}, minutes={self.minutes_used})>"
+        )
+
+
+class Purchase(Base):
+    """Purchase history (packages and subscriptions)."""
+
+    __tablename__ = "purchases"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    purchase_type: Mapped[str] = mapped_column(String(20), nullable=False)  # package, subscription
+    item_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    currency: Mapped[str] = mapped_column(String(10), nullable=False)
+    payment_provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    provider_transaction_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False
+    )  # pending, completed, failed, refunded
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<Purchase(id={self.id}, user_id={self.user_id}, "
+            f"type={self.purchase_type}, status={self.status})>"
+        )
+
+
+class DeductionLog(Base):
+    """Detailed log of minute deductions by source."""
+
+    __tablename__ = "deduction_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False, index=True
+    )
+    usage_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("usage.id"), nullable=False, index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False)  # daily, bonus, package
+    source_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    minutes_deducted: Mapped[float] = mapped_column(Float, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
+    )
