@@ -181,6 +181,17 @@ class Settings(BaseSettings):
         description="Maximum file size in bytes (20 MB - Telegram Bot API limit)",
     )
 
+    # Billing System
+    billing_enabled: bool = Field(
+        default=False, description="Enable billing system (tarification, quotas, payments)"
+    )
+    billing_limit_warning_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Threshold (0.0-1.0) for daily limit warning notification (default: 80%)",
+    )
+
     # LLM Refinement Configuration
     llm_refinement_enabled: bool = Field(default=True, description="Enable LLM text refinement")
     llm_provider: str = Field(
