@@ -3,7 +3,7 @@ Billing system repositories for database access
 """
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select, and_, func
@@ -227,10 +227,40 @@ class SubscriptionRepository:
         await self.session.flush()
         return subscription
 
+    async def set_next_tier(
+        self, subscription: UserSubscription, next_tier_id: int
+    ) -> UserSubscription:
+        """Set next_subscription_tier_id for downgrade at next renewal."""
+        subscription.next_subscription_tier_id = next_tier_id
+        subscription.updated_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return subscription
+
+    async def get_expired_subscriptions(self) -> list[UserSubscription]:
+        """Get active subscriptions that have expired."""
+        now = datetime.now(timezone.utc)
+        result = await self.session.execute(
+            select(UserSubscription).where(
+                and_(
+                    UserSubscription.status == "active",
+                    UserSubscription.expires_at <= now,
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def expire_subscription(self, subscription: UserSubscription) -> UserSubscription:
+        """Mark a subscription as expired."""
+        subscription.status = "expired"
+        subscription.auto_renew = False
+        subscription.updated_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return subscription
+
     async def get_expiring_subscriptions(self, days_ahead: int = 3) -> list[UserSubscription]:
         """Get subscriptions expiring within N days."""
         now = datetime.now(timezone.utc)
-        cutoff = now + __import__("datetime").timedelta(days=days_ahead)
+        cutoff = now + timedelta(days=days_ahead)
         result = await self.session.execute(
             select(UserSubscription).where(
                 and_(
