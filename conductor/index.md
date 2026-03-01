@@ -19,6 +19,8 @@ Navigation hub for project context.
 - [ ] [llm-output-truncation_20260221](./tracks/llm-output-truncation_20260221/index.md) — Обрезка ответа DeepSeek при обработке длинных текстов
 - [ ] [openai-size-check-bug_20250223](./tracks/openai-size-check-bug_20250223/index.md) — OpenAI File Size Check Blocks Chunking
 
+- [ ] [billing-system_20260302](./tracks/billing-system_20260302/index.md) — Billing System (Tarification)
+
 <!-- Auto-populated by /conductor:new-track -->
 
 ## Getting Started

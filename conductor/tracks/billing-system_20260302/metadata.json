@@ -1,0 +1,16 @@
+{
+  "id": "billing-system_20260302",
+  "title": "Billing System (Tarification)",
+  "type": "feature",
+  "status": "in_progress",
+  "created": "2026-03-02T00:00:00Z",
+  "updated": "2026-03-02T00:00:00Z",
+  "phases": {
+    "total": 12,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 72,
+    "completed": 0
+  }
+}
