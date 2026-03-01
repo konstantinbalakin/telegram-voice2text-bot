@@ -385,6 +385,20 @@ class UserMinuteBalanceRepository:
         await self.session.flush()
         return balance
 
+    async def has_welcome_bonus(self, user_id: int) -> bool:
+        """Check if user already received a welcome bonus."""
+        result = await self.session.execute(
+            select(func.count())
+            .select_from(UserMinuteBalance)
+            .where(
+                and_(
+                    UserMinuteBalance.user_id == user_id,
+                    UserMinuteBalance.source_description == "Welcome bonus",
+                )
+            )
+        )
+        return result.scalar_one() > 0
+
 
 class DailyUsageRepository:
     """Repository for DailyUsage model operations."""

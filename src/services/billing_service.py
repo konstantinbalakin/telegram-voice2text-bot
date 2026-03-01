@@ -4,7 +4,7 @@ Billing Service - core billing logic: limits, deductions, balances.
 
 import logging
 import math
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from src.storage.billing_repositories import (
@@ -14,6 +14,7 @@ from src.storage.billing_repositories import (
     DailyUsageRepository,
     DeductionLogRepository,
 )
+from src.storage.models import UserMinuteBalance
 
 logger = logging.getLogger(__name__)
 
@@ -203,3 +204,54 @@ class BillingService:
         daily_used = daily_usage.minutes_used if daily_usage else 0.0
 
         return (daily_used / daily_limit) >= self.warning_threshold
+
+    async def grant_welcome_bonus(self, user_id: int) -> Optional[UserMinuteBalance]:
+        """Grant welcome bonus to new user. Returns None if already granted or billing disabled."""
+        if not self.billing_enabled:
+            return None
+
+        already_granted = await self.balance_repo.has_welcome_bonus(user_id=user_id)
+        if already_granted:
+            logger.info(f"Welcome bonus already granted for user {user_id}")
+            return None
+
+        # Get bonus amount from billing conditions
+        bonus_minutes_str = await self.condition_repo.get_effective_value(
+            key="welcome_bonus_minutes", user_id=user_id
+        )
+        bonus_minutes = float(bonus_minutes_str) if bonus_minutes_str else 60.0
+
+        # Get bonus expiry days
+        bonus_days_str = await self.condition_repo.get_effective_value(
+            key="welcome_bonus_days", user_id=user_id
+        )
+        expires_at: Optional[datetime] = None
+        if bonus_days_str is not None:
+            expires_at = datetime.now(timezone.utc) + timedelta(days=int(bonus_days_str))
+
+        balance = await self.balance_repo.create(
+            user_id=user_id,
+            balance_type="bonus",
+            minutes_remaining=bonus_minutes,
+            expires_at=expires_at,
+            source_description="Welcome bonus",
+        )
+
+        logger.info(
+            f"Granted welcome bonus {bonus_minutes:.1f} min to user {user_id}, "
+            f"expires_at={expires_at}"
+        )
+        return balance
+
+    async def grant_grace_period(self, user_id: int, minutes: float = 60.0) -> UserMinuteBalance:
+        """Grant grace period bonus (perpetual) to existing user."""
+        balance = await self.balance_repo.create(
+            user_id=user_id,
+            balance_type="bonus",
+            minutes_remaining=minutes,
+            expires_at=None,
+            source_description="Grace period bonus",
+        )
+
+        logger.info(f"Granted grace period {minutes:.1f} min to user {user_id}")
+        return balance
