@@ -25,6 +25,7 @@ from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.telegram_client import TelegramClientService
 
 if TYPE_CHECKING:
+    from src.services.billing_service import BillingService
     from src.services.transcription_orchestrator import TranscriptionOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ class BotHandlers:
         queue_manager: QueueManager,
         orchestrator: "TranscriptionOrchestrator",
         telegram_client: Optional[TelegramClientService] = None,
+        billing_service: Optional["BillingService"] = None,
     ):
         """Initialize bot handlers.
 
@@ -137,12 +139,14 @@ class BotHandlers:
             queue_manager: Queue manager for request handling
             orchestrator: Transcription orchestrator for processing pipeline
             telegram_client: Optional Telegram Client API service for large files
+            billing_service: Optional billing service for limit checks
         """
         self.transcription_router = transcription_router
         self.audio_handler = audio_handler
         self.queue_manager = queue_manager
         self.orchestrator = orchestrator
         self.telegram_client = telegram_client
+        self.billing_service = billing_service
 
         # Register callback for queue updates
         self.queue_manager.set_on_queue_changed(self._update_queue_messages)
@@ -457,21 +461,37 @@ class BotHandlers:
 
         # 4. CHECK QUOTA (skip for document — duration unknown until ffprobe)
         if media_info.duration_seconds is not None:
-            async with get_session() as session:
-                user_repo = UserRepository(session)
-                db_user = await user_repo.get_by_telegram_id(user.id)
-                if not db_user:
-                    db_user = await user_repo.create(
-                        telegram_id=user.id,
-                        username=user.username,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
+            # 4a. Billing system check (new)
+            if self.billing_service and settings.billing_enabled:
+                duration_minutes = media_info.duration_seconds / 60.0
+                can_transcribe, billing_msg = await self.billing_service.check_can_transcribe(
+                    user_id=user.id, duration_minutes=duration_minutes
+                )
+                if not can_transcribe:
+                    await update.message.reply_text(
+                        f"⚠️ {billing_msg}\n\n"
+                        "Используйте /buy для покупки пакета минут\n"
+                        "или /subscribe для подписки."
                     )
-                quota_ok, quota_msg = self._check_quota(db_user, media_info.duration_seconds)
-                if not quota_ok:
-                    await update.message.reply_text(quota_msg)
-                    logger.warning(f"User {user.id} rejected: quota exceeded")
+                    logger.warning(f"User {user.id} rejected: billing limit exceeded")
                     return
+            else:
+                # 4b. Legacy quota check
+                async with get_session() as session:
+                    user_repo = UserRepository(session)
+                    db_user = await user_repo.get_by_telegram_id(user.id)
+                    if not db_user:
+                        db_user = await user_repo.create(
+                            telegram_id=user.id,
+                            username=user.username,
+                            first_name=user.first_name,
+                            last_name=user.last_name,
+                        )
+                    quota_ok, quota_msg = self._check_quota(db_user, media_info.duration_seconds)
+                    if not quota_ok:
+                        await update.message.reply_text(quota_msg)
+                        logger.warning(f"User {user.id} rejected: quota exceeded")
+                        return
 
         # Send initial status
         status_msg = await update.message.reply_text("📥 Загружаю файл...")

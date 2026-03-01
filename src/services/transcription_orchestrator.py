@@ -9,7 +9,7 @@ import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from telegram import InlineKeyboardMarkup, Message
 
@@ -32,6 +32,9 @@ from src.services.llm_service import LLMService
 from src.services.text_processor import TextProcessor
 from src.bot.keyboards import create_transcription_keyboard
 from src.utils.markdown_utils import sanitize_markdown, escape_markdownv2
+
+if TYPE_CHECKING:
+    from src.services.billing_service import BillingService
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +88,13 @@ class TranscriptionOrchestrator:
         audio_handler: AudioHandler,
         llm_service: Optional[LLMService] = None,
         text_processor: Optional[TextProcessor] = None,
+        billing_service: Optional["BillingService"] = None,
     ):
         self.transcription_router = transcription_router
         self.audio_handler = audio_handler
         self.llm_service = llm_service
         self.text_processor = text_processor
+        self.billing_service = billing_service
 
     async def _create_interactive_state_and_keyboard(
         self,
@@ -769,6 +774,31 @@ class TranscriptionOrchestrator:
 
                 final_text = result.text
                 await self._send_result_and_update_state(request, result.text, result)
+
+            # Billing: deduct minutes after successful transcription
+            if self.billing_service and settings.billing_enabled:
+                duration_minutes = request.duration_seconds / 60.0
+                await self.billing_service.deduct_minutes(
+                    user_id=request.user_id,
+                    usage_id=request.usage_id,
+                    duration_minutes=duration_minutes,
+                )
+
+                # Check and send warning if approaching limit
+                should_warn = await self.billing_service.should_warn_limit(user_id=request.user_id)
+                if should_warn:
+                    balance = await self.billing_service.get_user_balance(user_id=request.user_id)
+                    try:
+                        await request.user_message.reply_text(
+                            f"⚠️ Дневной лимит почти исчерпан!\n\n"
+                            f"Использовано: {balance['daily_used']:.1f} из "
+                            f"{balance['daily_limit']:.1f} мин\n"
+                            f"Бонусные минуты: {balance['bonus_minutes']:.1f}\n"
+                            f"Пакетные минуты: {balance['package_minutes']:.1f}\n\n"
+                            f"Используйте /buy или /subscribe для пополнения."
+                        )
+                    except Exception as warn_err:
+                        logger.warning(f"Failed to send billing warning: {warn_err}")
 
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
