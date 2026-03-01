@@ -23,8 +23,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.dataframe import dataframe_to_rows
 
 # ── Config ──────────────────────────────────────────────────────────────────
-DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "bot-prod-20260224-195317.db"
-OUTPUT_PATH = Path(__file__).parent / "2026-02-24-usage-report.xlsx"
+DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "bot-prod-20260227-153148.db"
+OUTPUT_PATH = Path(__file__).parent / "2026-02-27-usage-report.xlsx"
 DEV_IDS = (110859240, 437936743, 7964380536)
 COST_PER_MINUTE = 0.67  # RUB per audio minute (OpenAI Whisper API)
 START_DATE = "2025-12-15"
@@ -632,10 +632,7 @@ def build_user_segments(wb: Workbook, users_df: pd.DataFrame, usage_df: pd.DataF
     neg_base = udf[udf["model_size"] == "base"].groupby("user_id").size()
     neg_null = udf[udf["model_size"].isna()].groupby("user_id").size()
     neg_truncated = (
-        udf[
-            (udf["voice_duration_seconds"] > 420)
-            & (udf["created_dt"] < TRUNCATION_FIX_DATE)
-        ]
+        udf[(udf["voice_duration_seconds"] > 420) & (udf["created_dt"] < TRUNCATION_FIX_DATE)]
         .groupby("user_id")
         .size()
     )
@@ -906,7 +903,9 @@ def build_cohort_retention(wb: Workbook, usage_df: pd.DataFrame, users_df: pd.Da
         ws.add_chart(chart, f"A{n_data + 4}")
 
 
-def build_duration_distribution(wb: Workbook, usage_df: pd.DataFrame, users_df: pd.DataFrame) -> None:
+def build_duration_distribution(
+    wb: Workbook, usage_df: pd.DataFrame, users_df: pd.DataFrame
+) -> None:
     """Sheet 12: Duration Distribution — overall summary + per-user file length breakdown."""
     # ── Part 1: Overall summary ─────────────────────────────────────────────
     ws = wb.create_sheet("Duration Distribution")
@@ -1006,10 +1005,14 @@ def build_duration_distribution(wb: Workbook, usage_df: pd.DataFrame, users_df: 
     pivot["long_pct"] = pivot["long_files"] / pivot["total_files"]
 
     # Reorder columns for output
-    out_cols = ["telegram_id", "username", "first_name", "total_files"] + ordered_cols + [
-        "long_files",
-        "long_pct",
-    ]
+    out_cols = (
+        ["telegram_id", "username", "first_name", "total_files"]
+        + ordered_cols
+        + [
+            "long_files",
+            "long_pct",
+        ]
+    )
     out = pivot[out_cols].sort_values("total_files", ascending=False)
     out.columns = (
         ["Telegram ID", "Username", "First Name", "Total Files"]
