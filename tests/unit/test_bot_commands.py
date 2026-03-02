@@ -145,13 +145,10 @@ class TestBalanceCommand:
         mock_sub.expires_at = MagicMock()
         mock_sub.expires_at.strftime = MagicMock(return_value="15.03.2026")
         mock_sub.auto_renew = True
-        subscription_service.subscription_repo = AsyncMock()
-        subscription_service.subscription_repo.get_active_subscription = AsyncMock(
-            return_value=mock_sub
-        )
+        subscription_service.get_active_subscription = AsyncMock(return_value=mock_sub)
         mock_tier = MagicMock()
         mock_tier.name = "Pro"
-        subscription_service.subscription_repo.get_tier_by_id = AsyncMock(return_value=mock_tier)
+        subscription_service.get_tier_by_id = AsyncMock(return_value=mock_tier)
 
         cmds = BillingCommands(
             billing_service=billing_service,
@@ -279,8 +276,7 @@ class TestBuyCommand:
         pkg2.price_stars = 125
 
         payment_service = AsyncMock()
-        payment_service.package_repo = AsyncMock()
-        payment_service.package_repo.get_active_packages = AsyncMock(return_value=[pkg1, pkg2])
+        payment_service.get_active_packages = AsyncMock(return_value=[pkg1, pkg2])
 
         cmds = BillingCommands(
             billing_service=AsyncMock(),
@@ -305,8 +301,7 @@ class TestBuyCommand:
         from src.bot.billing_commands import BillingCommands
 
         payment_service = AsyncMock()
-        payment_service.package_repo = AsyncMock()
-        payment_service.package_repo.get_active_packages = AsyncMock(return_value=[])
+        payment_service.get_active_packages = AsyncMock(return_value=[])
 
         cmds = BillingCommands(
             billing_service=AsyncMock(),

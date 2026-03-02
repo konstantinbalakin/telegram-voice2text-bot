@@ -19,13 +19,14 @@ class TranscriptionRequest:
     """Request for transcription processing."""
 
     id: str
-    user_id: int
+    user_id: int  # Telegram user ID (for logging and context)
     file_path: Path
     duration_seconds: int
     context: TranscriptionContext
     status_message: Message
     user_message: Message  # Original user voice message (for replies)
     usage_id: int  # Database usage record ID for updates
+    db_user_id: int = 0  # Internal DB user ID (for billing)
     draft_messages: list[Message] = field(default_factory=list)  # Draft messages for hybrid mode
     created_at: float = field(default_factory=lambda: asyncio.get_event_loop().time())
 

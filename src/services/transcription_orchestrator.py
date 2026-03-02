@@ -776,18 +776,23 @@ class TranscriptionOrchestrator:
                 await self._send_result_and_update_state(request, result.text, result)
 
             # Billing: deduct minutes after successful transcription
-            if self.billing_service and settings.billing_enabled:
+            # Uses db_user_id (internal DB ID), not user_id (Telegram ID)
+            if self.billing_service and settings.billing_enabled and request.db_user_id:
                 duration_minutes = request.duration_seconds / 60.0
                 await self.billing_service.deduct_minutes(
-                    user_id=request.user_id,
+                    user_id=request.db_user_id,
                     usage_id=request.usage_id,
                     duration_minutes=duration_minutes,
                 )
 
                 # Check and send warning if approaching limit
-                should_warn = await self.billing_service.should_warn_limit(user_id=request.user_id)
+                should_warn = await self.billing_service.should_warn_limit(
+                    user_id=request.db_user_id
+                )
                 if should_warn:
-                    balance = await self.billing_service.get_user_balance(user_id=request.user_id)
+                    balance = await self.billing_service.get_user_balance(
+                        user_id=request.db_user_id
+                    )
                     try:
                         await request.user_message.reply_text(
                             f"⚠️ Дневной лимит почти исчерпан!\n\n"
