@@ -20,6 +20,7 @@ Navigation hub for project context.
 - [ ] [openai-size-check-bug_20250223](./tracks/openai-size-check-bug_20250223/index.md) — OpenAI File Size Check Blocks Chunking
 
 - [ ] [billing-system_20260302](./tracks/billing-system_20260302/index.md) — Billing System (Tarification)
+- [ ] [billing-review-fixes_20260302](./tracks/billing-review-fixes_20260302/index.md) — Billing System PR Review Fixes
 
 <!-- Auto-populated by /conductor:new-track -->
 

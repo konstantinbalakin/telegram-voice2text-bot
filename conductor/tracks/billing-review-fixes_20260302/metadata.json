@@ -1,0 +1,16 @@
+{
+  "id": "billing-review-fixes_20260302",
+  "title": "Billing System PR Review Fixes",
+  "type": "refactor",
+  "status": "pending",
+  "created": "2026-03-02T00:00:00Z",
+  "updated": "2026-03-02T00:00:00Z",
+  "phases": {
+    "total": 6,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 42,
+    "completed": 0
+  }
+}
