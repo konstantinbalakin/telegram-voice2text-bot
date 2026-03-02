@@ -199,6 +199,7 @@ async def main() -> None:
 
     if settings.billing_enabled:
         try:
+            from src.bot.billing_commands import BillingCommands
             from src.services.billing_service import BillingService
             from src.services.subscription_service import SubscriptionService
             from src.services.payments.payment_service import PaymentService
@@ -229,6 +230,15 @@ async def main() -> None:
             payment_callback_handlers = PaymentCallbackHandlers
             pre_checkout_handler = pre_checkout_query_handler
             success_payment_handler = successful_payment_handler
+
+            billing_commands = BillingCommands(
+                billing_service=billing_service,
+                subscription_service=subscription_service,
+                payment_service=payment_service,
+            )
+
+            # Inject billing service into orchestrator (created before billing init)
+            orchestrator.billing_service = billing_service
 
             logger.info("Billing services initialized")
         except Exception as e:
@@ -331,6 +341,14 @@ async def main() -> None:
         application.add_handler(CommandHandler("balance", billing_commands.balance_command))
         application.add_handler(CommandHandler("subscribe", billing_commands.subscribe_command))
         application.add_handler(CommandHandler("buy", billing_commands.buy_command))
+        application.add_handler(
+            CallbackQueryHandler(billing_commands.back_to_buy_callback, pattern=r"^back:buy$")
+        )
+        application.add_handler(
+            CallbackQueryHandler(
+                billing_commands.back_to_subscribe_callback, pattern=r"^back:subscribe$"
+            )
+        )
         logger.info("Billing commands registered (/balance, /subscribe, /buy)")
     else:
         application.add_handler(CommandHandler("start", bot_handlers.start_command))

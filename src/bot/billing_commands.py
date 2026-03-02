@@ -85,51 +85,117 @@ class BillingCommands:
             logger.error(f"Error in /balance command: {e}", exc_info=True)
             await update.message.reply_text(BILLING_ERROR_MSG)
 
+    async def _build_subscribe_text_and_markup(self) -> tuple[str, InlineKeyboardMarkup | None]:
+        """Build subscribe catalog text and button markup."""
+        tiers = await self.subscription_service.get_available_tiers()
+
+        if not tiers:
+            return "Подписки сейчас недоступны. Попробуйте позже.", None
+
+        lines = ["Доступные подписки:\n"]
+        for tier in tiers:
+            lines.append(f"--- {tier.name} ---")
+            lines.append(f"Дневной лимит: {tier.daily_limit_minutes} мин/день")
+            if tier.description:
+                lines.append(f"{tier.description}")
+
+        buttons = []
+        for tier in tiers:
+            prices = await self.subscription_service.get_tier_prices(tier.id)
+            if prices:
+                for price in prices:
+                    period_label = _period_label(price.period)
+                    row = []
+                    if price.amount_stars:
+                        row.append(
+                            InlineKeyboardButton(
+                                f"{tier.name} ({period_label}) - {price.amount_stars} ⭐",
+                                callback_data=f"sub_stars:{tier.id}:{price.period}",
+                            )
+                        )
+                    if price.amount_rub:
+                        row.append(
+                            InlineKeyboardButton(
+                                f"{tier.name} ({period_label}) - {price.amount_rub:.0f} ₽",
+                                callback_data=f"sub_card:{tier.id}:{price.period}",
+                            )
+                        )
+                    if row:
+                        buttons.append(row)
+
+        if not buttons:
+            return "\n".join(lines), None
+
+        text = "\n".join(lines) + "\n\nНажмите на кнопку для оформления подписки:"
+        return text, InlineKeyboardMarkup(buttons)
+
     async def subscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /subscribe command — show subscription catalog with payment buttons."""
         if not update.message:
             return
 
         try:
-            tiers = await self.subscription_service.get_available_tiers()
-
-            if not tiers:
-                await update.message.reply_text("Подписки сейчас недоступны. Попробуйте позже.")
-                return
-
-            lines = ["Доступные подписки:\n"]
-
-            for tier in tiers:
-                lines.append(f"--- {tier.name} ---")
-                lines.append(f"Дневной лимит: {tier.daily_limit_minutes} мин/день")
-                if tier.description:
-                    lines.append(f"{tier.description}")
-
-            await update.message.reply_text("\n".join(lines))
-
-            buttons = []
-            for tier in tiers:
-                prices = await self.subscription_service.get_tier_prices(tier.id)
-                if prices:
-                    for price in prices:
-                        period_label = _period_label(price.period)
-                        button_text = f"{tier.name} ({period_label})"
-                        if price.amount_stars:
-                            button_text += f" - {price.amount_stars} ⭐"
-                        callback_data = f"sub_stars:{tier.id}:{price.period}"
-                        buttons.append(
-                            [InlineKeyboardButton(button_text, callback_data=callback_data)]
-                        )
-
-            if buttons:
-                reply_markup = InlineKeyboardMarkup(buttons)
-                await update.message.reply_text(
-                    "Нажмите на кнопку ниже для оформления подписки:",
-                    reply_markup=reply_markup,
-                )
+            text, markup = await self._build_subscribe_text_and_markup()
+            await update.message.reply_text(text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error in /subscribe command: {e}", exc_info=True)
             await update.message.reply_text(BILLING_ERROR_MSG)
+
+    async def back_to_subscribe_callback(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle back:subscribe callback — return to subscription catalog."""
+        if not update.callback_query:
+            return
+
+        try:
+            await update.callback_query.answer()
+            text, markup = await self._build_subscribe_text_and_markup()
+            await update.callback_query.edit_message_text(text, reply_markup=markup)
+        except Exception as e:
+            logger.error(f"Error in back_to_subscribe_callback: {e}", exc_info=True)
+
+    async def _build_buy_text_and_markup(self) -> tuple[str, InlineKeyboardMarkup | None]:
+        """Build buy packages text and button markup."""
+        packages = await self.payment_service.get_active_packages()
+
+        if not packages:
+            return "Пакеты минут сейчас недоступны. Попробуйте позже.", None
+
+        lines = ["Пакеты минут:\n"]
+        for pkg in packages:
+            price_parts = []
+            if pkg.price_rub:
+                price_parts.append(f"{pkg.price_rub:.0f} руб")
+            if pkg.price_stars:
+                price_parts.append(f"{pkg.price_stars} ⭐")
+            lines.append(f"{pkg.name} ({pkg.minutes} мин) — {' / '.join(price_parts)}")
+
+        buttons = []
+        for pkg in packages:
+            row = []
+            if pkg.price_stars:
+                row.append(
+                    InlineKeyboardButton(
+                        f"{pkg.name} ({pkg.price_stars} ⭐)",
+                        callback_data=f"pkg_stars:{pkg.id}",
+                    )
+                )
+            if pkg.price_rub:
+                row.append(
+                    InlineKeyboardButton(
+                        f"{pkg.name} ({pkg.price_rub:.0f} ₽)",
+                        callback_data=f"pkg_card:{pkg.id}",
+                    )
+                )
+            if row:
+                buttons.append(row)
+
+        if not buttons:
+            return "\n".join(lines), None
+
+        text = "\n".join(lines) + "\n\nНажмите на кнопку для покупки пакета минут:"
+        return text, InlineKeyboardMarkup(buttons)
 
     async def buy_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /buy command — show minute package catalog with payment buttons."""
@@ -137,40 +203,25 @@ class BillingCommands:
             return
 
         try:
-            packages = await self.payment_service.get_active_packages()
-
-            if not packages:
-                await update.message.reply_text("Пакеты минут сейчас недоступны. Попробуйте позже.")
-                return
-
-            lines = ["Пакеты минут:\n"]
-
-            for pkg in packages:
-                price_parts = []
-                if pkg.price_rub:
-                    price_parts.append(f"{pkg.price_rub:.0f} руб")
-                if pkg.price_stars:
-                    price_parts.append(f"{pkg.price_stars} ⭐")
-                lines.append(f"{pkg.name} ({pkg.minutes} мин) — {' / '.join(price_parts)}")
-
-            await update.message.reply_text("\n".join(lines))
-
-            buttons = []
-            for pkg in packages:
-                if pkg.price_stars:
-                    button_text = f"{pkg.name} ({pkg.price_stars} ⭐)"
-                    callback_data = f"pkg_stars:{pkg.id}"
-                    buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
-
-            if buttons:
-                reply_markup = InlineKeyboardMarkup(buttons)
-                await update.message.reply_text(
-                    "Нажмите на кнопку ниже для покупки пакета минут:",
-                    reply_markup=reply_markup,
-                )
+            text, markup = await self._build_buy_text_and_markup()
+            await update.message.reply_text(text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error in /buy command: {e}", exc_info=True)
             await update.message.reply_text(BILLING_ERROR_MSG)
+
+    async def back_to_buy_callback(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle back:buy callback — return to packages catalog."""
+        if not update.callback_query:
+            return
+
+        try:
+            await update.callback_query.answer()
+            text, markup = await self._build_buy_text_and_markup()
+            await update.callback_query.edit_message_text(text, reply_markup=markup)
+        except Exception as e:
+            logger.error(f"Error in back_to_buy_callback: {e}", exc_info=True)
 
     async def start_command_with_billing(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE

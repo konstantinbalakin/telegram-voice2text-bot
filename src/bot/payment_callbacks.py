@@ -4,7 +4,7 @@ Payment callback handlers for inline payment buttons.
 
 import logging
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from src.services.payments.base import PaymentRequest, PaymentType
@@ -13,6 +13,13 @@ from src.storage.database import get_session
 from src.storage.repositories import UserRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _back_button(callback_data: str) -> InlineKeyboardMarkup:
+    """Create a single 'Back' button markup."""
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("« Назад", callback_data=callback_data)]]
+    )
 
 
 class PaymentCallbackHandlers:
@@ -71,6 +78,7 @@ class PaymentCallbackHandlers:
                 request=request,
             )
 
+            back = _back_button("back:buy")
             if result.success and result.payment_url:
                 await update.callback_query.message.reply_text(
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
@@ -78,14 +86,18 @@ class PaymentCallbackHandlers:
             else:
                 error_msg = result.error_message or "Неизвестная ошибка"
                 await update.callback_query.edit_message_text(
-                    f"Ошибка создания платежа: {error_msg}"
+                    f"Ошибка создания платежа: {error_msg}", reply_markup=back
                 )
         except ValueError as e:
             logger.error(f"User lookup error in buy_package_stars_callback: {e}")
-            await update.callback_query.edit_message_text("Ошибка: пользователь не найден")
+            await update.callback_query.edit_message_text(
+                "Ошибка: пользователь не найден", reply_markup=_back_button("back:buy")
+            )
         except Exception as e:
             logger.error(f"Error in buy_package_stars_callback: {e}", exc_info=True)
-            await update.callback_query.edit_message_text("Произошла ошибка. Попробуйте позже.")
+            await update.callback_query.edit_message_text(
+                "Произошла ошибка. Попробуйте позже.", reply_markup=_back_button("back:buy")
+            )
 
     async def buy_subscription_stars_callback(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -125,6 +137,7 @@ class PaymentCallbackHandlers:
                 request=request,
             )
 
+            back = _back_button("back:subscribe")
             if result.success and result.payment_url:
                 await update.callback_query.message.reply_text(
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
@@ -132,14 +145,20 @@ class PaymentCallbackHandlers:
             else:
                 error_msg = result.error_message or "Неизвестная ошибка"
                 await update.callback_query.edit_message_text(
-                    f"Ошибка создания платежа: {error_msg}"
+                    f"Ошибка создания платежа: {error_msg}", reply_markup=back
                 )
         except ValueError as e:
             logger.error(f"User lookup error in buy_subscription_stars_callback: {e}")
-            await update.callback_query.edit_message_text("Ошибка: пользователь не найден")
+            await update.callback_query.edit_message_text(
+                "Ошибка: пользователь не найден",
+                reply_markup=_back_button("back:subscribe"),
+            )
         except Exception as e:
             logger.error(f"Error in buy_subscription_stars_callback: {e}", exc_info=True)
-            await update.callback_query.edit_message_text("Произошла ошибка. Попробуйте позже.")
+            await update.callback_query.edit_message_text(
+                "Произошла ошибка. Попробуйте позже.",
+                reply_markup=_back_button("back:subscribe"),
+            )
 
     async def buy_package_card_callback(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -155,8 +174,10 @@ class PaymentCallbackHandlers:
 
         try:
             await update.callback_query.answer()
-
-            await update.callback_query.edit_message_text("💳 Оплата картой скоро будет доступна")
+            await update.callback_query.edit_message_text(
+                "💳 Оплата картой скоро будет доступна",
+                reply_markup=_back_button("back:buy"),
+            )
         except Exception as e:
             logger.error(f"Error in buy_package_card_callback: {e}", exc_info=True)
 
@@ -174,8 +195,10 @@ class PaymentCallbackHandlers:
 
         try:
             await update.callback_query.answer()
-
-            await update.callback_query.edit_message_text("💳 Оплата картой скоро будет доступна")
+            await update.callback_query.edit_message_text(
+                "💳 Оплата картой скоро будет доступна",
+                reply_markup=_back_button("back:subscribe"),
+            )
         except Exception as e:
             logger.error(f"Error in buy_subscription_card_callback: {e}", exc_info=True)
 

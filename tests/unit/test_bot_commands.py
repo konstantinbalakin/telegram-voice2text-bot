@@ -565,3 +565,129 @@ class TestUpdatedHelpCommand:
         text = update.message.reply_text.call_args[0][0]
         assert "/balance" in text
         assert "/subscribe" in text or "/buy" in text
+
+
+# =============================================================================
+# Back navigation callback tests
+# =============================================================================
+
+
+def _make_callback_update(data: str) -> tuple:
+    """Create a mock Update with callback_query for back-button tests."""
+    callback_query = MagicMock()
+    callback_query.data = data
+    callback_query.answer = AsyncMock()
+    callback_query.edit_message_text = AsyncMock()
+
+    update = MagicMock(spec=Update)
+    update.callback_query = callback_query
+    return update, callback_query
+
+
+class TestBackToByCallback:
+    """Tests for back:buy callback handler."""
+
+    @pytest.mark.asyncio
+    async def test_back_to_buy_rebuilds_menu(self) -> None:
+        """Test back_to_buy_callback edits message with package buttons."""
+        from src.bot.billing_commands import BillingCommands
+
+        payment_service = AsyncMock()
+        payment_service.get_active_packages = AsyncMock(
+            return_value=[
+                MagicMock(id=1, name="Small", minutes=60, price_rub=100, price_stars=50),
+            ]
+        )
+
+        cmds = BillingCommands(
+            billing_service=AsyncMock(),
+            subscription_service=AsyncMock(),
+            payment_service=payment_service,
+        )
+
+        update, callback_query = _make_callback_update("back:buy")
+        await cmds.back_to_buy_callback(update, _make_context())
+
+        callback_query.answer.assert_awaited_once()
+        callback_query.edit_message_text.assert_awaited_once()
+        call_args = callback_query.edit_message_text.await_args
+        assert "Small" in call_args.args[0]
+        assert call_args.kwargs["reply_markup"] is not None
+
+    @pytest.mark.asyncio
+    async def test_back_to_buy_no_packages(self) -> None:
+        """Test back_to_buy_callback when no packages available."""
+        from src.bot.billing_commands import BillingCommands
+
+        payment_service = AsyncMock()
+        payment_service.get_active_packages = AsyncMock(return_value=[])
+
+        cmds = BillingCommands(
+            billing_service=AsyncMock(),
+            subscription_service=AsyncMock(),
+            payment_service=payment_service,
+        )
+
+        update, callback_query = _make_callback_update("back:buy")
+        await cmds.back_to_buy_callback(update, _make_context())
+
+        callback_query.edit_message_text.assert_awaited_once()
+        call_args = callback_query.edit_message_text.await_args
+        assert "недоступн" in call_args.args[0].lower()
+
+
+class TestBackToSubscribeCallback:
+    """Tests for back:subscribe callback handler."""
+
+    @pytest.mark.asyncio
+    async def test_back_to_subscribe_rebuilds_menu(self) -> None:
+        """Test back_to_subscribe_callback edits message with subscription buttons."""
+        from src.bot.billing_commands import BillingCommands
+
+        subscription_service = AsyncMock()
+        subscription_service.get_available_tiers = AsyncMock(
+            return_value=[
+                MagicMock(id=1, name="Pro", daily_limit_minutes=60, description="Pro plan"),
+            ]
+        )
+        subscription_service.get_tier_prices = AsyncMock(
+            return_value=[
+                MagicMock(period="month", amount_stars=100, amount_rub=500),
+            ]
+        )
+
+        cmds = BillingCommands(
+            billing_service=AsyncMock(),
+            subscription_service=subscription_service,
+            payment_service=AsyncMock(),
+        )
+
+        update, callback_query = _make_callback_update("back:subscribe")
+        await cmds.back_to_subscribe_callback(update, _make_context())
+
+        callback_query.answer.assert_awaited_once()
+        callback_query.edit_message_text.assert_awaited_once()
+        call_args = callback_query.edit_message_text.await_args
+        assert "Pro" in call_args.args[0]
+        assert call_args.kwargs["reply_markup"] is not None
+
+    @pytest.mark.asyncio
+    async def test_back_to_subscribe_no_tiers(self) -> None:
+        """Test back_to_subscribe_callback when no tiers available."""
+        from src.bot.billing_commands import BillingCommands
+
+        subscription_service = AsyncMock()
+        subscription_service.get_available_tiers = AsyncMock(return_value=[])
+
+        cmds = BillingCommands(
+            billing_service=AsyncMock(),
+            subscription_service=subscription_service,
+            payment_service=AsyncMock(),
+        )
+
+        update, callback_query = _make_callback_update("back:subscribe")
+        await cmds.back_to_subscribe_callback(update, _make_context())
+
+        callback_query.edit_message_text.assert_awaited_once()
+        call_args = callback_query.edit_message_text.await_args
+        assert "недоступн" in call_args.args[0].lower()

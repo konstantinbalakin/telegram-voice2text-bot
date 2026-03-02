@@ -130,6 +130,24 @@ async def test_buy_package_card_callback_shows_stub():
 
 
 @pytest.mark.asyncio
+async def test_buy_package_card_callback_has_back_button():
+    """Test: buy_package_card_callback includes a back:buy button."""
+    handlers = PaymentCallbackHandlers(payment_service=AsyncMock())
+    callback_query = _make_callback_query("pkg_card:1")
+    update = _make_update(callback_query)
+
+    await handlers.buy_package_card_callback(update, MagicMock())
+
+    call_args = callback_query.edit_message_text.await_args
+    markup = call_args.kwargs["reply_markup"]
+    back_buttons = [
+        btn for row in markup.inline_keyboard for btn in row if btn.callback_data == "back:buy"
+    ]
+    assert len(back_buttons) == 1
+    assert "назад" in back_buttons[0].text.lower()
+
+
+@pytest.mark.asyncio
 async def test_buy_subscription_card_callback_shows_stub():
     """Test: buy_subscription_card_callback shows stub message."""
     payment_service = AsyncMock()
@@ -145,6 +163,74 @@ async def test_buy_subscription_card_callback_shows_stub():
     callback_query.edit_message_text.assert_awaited_once()
     call_args = callback_query.edit_message_text.await_args
     assert "карт" in call_args.args[0].lower()
+
+
+@pytest.mark.asyncio
+async def test_buy_subscription_card_callback_has_back_button():
+    """Test: buy_subscription_card_callback includes a back:subscribe button."""
+    handlers = PaymentCallbackHandlers(payment_service=AsyncMock())
+    callback_query = _make_callback_query("sub_card:2:month")
+    update = _make_update(callback_query)
+
+    await handlers.buy_subscription_card_callback(update, MagicMock())
+
+    call_args = callback_query.edit_message_text.await_args
+    markup = call_args.kwargs["reply_markup"]
+    back_buttons = [
+        btn
+        for row in markup.inline_keyboard
+        for btn in row
+        if btn.callback_data == "back:subscribe"
+    ]
+    assert len(back_buttons) == 1
+    assert "назад" in back_buttons[0].text.lower()
+
+
+@pytest.mark.asyncio
+async def test_buy_package_stars_error_has_back_button():
+    """Test: buy_package_stars_callback error response includes back:buy button."""
+    payment_service = AsyncMock()
+    payment_service.create_payment = AsyncMock(
+        return_value=MagicMock(success=False, payment_url=None, error_message="fail")
+    )
+    handlers = PaymentCallbackHandlers(payment_service=payment_service)
+    callback_query = _make_callback_query("pkg_stars:1")
+    update = _make_update(callback_query)
+
+    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+        await handlers.buy_package_stars_callback(update, MagicMock())
+
+    call_args = callback_query.edit_message_text.await_args
+    markup = call_args.kwargs["reply_markup"]
+    back_buttons = [
+        btn for row in markup.inline_keyboard for btn in row if btn.callback_data == "back:buy"
+    ]
+    assert len(back_buttons) == 1
+
+
+@pytest.mark.asyncio
+async def test_buy_subscription_stars_error_has_back_button():
+    """Test: buy_subscription_stars_callback error response includes back:subscribe button."""
+    payment_service = AsyncMock()
+    payment_service.create_payment = AsyncMock(
+        return_value=MagicMock(success=False, payment_url=None, error_message="fail")
+    )
+    handlers = PaymentCallbackHandlers(payment_service=payment_service)
+    callback_query = _make_callback_query("sub_stars:2:month")
+    update = _make_update(callback_query)
+
+    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+        await handlers.buy_subscription_stars_callback(update, MagicMock())
+
+    call_args = callback_query.edit_message_text.await_args
+    markup = call_args.kwargs["reply_markup"]
+    back_buttons = [
+        btn
+        for row in markup.inline_keyboard
+        for btn in row
+        if btn.callback_data == "back:subscribe"
+    ]
+    assert len(back_buttons) == 1
 
 
 # =============================================================================
