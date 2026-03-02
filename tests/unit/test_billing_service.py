@@ -427,3 +427,117 @@ async def test_daily_limit_zero_means_no_daily_minutes():
 
     assert result["from_daily"] == 0.0
     assert result["from_package"] == 3.0
+
+
+# =============================================================================
+# Task 1.1: get_limit_status Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_limit_status_ok():
+    """Test: status="ok" when daily_used/daily_limit < 0.8"""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 5.0
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = mock_daily
+
+    status = await service.get_limit_status(user_id=1)
+    assert status == "ok"
+
+
+@pytest.mark.asyncio
+async def test_get_limit_status_warning():
+    """Test: status="warning" when 0.8 <= daily_used/daily_limit < 1.0"""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 8.5
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = mock_daily
+
+    status = await service.get_limit_status(user_id=1)
+    assert status == "warning"
+
+
+@pytest.mark.asyncio
+async def test_get_limit_status_exhausted():
+    """Test: status="exhausted" when daily_used >= daily_limit"""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 10.0
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = mock_daily
+
+    status = await service.get_limit_status(user_id=1)
+    assert status == "exhausted"
+
+
+@pytest.mark.asyncio
+async def test_get_limit_status_exhausted_over_limit():
+    """Test: status="exhausted" when daily_used exceeds daily_limit"""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 15.0
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = mock_daily
+
+    status = await service.get_limit_status(user_id=1)
+    assert status == "exhausted"
+
+
+@pytest.mark.asyncio
+async def test_get_limit_status_no_usage_today():
+    """Test: status="ok" when no usage today (0.0 / 10.0 < 0.8)"""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = None
+
+    status = await service.get_limit_status(user_id=1)
+    assert status == "ok"
+
+
+@pytest.mark.asyncio
+async def test_get_limit_status_warning_at_exactly_80_percent():
+    """Test: status="warning" at exactly 80% threshold"""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 8.0
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = mock_daily
+
+    status = await service.get_limit_status(user_id=1)
+    assert status == "warning"
+
+
+@pytest.mark.asyncio
+async def test_get_limit_status_exhausted_at_exactly_100_percent():
+    """Test: status="exhausted" at exactly 100% usage"""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 10.0
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = mock_daily
+
+    status = await service.get_limit_status(user_id=1)
+    assert status == "exhausted"

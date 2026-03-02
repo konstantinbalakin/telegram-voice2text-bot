@@ -787,22 +787,34 @@ class TranscriptionOrchestrator:
                         duration_minutes=duration_minutes,
                     )
 
-                    # Check and send warning if approaching limit
-                    should_warn = await self.billing_service.should_warn_limit(
-                        user_id=request.db_user_id
-                    )
-                    if should_warn:
+                    # Check limit status and send appropriate warning
+                    status = await self.billing_service.get_limit_status(user_id=request.db_user_id)
+                    if status in ("warning", "exhausted"):
                         balance = await self.billing_service.get_user_balance(
                             user_id=request.db_user_id
                         )
-                        await request.user_message.reply_text(
-                            f"⚠️ Дневной лимит почти исчерпан!\n\n"
-                            f"Использовано: {balance.daily_used:.1f} из "
-                            f"{balance.daily_limit:.1f} мин\n"
-                            f"Бонусные минуты: {balance.bonus_minutes:.1f}\n"
-                            f"Пакетные минуты: {balance.package_minutes:.1f}\n\n"
-                            f"Используйте /buy или /subscribe для пополнения."
-                        )
+                        # Display used minutes limited to daily_limit
+                        display_used = min(balance.daily_used, balance.daily_limit)
+
+                        if status == "exhausted":
+                            message = (
+                                f"⛔ Дневной лимит исчерпан!\n\n"
+                                f"Использовано: {display_used:.1f} из "
+                                f"{balance.daily_limit:.1f} мин\n"
+                                f"Бонусные минуты: {balance.bonus_minutes:.1f}\n"
+                                f"Пакетные минуты: {balance.package_minutes:.1f}\n\n"
+                                f"Используйте /buy или /subscribe для пополнения."
+                            )
+                        else:  # status == "warning"
+                            message = (
+                                f"⚠️ Дневной лимит почти исчерпан!\n\n"
+                                f"Использовано: {display_used:.1f} из "
+                                f"{balance.daily_limit:.1f} мин\n"
+                                f"Бонусные минуты: {balance.bonus_minutes:.1f}\n"
+                                f"Пакетные минуты: {balance.package_minutes:.1f}\n\n"
+                                f"Используйте /buy или /subscribe для пополнения."
+                            )
+                        await request.user_message.reply_text(message)
                 except Exception as billing_err:
                     logger.error(
                         f"Billing error for request {request.id}: {billing_err}",

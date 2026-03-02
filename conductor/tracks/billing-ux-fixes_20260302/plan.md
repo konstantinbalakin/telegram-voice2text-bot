@@ -22,27 +22,27 @@
 
 ### Tasks
 
-- [ ] Task 1.1: Написать тесты для метода `BillingService.get_limit_status()`:
+- [x] Task 1.1: Написать тесты для метода `BillingService.get_limit_status()`:
   - Тест "ok" — когда `daily_used/daily_limit < 0.8`
   - Тест "warning" — когда `0.8 <= daily_used/daily_limit < 1.0`
   - Тест "exhausted" — когда `daily_used >= daily_limit`
-- [ ] Task 1.2: Реализовать метод `BillingService.get_limit_status(user_id)` в `src/services/billing_service.py`
-- [ ] Task 1.3: Написать тесты для уведомления в `TranscriptionOrchestrator.process_transcription()`:
+- [x] Task 1.2: Реализовать метод `BillingService.get_limit_status(user_id)` в `src/services/billing_service.py`
+- [x] Task 1.3: Написать тесты для уведомления в `TranscriptionOrchestrator.process_transcription()`:
   - Проверить что при status="exhausted" показывается сообщение "Дневной лимит исчерпан!"
   - Проверить что при status="warning" показывается сообщение "Дневной лимит почти исчерпан!"
   - Проверить что отображение использует `min(daily_used, daily_limit)`
-- [ ] Task 1.4: Обновить логику уведомления в `src/services/transcription_orchestrator.py`:
+- [x] Task 1.4: Обновить логику уведомления в `src/services/transcription_orchestrator.py`:
   - Заменить `should_warn_limit()` на `get_limit_status()`
   - Добавить условие для статусов "exhausted" и "warning"
   - Использовать `min(balance.daily_used, balance.daily_limit)` в уведомлении
 
 ### Verification
 
-- [ ] Тесты для `get_limit_status()` проходят
-- [ ] Тесты для уведомления проходят
-- [ ] При `daily_used >= daily_limit` показывается "Дневной лимит исчерпан!"
-- [ ] При `0.8 <= daily_used/daily_limit < 1.0` показывается "Дневной лимит почти исчерпан!"
-- [ ] В уведомлении отображается `min(daily_used, daily_limit)`
+- [x] Тесты для `get_limit_status()` проходят
+- [x] Тесты для уведомления проходят
+- [x] При `daily_used >= daily_limit` показывается "Дневной лимит исчерпан!"
+- [x] При `0.8 <= daily_used/daily_limit < 1.0` показывается "Дневной лимит почти исчерпан!"
+- [x] В уведомлении отображается `min(daily_used, daily_limit)`
 
 ---
 

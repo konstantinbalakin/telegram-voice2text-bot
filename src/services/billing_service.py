@@ -304,6 +304,39 @@ class BillingService:
 
             return (daily_used / daily_limit) >= self.warning_threshold
 
+    async def get_limit_status(self, user_id: int) -> str:
+        """Get user's daily limit status.
+
+        Returns:
+            "exhausted" if daily_used >= daily_limit
+            "warning" if 0.8 <= daily_used/daily_limit < 1.0
+            "ok" if daily_used/daily_limit < 0.8
+        """
+        async with self._repos() as (
+            condition_repo,
+            subscription_repo,
+            _balance_repo,
+            daily_usage_repo,
+            _deduction_log_repo,
+        ):
+            daily_limit = await self._get_daily_limit_with_repos(
+                user_id, condition_repo, subscription_repo
+            )
+            if daily_limit <= 0:
+                return "ok"
+
+            daily_usage = await daily_usage_repo.get_by_user_and_date(
+                user_id=user_id, usage_date=date.today()
+            )
+            daily_used = daily_usage.minutes_used if daily_usage else 0.0
+
+            if daily_used >= daily_limit:
+                return "exhausted"
+            elif (daily_used / daily_limit) >= self.warning_threshold:
+                return "warning"
+            else:
+                return "ok"
+
     async def grant_welcome_bonus(self, user_id: int) -> Optional[UserMinuteBalance]:
         """Grant welcome bonus to new user. Returns None if already granted or billing disabled."""
         if not self.billing_enabled:
