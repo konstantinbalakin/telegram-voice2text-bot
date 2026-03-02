@@ -16,7 +16,7 @@
 
 ---
 
-## Phase 1: Fix Daily Limit Notification Logic
+## Phase 1: Fix Daily Limit Notification Logic ✅ Complete
 
 Исправление логики уведомлений о дневном лимите (проблемы 1 и 2).
 
@@ -52,28 +52,28 @@
 
 ### Tasks
 
-- [ ] Task 2.1: Написать тесты для `PaymentCallbackHandlers`:
+- [x] Task 2.1: Написать тесты для `PaymentCallbackHandlers`:
   - Тест `buy_package_stars_callback()` — создаёт invoice через PaymentService
   - Тест `buy_subscription_stars_callback()` — создаёт invoice через PaymentService
   - Тест `buy_package_card_callback()` — показывает заглушку
   - Тест `buy_subscription_card_callback()` — показывает заглушку
-- [ ] Task 2.2: Реализовать `PaymentCallbackHandlers` в новом файле `src/bot/payment_callbacks.py`:
+- [x] Task 2.2: Реализовать `PaymentCallbackHandlers` в новом файле `src/bot/payment_callbacks.py`:
   - `buy_package_stars_callback()` — обрабатывает `pkg_stars:{id}`
   - `buy_subscription_stars_callback()` — обрабатывает `sub_stars:{id}:{period}`
   - `buy_package_card_callback()` — обрабатывает `pkg_card:{id}` (заглушка)
   - `buy_subscription_card_callback()` — обрабатывает `sub_card:{id}:{period}` (заглушка)
-- [ ] Task 2.3: Написать тесты для обработчиков Telegram Stars платежей:
+- [x] Task 2.3: Написать тесты для обработчиков Telegram Stars платежей:
   - Тест `pre_checkout_query_handler()` — подтверждает pre-checkout
   - Тест `successful_payment_handler()` — парсит payload и вызывает `handle_successful_payment()`
-- [ ] Task 2.4: Реализовать обработчики Telegram Stars платежей в `src/bot/payment_callbacks.py`:
+- [x] Task 2.4: Реализовать обработчики Telegram Stars платежей в `src/bot/payment_callbacks.py`:
   - `pre_checkout_query_handler()` — всегда возвращает `ok=True`
   - `successful_payment_handler()` — парсит payload, вызывает `PaymentService.handle_successful_payment()`, отправляет подтверждение
 
 ### Verification
 
-- [ ] Тесты для `PaymentCallbackHandlers` проходят
-- [ ] Тесты для обработчиков платежей проходят
-- [ ] Callback-обработчики корректно формируют ответные сообщения
+- [x] Тесты для `PaymentCallbackHandlers` проходят
+- [x] Тесты для обработчиков платежей проходят
+- [x] Callback-обработчики корректно формируют ответные сообщения
 
 ---
 
