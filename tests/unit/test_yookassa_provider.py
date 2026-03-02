@@ -180,15 +180,12 @@ def test_parse_metadata_subscription():
 
 
 def test_parse_metadata_invalid():
-    """Test parsing invalid metadata."""
+    """Test parsing incomplete metadata returns None."""
     result = YooKassaProvider.parse_metadata({"invalid": "data"})
-    assert result is not None  # Returns with defaults
-    assert result["item_id"] == 0
+    assert result is None  # Missing required fields
 
 
 def test_parse_metadata_none_values():
-    """Test parsing metadata with None values."""
+    """Test parsing empty metadata returns None."""
     result = YooKassaProvider.parse_metadata({})
-    assert result is not None
-    assert result["payment_type"] == ""
-    assert result["item_id"] == 0
+    assert result is None  # Missing required fields

@@ -65,15 +65,20 @@ class TelegramStarsProvider:
         """Parse payment payload string into components.
 
         Payload format: {payment_type}:{item_id}:{user_id}
+
+        Returns:
+            Parsed dict or None on malformed payload.
         """
         try:
             parts = payload.split(":")
             if len(parts) != 3:
+                logger.warning(f"Malformed Stars payload (expected 3 parts): {payload!r}")
                 return None
             return {
                 "payment_type": parts[0],
                 "item_id": int(parts[1]),
                 "user_id": int(parts[2]),
             }
-        except (ValueError, IndexError):
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Failed to parse Stars payload {payload!r}: {e}")
             return None

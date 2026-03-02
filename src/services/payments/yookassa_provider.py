@@ -122,13 +122,26 @@ class YooKassaProvider:
             )
 
     async def handle_callback(self, data: dict) -> PaymentResult:
-        """Handle YooKassa webhook notification."""
+        """Handle YooKassa webhook notification.
+
+        Verifies the payment via Payment.find_one() to prevent spoofed callbacks.
+        """
         try:
             event = data.get("event", "")
             payment_obj = data.get("object", {})
             payment_id = payment_obj.get("id", "")
 
             if event == "payment.succeeded":
+                # Verify payment status with YooKassa API to prevent spoofed webhooks
+                if self._configured and payment_id:
+                    verification = await self.verify_payment(payment_id)
+                    if not verification.success:
+                        logger.warning(
+                            f"Webhook verification failed for payment {payment_id}: "
+                            f"{verification.error_message}"
+                        )
+                        return verification
+
                 return PaymentResult(
                     success=True,
                     provider_transaction_id=payment_id,
@@ -179,12 +192,25 @@ class YooKassaProvider:
 
     @staticmethod
     def parse_metadata(metadata: dict) -> Optional[dict]:
-        """Parse payment metadata from YooKassa payment object."""
+        """Parse payment metadata from YooKassa payment object.
+
+        Returns:
+            Parsed dict or None on malformed metadata.
+        """
         try:
+            payment_type = metadata.get("payment_type")
+            item_id_raw = metadata.get("item_id")
+            user_id_raw = metadata.get("user_id")
+
+            if not payment_type or item_id_raw is None or user_id_raw is None:
+                logger.warning(f"Incomplete YooKassa metadata: {metadata}")
+                return None
+
             return {
-                "payment_type": metadata.get("payment_type", ""),
-                "item_id": int(metadata.get("item_id", 0)),
-                "user_id": int(metadata.get("user_id", 0)),
+                "payment_type": payment_type,
+                "item_id": int(item_id_raw),
+                "user_id": int(user_id_raw),
             }
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse YooKassa metadata {metadata}: {e}")
             return None

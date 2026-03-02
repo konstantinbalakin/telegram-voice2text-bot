@@ -220,8 +220,10 @@ class SubscriptionRepository:
         return result.scalar_one_or_none()
 
     async def cancel_subscription(self, subscription: UserSubscription) -> UserSubscription:
-        """Cancel a subscription (remains active until expiration)."""
-        subscription.status = "cancelled"
+        """Cancel a subscription: disable auto-renewal but keep active until expiry.
+
+        Status remains 'active' so the user retains their tier benefits until expires_at.
+        """
         subscription.auto_renew = False
         subscription.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
@@ -345,15 +347,25 @@ class UserMinuteBalanceRepository:
         return balance
 
     async def get_active_balances(self, user_id: int) -> list[UserMinuteBalance]:
-        """Get all active (non-zero, non-expired) balances for a user."""
+        """Get all active (non-zero, non-expired) balances for a user.
+
+        Ordered: bonus first, then package (deduction priority).
+        Within same type, oldest first (FIFO).
+        """
         now = datetime.now(timezone.utc)
         result = await self.session.execute(
-            select(UserMinuteBalance).where(
+            select(UserMinuteBalance)
+            .where(
                 and_(
                     UserMinuteBalance.user_id == user_id,
                     UserMinuteBalance.minutes_remaining > 0,
                     (UserMinuteBalance.expires_at.is_(None)) | (UserMinuteBalance.expires_at > now),
                 )
+            )
+            .order_by(
+                # bonus < package alphabetically, so ASC gives bonus first
+                UserMinuteBalance.balance_type.asc(),
+                UserMinuteBalance.created_at.asc(),
             )
         )
         return list(result.scalars().all())

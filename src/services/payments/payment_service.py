@@ -144,17 +144,42 @@ class PaymentService:
         payment_type: PaymentType,
         item_id: int,
         provider_transaction_id: Optional[str] = None,
+        period: str = "month",
+        purchase_id: Optional[int] = None,
     ) -> bool:
-        """Handle a successful payment: credit minutes or activate subscription."""
+        """Handle a successful payment: credit minutes or activate subscription.
+
+        Also marks the Purchase record as completed if purchase_id is provided.
+
+        Args:
+            provider_name: Payment provider identifier
+            user_id: Internal DB user ID
+            payment_type: PACKAGE or SUBSCRIPTION
+            item_id: Package or tier ID
+            provider_transaction_id: Provider-specific transaction ID
+            period: Subscription period (week/month/year), only for SUBSCRIPTION
+            purchase_id: Purchase record ID to mark as completed
+        """
+        success = False
         if payment_type == PaymentType.PACKAGE:
-            return await self._credit_package(user_id=user_id, package_id=item_id)
+            success = await self._credit_package(user_id=user_id, package_id=item_id)
         elif payment_type == PaymentType.SUBSCRIPTION:
-            return await self._activate_subscription(
+            success = await self._activate_subscription(
                 user_id=user_id,
                 tier_id=item_id,
                 payment_provider=provider_name,
+                period=period,
             )
-        return False
+
+        # Mark purchase as completed
+        if success and purchase_id is not None:
+            async with self._repos() as (purchase_repo, _, __, ___):
+                purchase = await purchase_repo.get_by_id(purchase_id)
+                if purchase:
+                    await purchase_repo.mark_completed(purchase)
+                    logger.info(f"Marked purchase {purchase_id} as completed")
+
+        return success
 
     async def _credit_package(self, user_id: int, package_id: int) -> bool:
         """Credit minute package to user.
@@ -178,14 +203,14 @@ class PaymentService:
         return True
 
     async def _activate_subscription(
-        self, user_id: int, tier_id: int, payment_provider: str
+        self, user_id: int, tier_id: int, payment_provider: str, period: str = "month"
     ) -> bool:
         """Activate subscription for user."""
         assert self.subscription_service is not None
         await self.subscription_service.create_subscription(
             user_id=user_id,
             tier_id=tier_id,
-            period="month",
+            period=period,
             payment_provider=payment_provider,
         )
 

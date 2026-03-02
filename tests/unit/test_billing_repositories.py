@@ -284,7 +284,7 @@ async def test_subscription_cancel(async_session):
     )
 
     cancelled = await repo.cancel_subscription(sub)
-    assert cancelled.status == "cancelled"
+    assert cancelled.status == "active"  # Remains active until expiry
     assert cancelled.auto_renew is False
 
 

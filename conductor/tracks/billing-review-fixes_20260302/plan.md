@@ -3,7 +3,7 @@
 **Track ID:** billing-review-fixes_20260302
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-02
-**Status:** [ ] Not Started
+**Status:** [~] In Progress
 
 ## Overview
 
@@ -15,13 +15,13 @@
 
 ### Tasks
 
-- [ ] Task 1.1: Переделать DI биллинга на per-request сессии — сервисы принимают session_factory вместо готовых репозиториев (`src/main.py`, `src/services/billing_service.py`, `src/services/subscription_service.py`, `src/services/payments/payment_service.py`)
-- [ ] Task 1.2: Написать тесты на per-request сессии — проверить, что каждый вызов сервиса создаёт новую сессию
-- [ ] Task 1.3: Исправить маппинг Telegram ID -> DB ID в `handlers.py` и `transcription_orchestrator.py` — использовать `UserRepository.get_by_telegram_id()`
-- [ ] Task 1.4: Написать тесты на корректный маппинг ID
-- [ ] Task 1.5: Обернуть синхронные вызовы YooKassa SDK в `asyncio.to_thread()` (`yookassa_provider.py`)
-- [ ] Task 1.6: Написать тесты на async-обёртку YooKassa
-- [ ] Task 1.7: Заменить hardcoded `customer@example.com` — добавить параметр email в PaymentRequest или убрать receipt при отсутствии email
+- [x] Task 1.1: Переделать DI биллинга на per-request сессии — сервисы принимают session_factory вместо готовых репозиториев (`src/main.py`, `src/services/billing_service.py`, `src/services/subscription_service.py`, `src/services/payments/payment_service.py`)
+- [x] Task 1.2: Написать тесты на per-request сессии — проверить, что каждый вызов сервиса создаёт новую сессию
+- [x] Task 1.3: Исправить маппинг Telegram ID -> DB ID в `handlers.py` и `transcription_orchestrator.py` — использовать `UserRepository.get_by_telegram_id()`
+- [x] Task 1.4: Написать тесты на корректный маппинг ID
+- [x] Task 1.5: Обернуть синхронные вызовы YooKassa SDK в `asyncio.to_thread()` (`yookassa_provider.py`)
+- [x] Task 1.6: Написать тесты на async-обёртку YooKassa
+- [x] Task 1.7: Заменить hardcoded `customer@example.com` — добавить параметр email в PaymentRequest или убрать receipt при отсутствии email
 
 ### Verification
 
