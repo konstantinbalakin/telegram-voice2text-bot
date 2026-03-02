@@ -334,7 +334,7 @@ jobs:
             DEFAULT_DAILY_QUOTA_SECONDS=60 #еще не внедрено
 
             # Billing System
-            BILLING_ENABLED=false
+            BILLING_ENABLED=true
             BILLING_LIMIT_WARNING_THRESHOLD=0.8
             YOOKASSA_SHOP_ID=${{ secrets.YOOKASSA_SHOP_ID }}
             YOOKASSA_SECRET_KEY=${{ secrets.YOOKASSA_SECRET_KEY }}

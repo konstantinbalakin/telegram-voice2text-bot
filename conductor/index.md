@@ -21,6 +21,7 @@ Navigation hub for project context.
 
 - [ ] [billing-system_20260302](./tracks/billing-system_20260302/index.md) — Billing System (Tarification)
 - [ ] [billing-review-fixes_20260302](./tracks/billing-review-fixes_20260302/index.md) — Billing System PR Review Fixes
+- [ ] [billing-ux-fixes_20260302](./tracks/billing-ux-fixes_20260302/index.md) — Billing UX Fixes
 
 <!-- Auto-populated by /conductor:new-track -->
 
