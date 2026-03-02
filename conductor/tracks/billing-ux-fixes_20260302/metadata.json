@@ -2,15 +2,15 @@
   "id": "billing-ux-fixes_20260302",
   "title": "Billing UX Fixes",
   "type": "bug",
-  "status": "in_progress",
+  "status": "complete",
   "created": "2026-03-02T00:00:00Z",
   "updated": "2026-03-02T00:00:00Z",
   "phases": {
     "total": 5,
-    "completed": 0
+    "completed": 5
   },
   "tasks": {
     "total": 25,
-    "completed": 0
+    "completed": 25
   }
 }
