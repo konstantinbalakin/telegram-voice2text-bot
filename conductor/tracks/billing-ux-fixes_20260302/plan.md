@@ -77,7 +77,7 @@
 
 ---
 
-## Phase 3: Add Inline Buttons to /subscribe and /buy Commands
+## Phase 3: Add Inline Buttons to /subscribe and /buy Commands ✅ Complete
 
 Добавление inline кнопок оплаты в команды `/subscribe` и `/buy`.
 
@@ -113,32 +113,32 @@
 
 ### Tasks
 
-- [ ] Task 4.1: Добавить импорты в `src/main.py`:
+- [x] Task 4.1: Добавить импорты в `src/main.py`:
   - `TelegramStarsProvider` из `src.services.payments.telegram_stars`
   - `PaymentCallbackHandlers`, `pre_checkout_query_handler`, `successful_payment_handler` из `src.bot.payment_callbacks`
-- [ ] Task 4.2: Зарегистрировать TelegramStarsProvider:
+- [x] Task 4.2: Зарегистрировать TelegramStarsProvider:
   - Создать экземпляр `TelegramStarsProvider(bot=application.bot)`
   - Вызвать `payment_service.register_provider(telegram_stars_provider)`
-- [ ] Task 4.3: Создать PaymentCallbackHandlers:
+- [x] Task 4.3: Создать PaymentCallbackHandlers:
   - Создать экземпляр `PaymentCallbackHandlers(payment_service=payment_service)`
-- [ ] Task 4.4: Зарегистрировать callback-обработчики:
+- [x] Task 4.4: Зарегистрировать callback-обработчики:
   - `CallbackQueryHandler(buy_package_stars_callback, pattern=r"^pkg_stars:\d+$")`
   - `CallbackQueryHandler(buy_subscription_stars_callback, pattern=r"^sub_stars:\d+:(week|month|year)$")`
   - `CallbackQueryHandler(buy_package_card_callback, pattern=r"^pkg_card:\d+$")`
   - `CallbackQueryHandler(buy_subscription_card_callback, pattern=r"^sub_card:\d+:(week|month|year)$")`
-- [ ] Task 4.5: Зарегистрировать обработчики Telegram Stars платежей:
+- [x] Task 4.5: Зарегистрировать обработчики Telegram Stars платежей:
   - `PreCheckoutQueryHandler(pre_checkout_query_handler)`
   - `MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_handler)`
-- [ ] Task 4.6: Сохранить PaymentService в application_data:
+- [x] Task 4.6: Сохранить PaymentService в application_data:
   - `application.application_data["payment_service"] = payment_service`
 
 ### Verification
 
-- [ ] TelegramStarsProvider зарегистрирован в PaymentService
-- [ ] Callback-обработчики зарегистрированы
-- [ ] Обработчики платежей Telegram Stars зарегистрированы
-- [ ] PaymentService доступен через `application.application_data`
-- [ ] Бот запускается без ошибок
+- [x] TelegramStarsProvider зарегистрирован в PaymentService
+- [x] Callback-обработчики зарегистрированы
+- [x] Обработчики платежей Telegram Stars зарегистрированы
+- [x] PaymentService доступен через `application.application_data`
+- [x] Бот запускается без ошибок
 
 ---
 

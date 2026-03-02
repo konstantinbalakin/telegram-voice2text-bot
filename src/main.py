@@ -19,6 +19,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
     TypeHandler,
+    PreCheckoutQueryHandler,
 )
 
 from src.config import settings
@@ -42,6 +43,11 @@ from src.services.transcription_orchestrator import TranscriptionOrchestrator
 from src.services.export_service import ExportService
 from src.services.pdf_generator import PDFGenerator
 from src.bot.billing_commands import BillingCommands
+from src.bot.payment_callbacks import (
+    PaymentCallbackHandlers,
+    pre_checkout_query_handler,
+    successful_payment_handler,
+)
 from src.utils.logging_config import setup_logging, log_deployment_event, get_config_summary
 
 # Setup centralized logging
@@ -187,11 +193,17 @@ async def main() -> None:
     # Initialize billing services (if enabled)
     billing_service = None
     billing_commands = None
+    telegram_stars_provider = None
+    payment_callback_handlers = None
+    pre_checkout_handler = None
+    success_payment_handler = None
+
     if settings.billing_enabled:
         try:
             from src.services.billing_service import BillingService
             from src.services.subscription_service import SubscriptionService
             from src.services.payments.payment_service import PaymentService
+            from src.services.payments.telegram_stars import TelegramStarsProvider
 
             # Services use per-request sessions via session_factory.
             # Each method call creates a fresh session, avoiding use-after-free.
@@ -210,13 +222,16 @@ async def main() -> None:
                 subscription_service=subscription_service,
             )
 
-            billing_commands = BillingCommands(
-                billing_service=billing_service,
-                subscription_service=subscription_service,
-                payment_service=payment_service,
-            )
+            # Create Telegram Stars provider (will be registered after application is built)
+            telegram_stars_provider = TelegramStarsProvider
+            logger.info("Telegram Stars provider class ready")
 
-            logger.info("Billing system initialized")
+            # Create payment callback handler factories (will be registered after application is built)
+            payment_callback_handlers = PaymentCallbackHandlers
+            pre_checkout_handler = pre_checkout_query_handler
+            success_payment_handler = successful_payment_handler
+
+            logger.info("Billing services initialized")
         except Exception as e:
             logger.error(f"Failed to initialize billing system: {e}", exc_info=True)
             logger.warning("Continuing without billing system")
@@ -242,6 +257,55 @@ async def main() -> None:
         .connect_timeout(settings.telegram_timeout)
         .build()
     )
+
+    # Register Telegram Stars provider and payment handlers (after application is built)
+    if settings.billing_enabled and payment_service and telegram_stars_provider:
+        try:
+            # Register Telegram Stars provider
+            telegram_stars_provider_instance = telegram_stars_provider(bot=application.bot)
+            payment_service.register_provider(telegram_stars_provider_instance)
+            logger.info("Telegram Stars provider registered")
+
+            # Store payment_service in application_data for handlers
+            if hasattr(application, "application_data"):
+                application.application_data["payment_service"] = payment_service
+
+            # Create payment callback handlers
+            payment_callbacks = payment_callback_handlers(payment_service=payment_service)
+            pre_checkout = pre_checkout_handler(payment_service=payment_service)
+            success_payment = success_payment_handler(payment_service=payment_service)
+
+            # Register payment callback handlers
+            application.add_handler(
+                CallbackQueryHandler(
+                    payment_callbacks.buy_package_stars_callback, pattern=r"^pkg_stars:\d+$"
+                )
+            )
+            application.add_handler(
+                CallbackQueryHandler(
+                    payment_callbacks.buy_subscription_stars_callback,
+                    pattern=r"^sub_stars:\d+:(week|month|year)$",
+                )
+            )
+            application.add_handler(
+                CallbackQueryHandler(
+                    payment_callbacks.buy_package_card_callback, pattern=r"^pkg_card:\d+$"
+                )
+            )
+            application.add_handler(
+                CallbackQueryHandler(
+                    payment_callbacks.buy_subscription_card_callback,
+                    pattern=r"^sub_card:\d+:(week|month|year)$",
+                )
+            )
+
+            # Register pre-checkout and successful payment handlers for Telegram Stars
+            application.add_handler(PreCheckoutQueryHandler(pre_checkout))
+            application.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, success_payment))
+
+            logger.info("Payment callback handlers registered")
+        except Exception as e:
+            logger.error(f"Failed to register payment handlers: {e}", exc_info=True)
 
     # Debug: Log all incoming updates
     async def debug_all_updates(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -309,7 +373,9 @@ async def main() -> None:
             """Wrapper to create repositories with session for each callback."""
             logger.debug(f"callback_query_wrapper called! update type: {type(update)}")
             if hasattr(update, "callback_query"):
-                logger.debug(f"callback_query data: {update.callback_query.data if update.callback_query else 'None'}")  # type: ignore[attr-defined]
+                logger.debug(
+                    f"callback_query data: {update.callback_query.data if update.callback_query else 'None'}"
+                )  # type: ignore[attr-defined]
             async with get_session() as session:
                 state_repo = TranscriptionStateRepository(session)
                 variant_repo = TranscriptionVariantRepository(session)
