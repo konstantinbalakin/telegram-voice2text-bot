@@ -10,6 +10,6 @@
 
 | [x] | billing-system_20260302 | Billing System (Tarification) | 2026-03-02 | 2026-03-02 |
 
-| [~] | billing-review-fixes_20260302 | Billing System PR Review Fixes | 2026-03-02 | 2026-03-02 |
+| [x] | billing-review-fixes_20260302 | Billing System PR Review Fixes | 2026-03-02 | 2026-03-02 |
 
 <!-- Tracks registered by /conductor:new-track -->

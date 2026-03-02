@@ -3,36 +3,9 @@ Tests for billing integration into the transcription pipeline (Phase 6)
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
-from src.services.billing_service import BillingService
-
-
-# === Helpers ===
-
-
-def _make_billing_service(
-    billing_enabled: bool = True,
-) -> tuple[BillingService, dict[str, AsyncMock]]:
-    """Create BillingService with mocked repositories."""
-    mocks = {
-        "condition_repo": AsyncMock(),
-        "subscription_repo": AsyncMock(),
-        "balance_repo": AsyncMock(),
-        "daily_usage_repo": AsyncMock(),
-        "deduction_log_repo": AsyncMock(),
-    }
-
-    service = BillingService(
-        condition_repo=mocks["condition_repo"],
-        subscription_repo=mocks["subscription_repo"],
-        balance_repo=mocks["balance_repo"],
-        daily_usage_repo=mocks["daily_usage_repo"],
-        deduction_log_repo=mocks["deduction_log_repo"],
-        billing_enabled=billing_enabled,
-    )
-
-    return service, mocks
+from tests.conftest import make_billing_service
 
 
 # =============================================================================
@@ -43,7 +16,7 @@ def _make_billing_service(
 @pytest.mark.asyncio
 async def test_check_billing_before_transcription_allowed():
     """Test: billing check allows transcription when minutes available."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -58,7 +31,7 @@ async def test_check_billing_before_transcription_allowed():
 @pytest.mark.asyncio
 async def test_check_billing_before_transcription_blocked():
     """Test: billing check blocks transcription when no minutes."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -76,7 +49,7 @@ async def test_check_billing_before_transcription_blocked():
 @pytest.mark.asyncio
 async def test_check_billing_disabled_always_allows():
     """Test: billing disabled always allows transcription."""
-    service, _ = _make_billing_service(billing_enabled=False)
+    service, _ = make_billing_service(billing_enabled=False)
 
     can, reason = await service.check_can_transcribe(user_id=1, duration_minutes=100.0)
     assert can is True
@@ -90,7 +63,7 @@ async def test_check_billing_disabled_always_allows():
 @pytest.mark.asyncio
 async def test_deduct_after_transcription():
     """Test: deduction happens after successful transcription."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -116,7 +89,7 @@ async def test_deduct_after_transcription():
 @pytest.mark.asyncio
 async def test_transcription_seamless_with_enough_minutes():
     """Test: transcription proceeds seamlessly when user has enough minutes."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -135,7 +108,7 @@ async def test_transcription_seamless_with_enough_minutes():
 @pytest.mark.asyncio
 async def test_transcription_blocked_with_purchase_info():
     """Test: transcription blocked message includes info about available balance."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -159,7 +132,7 @@ async def test_transcription_blocked_with_purchase_info():
 @pytest.mark.asyncio
 async def test_warning_at_80_percent():
     """Test: warning triggered when 80%+ of daily limit used."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -175,7 +148,7 @@ async def test_warning_at_80_percent():
 @pytest.mark.asyncio
 async def test_no_warning_below_threshold():
     """Test: no warning when below threshold."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -191,7 +164,7 @@ async def test_no_warning_below_threshold():
 @pytest.mark.asyncio
 async def test_warning_after_deduction():
     """Test: warning check after deduction shows correct state."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -213,7 +186,7 @@ async def test_warning_after_deduction():
 @pytest.mark.asyncio
 async def test_get_purchase_buttons_text():
     """Test generating purchase suggestion text when minutes are insufficient."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"

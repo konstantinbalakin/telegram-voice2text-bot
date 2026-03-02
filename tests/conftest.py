@@ -5,9 +5,11 @@ Pytest configuration and fixtures
 import pytest
 import pytest_asyncio
 import asyncio
+from unittest.mock import AsyncMock
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
+from src.services.billing_service import BillingService
 from src.storage.models import Base
 from src.transcription.audio_handler import AudioHandler
 
@@ -72,3 +74,34 @@ async def async_session(async_engine):
 def audio_handler(tmp_path):
     """Create AudioHandler instance with temp directory."""
     return AudioHandler(temp_dir=tmp_path)
+
+
+def make_billing_service(
+    billing_enabled: bool = True,
+    warning_threshold: float = 0.8,
+) -> tuple[BillingService, dict[str, AsyncMock]]:
+    """Create BillingService with mocked repositories.
+
+    Shared helper used across billing test modules.
+    Returns (service, mocks_dict) where mocks_dict keys are:
+    condition_repo, subscription_repo, balance_repo, daily_usage_repo, deduction_log_repo.
+    """
+    mocks = {
+        "condition_repo": AsyncMock(),
+        "subscription_repo": AsyncMock(),
+        "balance_repo": AsyncMock(),
+        "daily_usage_repo": AsyncMock(),
+        "deduction_log_repo": AsyncMock(),
+    }
+
+    service = BillingService(
+        condition_repo=mocks["condition_repo"],
+        subscription_repo=mocks["subscription_repo"],
+        balance_repo=mocks["balance_repo"],
+        daily_usage_repo=mocks["daily_usage_repo"],
+        deduction_log_repo=mocks["deduction_log_repo"],
+        billing_enabled=billing_enabled,
+        warning_threshold=warning_threshold,
+    )
+
+    return service, mocks

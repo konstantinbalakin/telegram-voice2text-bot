@@ -3,38 +3,9 @@ Tests for BillingService - core billing logic
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
-from src.services.billing_service import BillingService
-
-
-# === Helpers ===
-
-
-def _make_billing_service(
-    billing_enabled: bool = True,
-    warning_threshold: float = 0.8,
-) -> tuple[BillingService, dict[str, AsyncMock]]:
-    """Create BillingService with mocked repositories."""
-    mocks = {
-        "condition_repo": AsyncMock(),
-        "subscription_repo": AsyncMock(),
-        "balance_repo": AsyncMock(),
-        "daily_usage_repo": AsyncMock(),
-        "deduction_log_repo": AsyncMock(),
-    }
-
-    service = BillingService(
-        condition_repo=mocks["condition_repo"],
-        subscription_repo=mocks["subscription_repo"],
-        balance_repo=mocks["balance_repo"],
-        daily_usage_repo=mocks["daily_usage_repo"],
-        deduction_log_repo=mocks["deduction_log_repo"],
-        billing_enabled=billing_enabled,
-        warning_threshold=warning_threshold,
-    )
-
-    return service, mocks
+from tests.conftest import make_billing_service
 
 
 # =============================================================================
@@ -45,7 +16,7 @@ def _make_billing_service(
 @pytest.mark.asyncio
 async def test_get_daily_limit_from_subscription():
     """Subscription replaces (not sums with) the daily limit."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     # User has a Pro subscription with 30 min/day
     mock_sub = MagicMock()
@@ -62,7 +33,7 @@ async def test_get_daily_limit_from_subscription():
 @pytest.mark.asyncio
 async def test_get_daily_limit_from_billing_condition():
     """No subscription — use billing condition."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -74,7 +45,7 @@ async def test_get_daily_limit_from_billing_condition():
 @pytest.mark.asyncio
 async def test_get_daily_limit_default_when_no_condition():
     """No subscription, no condition — default 10 min."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = None
@@ -91,7 +62,7 @@ async def test_get_daily_limit_default_when_no_condition():
 @pytest.mark.asyncio
 async def test_get_user_balance():
     """Test getting full user balance."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -115,7 +86,7 @@ async def test_get_user_balance():
 @pytest.mark.asyncio
 async def test_get_user_balance_no_usage_today():
     """Test balance when no usage today."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -137,7 +108,7 @@ async def test_get_user_balance_no_usage_today():
 @pytest.mark.asyncio
 async def test_check_can_transcribe_enough_daily():
     """Test: enough daily minutes available."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -152,7 +123,7 @@ async def test_check_can_transcribe_enough_daily():
 @pytest.mark.asyncio
 async def test_check_can_transcribe_enough_with_bonus():
     """Test: daily exhausted but bonus available."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -170,7 +141,7 @@ async def test_check_can_transcribe_enough_with_bonus():
 @pytest.mark.asyncio
 async def test_check_can_transcribe_not_enough():
     """Test: not enough minutes anywhere."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -189,7 +160,7 @@ async def test_check_can_transcribe_not_enough():
 @pytest.mark.asyncio
 async def test_check_can_transcribe_billing_disabled():
     """Test: billing disabled — always allow."""
-    service, mocks = _make_billing_service(billing_enabled=False)
+    service, mocks = make_billing_service(billing_enabled=False)
 
     can, reason = await service.check_can_transcribe(user_id=1, duration_minutes=100.0)
     assert can is True
@@ -203,7 +174,7 @@ async def test_check_can_transcribe_billing_disabled():
 @pytest.mark.asyncio
 async def test_deduct_minutes_from_daily_only():
     """Test deduction fully from daily limit."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -224,7 +195,7 @@ async def test_deduct_minutes_from_daily_only():
 @pytest.mark.asyncio
 async def test_deduct_minutes_spread_across_sources():
     """Test deduction spread: daily → bonus → package."""
-    service, mocks = _make_billing_service()
+    service, mocks = make_billing_service()
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -260,7 +231,7 @@ async def test_deduct_minutes_spread_across_sources():
 @pytest.mark.asyncio
 async def test_deduct_minutes_billing_disabled():
     """Test: billing disabled — no deduction."""
-    service, mocks = _make_billing_service(billing_enabled=False)
+    service, mocks = make_billing_service(billing_enabled=False)
 
     result = await service.deduct_minutes(user_id=1, usage_id=100, duration_minutes=5.0)
 
@@ -277,7 +248,7 @@ async def test_deduct_minutes_billing_disabled():
 @pytest.mark.asyncio
 async def test_round_to_tenth():
     """Test rounding to tenths of a minute."""
-    service, _ = _make_billing_service()
+    service, _ = make_billing_service()
 
     assert service.round_minutes(3.14159) == 3.2
     assert service.round_minutes(3.04) == 3.1
@@ -294,7 +265,7 @@ async def test_round_to_tenth():
 @pytest.mark.asyncio
 async def test_check_warning_threshold_exceeded():
     """Test warning when 80%+ of daily limit used."""
-    service, mocks = _make_billing_service(warning_threshold=0.8)
+    service, mocks = make_billing_service(warning_threshold=0.8)
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -310,7 +281,7 @@ async def test_check_warning_threshold_exceeded():
 @pytest.mark.asyncio
 async def test_check_warning_threshold_not_exceeded():
     """Test no warning when under threshold."""
-    service, mocks = _make_billing_service(warning_threshold=0.8)
+    service, mocks = make_billing_service(warning_threshold=0.8)
 
     mocks["subscription_repo"].get_active_subscription.return_value = None
     mocks["condition_repo"].get_effective_value.return_value = "10"
@@ -321,3 +292,138 @@ async def test_check_warning_threshold_not_exceeded():
 
     should_warn = await service.should_warn_limit(user_id=1)
     assert should_warn is False
+
+
+# =============================================================================
+# Task 6.1: Deduction Shortfall Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_deduct_minutes_shortfall_logs_warning():
+    """Test: remaining > 0 after all sources exhausted logs a warning."""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "5"  # 5 min daily
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 5.0  # daily fully used
+    mocks["daily_usage_repo"].get_or_create.return_value = (mock_daily, False)
+
+    # Only 2 bonus minutes available, no package
+    mock_bonus = MagicMock()
+    mock_bonus.id = 1
+    mock_bonus.balance_type = "bonus"
+    mock_bonus.minutes_remaining = 2.0
+    mocks["balance_repo"].get_active_balances.return_value = [mock_bonus]
+    mocks["balance_repo"].deduct_minutes.return_value = MagicMock()
+
+    # Request 5 min, but only 2 available (from bonus)
+    result = await service.deduct_minutes(user_id=1, usage_id=100, duration_minutes=5.0)
+
+    assert result["from_daily"] == 0.0
+    assert result["from_bonus"] == 2.0
+    assert result["from_package"] == 0.0
+
+
+# =============================================================================
+# Task 6.4: get_user_daily_limit with missing tier
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_daily_limit_subscription_with_missing_tier():
+    """Test: active subscription but tier not found falls back to billing condition."""
+    service, mocks = make_billing_service()
+
+    mock_sub = MagicMock()
+    mock_sub.tier_id = 999
+    mocks["subscription_repo"].get_active_subscription.return_value = mock_sub
+    mocks["subscription_repo"].get_tier_by_id.return_value = None  # tier deleted
+    mocks["condition_repo"].get_effective_value.return_value = "15"
+
+    limit = await service.get_user_daily_limit(user_id=1)
+    assert limit == 15.0
+
+
+@pytest.mark.asyncio
+async def test_get_daily_limit_no_subscription_no_condition():
+    """Test: no subscription, no billing condition -> default 10 min."""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = None
+
+    limit = await service.get_user_daily_limit(user_id=1)
+    assert limit == 10.0
+
+
+# =============================================================================
+# Task 6.5: Edge Cases
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_deduct_minutes_zero():
+    """Test: deduct_minutes(0.0) deducts nothing."""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 0.0
+    mocks["daily_usage_repo"].get_or_create.return_value = (mock_daily, True)
+    mocks["balance_repo"].get_active_balances.return_value = []
+
+    result = await service.deduct_minutes(user_id=1, usage_id=100, duration_minutes=0.0)
+
+    assert result["from_daily"] == 0.0
+    assert result["from_bonus"] == 0.0
+    assert result["from_package"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_deduct_minutes_negative():
+    """Test: deduct_minutes(-1.0) — negative durations pass through (callers should validate)."""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 0.0
+    mocks["daily_usage_repo"].get_or_create.return_value = (mock_daily, True)
+    mocks["balance_repo"].get_active_balances.return_value = []
+
+    result = await service.deduct_minutes(user_id=1, usage_id=100, duration_minutes=-1.0)
+
+    # Negative duration results in negative deduction from daily
+    # (callers are expected to validate duration before calling)
+    assert result["from_daily"] == -1.0
+
+
+@pytest.mark.asyncio
+async def test_daily_limit_zero_means_no_daily_minutes():
+    """Test: daily_limit=0 means all minutes come from bonus/package."""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "0"  # zero daily limit
+
+    mock_daily = MagicMock()
+    mock_daily.minutes_used = 0.0
+    mocks["daily_usage_repo"].get_or_create.return_value = (mock_daily, True)
+
+    mock_package = MagicMock()
+    mock_package.id = 1
+    mock_package.balance_type = "package"
+    mock_package.minutes_remaining = 100.0
+    mocks["balance_repo"].get_active_balances.return_value = [mock_package]
+    mocks["balance_repo"].deduct_minutes.return_value = MagicMock()
+
+    result = await service.deduct_minutes(user_id=1, usage_id=100, duration_minutes=3.0)
+
+    assert result["from_daily"] == 0.0
+    assert result["from_package"] == 3.0

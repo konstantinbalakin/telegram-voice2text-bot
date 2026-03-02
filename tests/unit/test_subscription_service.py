@@ -268,18 +268,59 @@ async def test_renew_subscription_with_downgrade():
 
 @pytest.mark.asyncio
 async def test_check_expired_subscriptions_marks_expired():
-    """Test that expired subscriptions are marked as expired."""
+    """Test that expired subscriptions without auto_renew are marked as expired."""
     service, mocks = _make_subscription_service()
 
     expired_sub = _mock_subscription(
         expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
         auto_renew=False,
     )
-    # Simulate repo returning expired subs
     mocks["subscription_repo"].get_expired_subscriptions.return_value = [expired_sub]
 
     count = await service.check_expired_subscriptions()
-    assert count >= 0
+    assert count == 1
+    mocks["subscription_repo"].expire_subscription.assert_called_once_with(expired_sub)
+
+
+@pytest.mark.asyncio
+async def test_check_expired_subscriptions_skips_auto_renew():
+    """Test that expired subscriptions with auto_renew=True are NOT marked expired."""
+    service, mocks = _make_subscription_service()
+
+    expired_sub_renew = _mock_subscription(
+        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        auto_renew=True,
+    )
+    mocks["subscription_repo"].get_expired_subscriptions.return_value = [expired_sub_renew]
+
+    count = await service.check_expired_subscriptions()
+    assert count == 0
+    mocks["subscription_repo"].expire_subscription.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_check_expired_subscriptions_mixed():
+    """Test mixed auto_renew and non-auto_renew expired subscriptions."""
+    service, mocks = _make_subscription_service()
+
+    expired_no_renew = _mock_subscription(
+        sub_id=1,
+        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        auto_renew=False,
+    )
+    expired_with_renew = _mock_subscription(
+        sub_id=2,
+        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+        auto_renew=True,
+    )
+    mocks["subscription_repo"].get_expired_subscriptions.return_value = [
+        expired_no_renew,
+        expired_with_renew,
+    ]
+
+    count = await service.check_expired_subscriptions()
+    assert count == 1  # only the one without auto_renew
+    mocks["subscription_repo"].expire_subscription.assert_called_once_with(expired_no_renew)
 
 
 # =============================================================================

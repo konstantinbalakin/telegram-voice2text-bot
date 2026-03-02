@@ -3,7 +3,7 @@
 **Track ID:** billing-review-fixes_20260302
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-02
-**Status:** [~] In Progress
+**Status:** [x] Complete
 
 ## Overview
 
@@ -114,27 +114,27 @@
 
 ### Tasks
 
-- [ ] Task 6.1: Добавить тест на недосписание минут (deduction shortfall) — `remaining > 0` после обхода всех источников
-- [ ] Task 6.2: Добавить тест на исключение провайдера при `create_payment` — Purchase должен быть marked_failed
-- [ ] Task 6.3: Усилить тест `check_expired_subscriptions` — проверить auto_renew логику, заменить `assert count >= 0` на точное значение
-- [ ] Task 6.4: Добавить тест `get_user_daily_limit` при отсутствующем tier
-- [ ] Task 6.5: Добавить тесты на граничные значения: `deduct_minutes(0.0)`, `deduct_minutes(-1.0)`, `daily_limit=0`
-- [ ] Task 6.6: Вынести `_make_billing_service` в `conftest.py` — убрать дублирование из 3 файлов
-- [ ] Task 6.7: Переименовать `test_billing_e2e.py` в `test_billing_scenarios.py` — название точнее отражает содержание
+- [x] Task 6.1: Добавить тест на недосписание минут (deduction shortfall) — `remaining > 0` после обхода всех источников
+- [x] Task 6.2: Добавить тест на исключение провайдера при `create_payment` — Purchase должен быть marked_failed
+- [x] Task 6.3: Усилить тест `check_expired_subscriptions` — проверить auto_renew логику, заменить `assert count >= 0` на точное значение
+- [x] Task 6.4: Добавить тест `get_user_daily_limit` при отсутствующем tier
+- [x] Task 6.5: Добавить тесты на граничные значения: `deduct_minutes(0.0)`, `deduct_minutes(-1.0)`, `daily_limit=0`
+- [x] Task 6.6: Вынести `_make_billing_service` в `conftest.py` — убрать дублирование из 3 файлов
+- [x] Task 6.7: Переименовать `test_billing_e2e.py` в `test_billing_scenarios.py` — название точнее отражает содержание
 
 ### Verification
 
-- [ ] Все тесты проходят: `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v`
-- [ ] Покрытие новых edge cases подтверждено
+- [x] Все тесты проходят: `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v`
+- [x] Покрытие новых edge cases подтверждено
 
 ## Final Verification
 
-- [ ] Все acceptance criteria выполнены
-- [ ] `uv run ruff check src/`
-- [ ] `uv run black --check src/ tests/`
-- [ ] `uv run mypy src/`
-- [ ] `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v`
-- [ ] Все тесты проходят (ожидается 918+)
+- [x] Все acceptance criteria выполнены
+- [x] `uv run ruff check src/`
+- [x] `uv run black --check src/ tests/`
+- [x] `uv run mypy src/`
+- [x] `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v`
+- [x] Все тесты проходят (977)
 - [ ] PR готов к мержу
 
 ---

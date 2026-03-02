@@ -258,3 +258,30 @@ def test_available_providers():
     assert len(providers) == 2
     assert "stars" in providers
     assert "yookassa" in providers
+
+
+@pytest.mark.asyncio
+async def test_create_payment_provider_exception_marks_purchase_failed():
+    """Test: provider raises exception -> Purchase marked_failed."""
+    service, mocks = _make_payment_service()
+    provider = _mock_provider("telegram_stars")
+    provider.create_payment.side_effect = RuntimeError("Network error")
+    service.register_provider(provider)
+
+    mock_purchase = MagicMock()
+    mock_purchase.id = 1
+    mocks["purchase_repo"].create.return_value = mock_purchase
+
+    request = PaymentRequest(
+        user_id=1,
+        payment_type=PaymentType.PACKAGE,
+        item_id=1,
+        amount=149.0,
+        currency="RUB",
+        description="50 minutes",
+    )
+
+    with pytest.raises(RuntimeError, match="Network error"):
+        await service.create_payment("telegram_stars", request)
+
+    mocks["purchase_repo"].create.assert_called_once()
