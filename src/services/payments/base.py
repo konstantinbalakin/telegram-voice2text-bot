@@ -33,6 +33,7 @@ class PaymentRequest:
     amount: float
     currency: str
     description: str
+    customer_email: Optional[str] = None
 
 
 @dataclass

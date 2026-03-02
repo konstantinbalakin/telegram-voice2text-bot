@@ -5,6 +5,7 @@ Note: Requires `yookassa` package to be installed for production use.
 This module can work in mock mode without the package for testing.
 """
 
+import asyncio
 import logging
 import uuid
 from typing import Optional
@@ -21,6 +22,7 @@ class YooKassaProvider:
     """Payment provider for YooKassa (Russian payment gateway).
 
     Supports: bank cards, SBP, recurring payments, 54-FZ receipts.
+    Sync SDK calls are wrapped in asyncio.to_thread() to avoid blocking the event loop.
     """
 
     def __init__(
@@ -62,7 +64,7 @@ class YooKassaProvider:
             idempotency_key = str(uuid.uuid4())
 
             receipt = {
-                "customer": {"email": "customer@example.com"},
+                "customer": {"email": request.customer_email} if request.customer_email else {},
                 "items": [
                     {
                         "description": request.description,
@@ -78,7 +80,7 @@ class YooKassaProvider:
                 ],
             }
 
-            payment_data = {
+            payment_data: dict = {
                 "amount": {
                     "value": f"{request.amount:.2f}",
                     "currency": "RUB",
@@ -94,10 +96,14 @@ class YooKassaProvider:
                     "item_id": str(request.item_id),
                     "user_id": str(request.user_id),
                 },
-                "receipt": receipt,
             }
 
-            payment = Payment.create(payment_data, idempotency_key)
+            # Only include receipt if customer email is provided (54-FZ requirement)
+            if request.customer_email:
+                payment_data["receipt"] = receipt
+
+            # Wrap sync SDK call in asyncio.to_thread to avoid blocking event loop
+            payment = await asyncio.to_thread(Payment.create, payment_data, idempotency_key)
 
             confirmation_url = None
             if payment.confirmation:
@@ -153,7 +159,8 @@ class YooKassaProvider:
         try:
             from yookassa import Payment  # type: ignore[import-not-found]
 
-            payment = Payment.find_one(transaction_id)
+            # Wrap sync SDK call in asyncio.to_thread to avoid blocking event loop
+            payment = await asyncio.to_thread(Payment.find_one, transaction_id)
 
             if payment.status == "succeeded":
                 return PaymentResult(
