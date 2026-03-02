@@ -197,7 +197,256 @@ def load_data() -> dict[str, pd.DataFrame]:
     return {"users": users_df, "usage": usage_df, "variants": variants_df}
 
 
-# ── Sheet Builders ──────────────────────────────────────────────────────────
+def load_billing_data() -> dict[str, pd.DataFrame]:
+    """Load billing-related data from SQLite (if billing tables exist)."""
+    conn = sqlite3.connect(DB_PATH)
+
+    # Check if billing tables exist
+    tables = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table'", conn)
+    table_names = set(tables["name"].tolist())
+    billing_tables = {
+        "daily_usage",
+        "purchases",
+        "user_subscriptions",
+        "user_minute_balances",
+        "subscription_tiers",
+        "minute_packages",
+    }
+
+    if not billing_tables.issubset(table_names):
+        conn.close()
+        return {}
+
+    dev_filter = f"u.telegram_id NOT IN {DEV_IDS}"
+
+    # Daily usage with billing breakdown
+    daily_usage_df = pd.read_sql_query(
+        f"""
+        SELECT
+            du.user_id,
+            u.telegram_id,
+            u.username,
+            du.date,
+            du.minutes_used,
+            du.minutes_from_daily,
+            du.minutes_from_bonus,
+            du.minutes_from_package
+        FROM daily_usage du
+        JOIN users u ON u.id = du.user_id
+        WHERE {dev_filter}
+        ORDER BY du.date
+        """,
+        conn,
+    )
+
+    # Purchases
+    purchases_df = pd.read_sql_query(
+        f"""
+        SELECT
+            p.id,
+            p.user_id,
+            u.telegram_id,
+            u.username,
+            p.purchase_type,
+            p.item_id,
+            p.amount,
+            p.currency,
+            p.payment_provider,
+            p.status,
+            p.created_at,
+            p.completed_at
+        FROM purchases p
+        JOIN users u ON u.id = p.user_id
+        WHERE {dev_filter}
+        ORDER BY p.created_at
+        """,
+        conn,
+    )
+
+    # Subscriptions
+    subscriptions_df = pd.read_sql_query(
+        f"""
+        SELECT
+            us.user_id,
+            u.telegram_id,
+            u.username,
+            st.name as tier_name,
+            us.period,
+            us.started_at,
+            us.expires_at,
+            us.auto_renew,
+            us.status,
+            us.payment_provider
+        FROM user_subscriptions us
+        JOIN users u ON u.id = us.user_id
+        JOIN subscription_tiers st ON st.id = us.tier_id
+        WHERE {dev_filter}
+        ORDER BY us.started_at
+        """,
+        conn,
+    )
+
+    # Minute balances
+    balances_df = pd.read_sql_query(
+        f"""
+        SELECT
+            umb.user_id,
+            u.telegram_id,
+            umb.balance_type,
+            umb.minutes_remaining,
+            umb.expires_at,
+            umb.source_description
+        FROM user_minute_balances umb
+        JOIN users u ON u.id = umb.user_id
+        WHERE {dev_filter}
+        ORDER BY umb.user_id
+        """,
+        conn,
+    )
+
+    conn.close()
+    return {
+        "daily_usage": daily_usage_df,
+        "purchases": purchases_df,
+        "subscriptions": subscriptions_df,
+        "balances": balances_df,
+    }
+
+
+def build_billing_conversion(
+    wb: Workbook,
+    daily_usage_df: pd.DataFrame,
+    purchases_df: pd.DataFrame,
+    users_df: pd.DataFrame,
+) -> None:
+    """Conversion Metrics sheet: limit exceeded %, Free-to-Paid CR, repeat purchases, ARPU."""
+    ws = wb.create_sheet("Conversion Metrics")
+
+    total_users = len(users_df)
+
+    # Users who exceeded daily limit (used bonus or package minutes)
+    if not daily_usage_df.empty:
+        exceeded = daily_usage_df[
+            (daily_usage_df["minutes_from_bonus"] > 0)
+            | (daily_usage_df["minutes_from_package"] > 0)
+        ]["user_id"].nunique()
+    else:
+        exceeded = 0
+    exceeded_pct = exceeded / total_users if total_users > 0 else 0
+
+    # Paying users (completed purchases)
+    if not purchases_df.empty:
+        completed = purchases_df[purchases_df["status"] == "completed"]
+        paying_users = completed["user_id"].nunique()
+        repeat_buyers = completed.groupby("user_id").size()
+        repeat_count = (repeat_buyers > 1).sum()
+        total_revenue = completed["amount"].sum()
+    else:
+        paying_users = 0
+        repeat_count = 0
+        total_revenue = 0
+
+    free_to_paid_cr = paying_users / total_users if total_users > 0 else 0
+    arpu = total_revenue / total_users if total_users > 0 else 0
+    arppu = total_revenue / paying_users if paying_users > 0 else 0
+
+    data = [
+        ["Metric", "Value"],
+        ["Total Users", total_users],
+        ["Users Exceeded Daily Limit", exceeded],
+        ["% Exceeded Daily Limit", f"{exceeded_pct:.1%}"],
+        ["Paying Users", paying_users],
+        ["Free-to-Paid CR", f"{free_to_paid_cr:.1%}"],
+        ["Repeat Buyers", repeat_count],
+        ["Total Revenue (RUB)", f"{total_revenue:.2f}"],
+        ["ARPU (RUB)", f"{arpu:.2f}"],
+        ["ARPPU (RUB)", f"{arppu:.2f}"],
+    ]
+
+    for row in data:
+        ws.append(row)
+    style_header(ws, 2)
+    auto_width(ws)
+
+
+def build_billing_financial(
+    wb: Workbook,
+    purchases_df: pd.DataFrame,
+    usage_df: pd.DataFrame,
+) -> None:
+    """Financial Metrics sheet: revenue, costs, gross margin."""
+    ws = wb.create_sheet("Financial Metrics")
+
+    if not purchases_df.empty:
+        completed = purchases_df[purchases_df["status"] == "completed"]
+        total_revenue = completed["amount"].sum()
+        revenue_by_type = completed.groupby("purchase_type")["amount"].sum()
+    else:
+        total_revenue = 0
+        revenue_by_type = pd.Series(dtype=float)
+
+    # Costs: total audio minutes * cost per minute
+    total_audio_min = usage_df["voice_duration_minutes"].sum() if not usage_df.empty else 0
+    total_cost = total_audio_min * COST_PER_MINUTE
+    gross_margin = total_revenue - total_cost
+
+    data = [
+        ["Metric", "Value"],
+        ["Total Revenue (RUB)", f"{total_revenue:.2f}"],
+        ["Revenue from Packages", f"{revenue_by_type.get('package', 0):.2f}"],
+        ["Revenue from Subscriptions", f"{revenue_by_type.get('subscription', 0):.2f}"],
+        ["Total Audio (min)", f"{total_audio_min:.1f}"],
+        ["Total Cost (RUB)", f"{total_cost:.2f}"],
+        ["Gross Margin (RUB)", f"{gross_margin:.2f}"],
+        ["Gross Margin %", f"{gross_margin / total_revenue:.1%}" if total_revenue > 0 else "N/A"],
+        ["Cost per MAU (RUB)", f"{total_cost / max(len(usage_df['user_id'].unique()), 1):.2f}"],
+    ]
+
+    for row in data:
+        ws.append(row)
+    style_header(ws, 2)
+    auto_width(ws)
+
+
+def build_billing_operational(
+    wb: Workbook,
+    daily_usage_df: pd.DataFrame,
+    balances_df: pd.DataFrame,
+) -> None:
+    """Operational Metrics: daily limit usage, welcome bonus consumption."""
+    ws = wb.create_sheet("Operational Metrics")
+
+    data = [["Metric", "Value"]]
+
+    if not daily_usage_df.empty:
+        avg_daily_usage = daily_usage_df["minutes_used"].mean()
+        avg_from_daily = daily_usage_df["minutes_from_daily"].mean()
+        avg_from_bonus = daily_usage_df["minutes_from_bonus"].mean()
+        avg_from_package = daily_usage_df["minutes_from_package"].mean()
+        data.extend(
+            [
+                ["Avg Daily Usage (min)", f"{avg_daily_usage:.2f}"],
+                ["Avg from Daily Limit", f"{avg_from_daily:.2f}"],
+                ["Avg from Bonus", f"{avg_from_bonus:.2f}"],
+                ["Avg from Package", f"{avg_from_package:.2f}"],
+            ]
+        )
+
+    if not balances_df.empty:
+        bonus_balances = balances_df[balances_df["balance_type"] == "bonus"]
+        total_bonus_remaining = bonus_balances["minutes_remaining"].sum()
+        users_with_bonus = bonus_balances[bonus_balances["minutes_remaining"] > 0].shape[0]
+        data.extend(
+            [
+                ["Total Bonus Remaining (min)", f"{total_bonus_remaining:.1f}"],
+                ["Users with Bonus > 0", users_with_bonus],
+            ]
+        )
+
+    for row in data:
+        ws.append(row)
+    style_header(ws, 2)
+    auto_width(ws)
 
 
 def build_users_sheet(wb: Workbook, users_df: pd.DataFrame) -> None:
@@ -1072,6 +1321,23 @@ def main() -> None:
     build_duration_distribution(wb, data["usage"], data["users"])
     print("  ✓ Duration Distribution")
     print("  ✓ User Duration Profile")
+
+    # Billing metrics (if billing tables exist)
+    billing_data = load_billing_data()
+    if billing_data:
+        build_billing_conversion(
+            wb,
+            billing_data["daily_usage"],
+            billing_data["purchases"],
+            data["users"],
+        )
+        print("  ✓ Conversion Metrics")
+        build_billing_financial(wb, billing_data["purchases"], data["usage"])
+        print("  ✓ Financial Metrics")
+        build_billing_operational(wb, billing_data["daily_usage"], billing_data["balances"])
+        print("  ✓ Operational Metrics")
+    else:
+        print("  ⓘ Billing tables not found, skipping billing metrics")
 
     print(f"Saving to {OUTPUT_PATH}...")
     wb.save(str(OUTPUT_PATH))
