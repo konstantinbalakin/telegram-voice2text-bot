@@ -2,15 +2,33 @@
   "id": "billing-system_20260302",
   "title": "Billing System (Tarification)",
   "type": "feature",
-  "status": "in_progress",
+  "status": "complete",
   "created": "2026-03-02T00:00:00Z",
-  "updated": "2026-03-02T00:00:00Z",
+  "updated": "2026-03-02T07:00:00Z",
+  "current_phase": 12,
+  "current_task": "12.5",
   "phases": {
     "total": 12,
-    "completed": 0
+    "completed": 12
   },
   "tasks": {
     "total": 72,
-    "completed": 0
-  }
+    "completed": 72
+  },
+  "commits": [
+    "a733861: feat(billing): add billing system database models and tests",
+    "c7e88e0: feat(billing): add alembic migration for billing system tables",
+    "04b20c3: feat(billing): add BILLING_ENABLED and BILLING_LIMIT_WARNING_THRESHOLD config",
+    "24eb56c: feat(billing): add billing repositories with tests",
+    "aff708c: feat(billing): add BillingService with core billing logic",
+    "ee2d3fd: feat(billing): add SubscriptionService with subscription management logic",
+    "46ab863: feat(billing): add welcome bonus and grace period",
+    "a39cc97: feat(billing): integrate billing into transcription pipeline",
+    "0e028c1: feat(billing): add payment service abstraction layer",
+    "17feace: feat(billing): add Telegram Stars payment provider",
+    "d9e8bc0: feat(billing): add YooKassa payment provider",
+    "6efb6d6: feat(billing): add billing commands and DI wiring",
+    "ce82227: feat(billing): add billing analytics sheets to Excel report",
+    "fcda653: feat(billing): add seed data migration and e2e tests"
+  ]
 }

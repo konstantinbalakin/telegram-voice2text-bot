@@ -8,6 +8,6 @@
 | [x] | llm-output-truncation_20260221 | Обрезка ответа DeepSeek при обработке длинных текстов | 2026-02-21 | 2026-02-21 |
 | [x] | openai-size-check-bug_20250223 | OpenAI File Size Check Blocks Chunking | 2026-02-23 | 2026-02-23 |
 
-| [~] | billing-system_20260302 | Billing System (Tarification) | 2026-03-02 | 2026-03-02 |
+| [x] | billing-system_20260302 | Billing System (Tarification) | 2026-03-02 | 2026-03-02 |
 
 <!-- Tracks registered by /conductor:new-track -->
