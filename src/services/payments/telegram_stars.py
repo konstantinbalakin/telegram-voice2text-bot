@@ -53,7 +53,12 @@ class TelegramStarsProvider:
             )
 
     async def handle_callback(self, data: dict) -> PaymentResult:
-        """Handle Telegram Stars payment callback (pre_checkout_query or successful_payment)."""
+        """Handle Telegram Stars payment callback.
+
+        Stars payments are fully managed by Telegram's built-in payment system.
+        The bot receives pre_checkout_query and successful_payment updates directly
+        from Telegram, so no additional verification is needed here.
+        """
         return PaymentResult(success=True)
 
     async def verify_payment(self, transaction_id: str) -> PaymentResult:

@@ -31,6 +31,11 @@ class BillingService:
 
     Accepts either a session_factory (production) or pre-built repos (testing).
     When session_factory is provided, each method creates a fresh DB session.
+
+    Args:
+        warning_threshold: Fraction of daily limit (0.0-1.0) at which user gets a warning.
+            Default 0.8 means warning at 80% usage.
+        billing_enabled: When False, all checks pass and no minutes are deducted.
     """
 
     def __init__(
@@ -183,9 +188,13 @@ class BillingService:
         )
 
     async def deduct_minutes(self, user_id: int, usage_id: int, duration_minutes: float) -> dict:
-        """Deduct minutes from user's sources: daily -> bonus -> package.
+        """Deduct minutes from user's sources in priority order: daily -> bonus -> package.
 
-        Returns breakdown of deduction by source.
+        Duration is rounded up to tenths of a minute (e.g. 1.03 -> 1.1).
+        Deduction order within bonus/package: oldest first (FIFO).
+        Logs a warning if the full amount cannot be covered.
+
+        Returns dict with keys: from_daily, from_bonus, from_package.
         """
         if not self.billing_enabled:
             return {"from_daily": 0.0, "from_bonus": 0.0, "from_package": 0.0}

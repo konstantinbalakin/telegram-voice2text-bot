@@ -1,8 +1,9 @@
 """
 YooKassa payment provider.
 
-Note: Requires `yookassa` package to be installed for production use.
-This module can work in mock mode without the package for testing.
+Integrates with YooKassa (Russian payment gateway) for processing payments
+via bank cards, SBP, and other methods. Requires the `yookassa` package.
+Sync SDK calls are wrapped in asyncio.to_thread() to avoid blocking the event loop.
 """
 
 import asyncio

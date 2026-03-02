@@ -97,16 +97,16 @@
 
 ### Tasks
 
-- [ ] Task 5.1: Исправить docstring `cancel_subscription` — отразить новое поведение (после Phase 3.3)
-- [ ] Task 5.2: Исправить модуль docstring YooKassa — убрать "mock mode", описать реальное поведение
-- [ ] Task 5.3: Обновить docstring `handle_callback` в TelegramStars — пояснить, что callback обрабатывается через Telegram API
-- [ ] Task 5.4: Добавить документацию к `deduct_minutes` — порядок списания и округление
-- [ ] Task 5.5: Документировать `warning_threshold`, hardcoded значения и бизнес-логику
-- [ ] Task 5.6: Убрать тривиальные docstring'ы (`"Payment type."`, `"Payment status."`) или расширить
+- [x] Task 5.1: Исправить docstring `cancel_subscription` — отразить новое поведение (после Phase 3.3)
+- [x] Task 5.2: Исправить модуль docstring YooKassa — убрать "mock mode", описать реальное поведение
+- [x] Task 5.3: Обновить docstring `handle_callback` в TelegramStars — пояснить, что callback обрабатывается через Telegram API
+- [x] Task 5.4: Добавить документацию к `deduct_minutes` — порядок списания и округление
+- [x] Task 5.5: Документировать `warning_threshold`, hardcoded значения и бизнес-логику
+- [x] Task 5.6: Убрать тривиальные docstring'ы (`"Payment type."`, `"Payment status."`) или расширить
 
 ### Verification
 
-- [ ] Все docstring'ы точно отражают поведение кода
+- [x] Все docstring'ы точно отражают поведение кода
 
 ## Phase 6: Test Quality & Coverage Gaps
 
