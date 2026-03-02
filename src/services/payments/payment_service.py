@@ -3,7 +3,8 @@ Payment Service - routes payments to appropriate providers, handles callbacks.
 """
 
 import logging
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncGenerator, Callable, Optional
 
 from src.services.payments.base import (
     PaymentProvider,
@@ -21,24 +22,71 @@ from src.services.subscription_service import SubscriptionService
 
 logger = logging.getLogger(__name__)
 
+# Type alias for session factory (e.g. database.get_session)
+SessionFactory = Callable[..., Any]
+
 
 class PaymentService:
-    """Routes payments to providers and handles post-payment logic."""
+    """Routes payments to providers and handles post-payment logic.
+
+    Accepts either a session_factory (production) or pre-built repos (testing).
+    """
 
     def __init__(
         self,
-        purchase_repo: PurchaseRepository,
-        subscription_repo: SubscriptionRepository,
-        balance_repo: UserMinuteBalanceRepository,
-        package_repo: MinutePackageRepository,
-        subscription_service: SubscriptionService,
+        *,
+        session_factory: Optional[SessionFactory] = None,
+        purchase_repo: Optional[PurchaseRepository] = None,
+        subscription_repo: Optional[SubscriptionRepository] = None,
+        balance_repo: Optional[UserMinuteBalanceRepository] = None,
+        package_repo: Optional[MinutePackageRepository] = None,
+        subscription_service: Optional[SubscriptionService] = None,
     ):
-        self.purchase_repo = purchase_repo
-        self.subscription_repo = subscription_repo
-        self.balance_repo = balance_repo
-        self.package_repo = package_repo
+        self._session_factory = session_factory
+        self._purchase_repo = purchase_repo
+        self._subscription_repo = subscription_repo
+        self._balance_repo = balance_repo
+        self._package_repo = package_repo
         self.subscription_service = subscription_service
         self._providers: dict[str, PaymentProvider] = {}
+
+    @asynccontextmanager
+    async def _repos(
+        self,
+    ) -> AsyncGenerator[
+        tuple[
+            PurchaseRepository,
+            SubscriptionRepository,
+            UserMinuteBalanceRepository,
+            MinutePackageRepository,
+        ],
+        None,
+    ]:
+        """Get repositories — per-request session or pre-built (tests)."""
+        if self._session_factory:
+            async with self._session_factory() as session:
+                yield (
+                    PurchaseRepository(session),
+                    SubscriptionRepository(session),
+                    UserMinuteBalanceRepository(session),
+                    MinutePackageRepository(session),
+                )
+        else:
+            assert self._purchase_repo is not None
+            assert self._subscription_repo is not None
+            assert self._balance_repo is not None
+            assert self._package_repo is not None
+            yield (
+                self._purchase_repo,
+                self._subscription_repo,
+                self._balance_repo,
+                self._package_repo,
+            )
+
+    async def get_active_packages(self) -> list:
+        """Get all active minute packages."""
+        async with self._repos() as (_, __, ___, package_repo):
+            return await package_repo.get_active_packages()
 
     def register_provider(self, provider: PaymentProvider) -> None:
         """Register a payment provider."""
@@ -67,24 +115,25 @@ class PaymentService:
                 error_message=f"Unknown payment provider: {provider_name}",
             )
 
-        # Create purchase record
-        purchase = await self.purchase_repo.create(
-            user_id=request.user_id,
-            purchase_type=request.payment_type.value,
-            item_id=request.item_id,
-            amount=request.amount,
-            currency=request.currency,
-            payment_provider=provider_name,
-        )
-
-        # Create payment with provider
-        result = await provider.create_payment(request)
-
-        if not result.success:
-            await self.purchase_repo.mark_failed(purchase)
-            logger.warning(
-                f"Payment creation failed for user {request.user_id}: {result.error_message}"
+        async with self._repos() as (purchase_repo, _, __, ___):
+            # Create purchase record
+            purchase = await purchase_repo.create(
+                user_id=request.user_id,
+                purchase_type=request.payment_type.value,
+                item_id=request.item_id,
+                amount=request.amount,
+                currency=request.currency,
+                payment_provider=provider_name,
             )
+
+            # Create payment with provider
+            result = await provider.create_payment(request)
+
+            if not result.success:
+                await purchase_repo.mark_failed(purchase)
+                logger.warning(
+                    f"Payment creation failed for user {request.user_id}: {result.error_message}"
+                )
 
         return result
 
@@ -109,17 +158,18 @@ class PaymentService:
 
     async def _credit_package(self, user_id: int, package_id: int) -> bool:
         """Credit minute package to user."""
-        package = await self.package_repo.get_by_id(package_id)
-        if not package:
-            logger.error(f"Package {package_id} not found")
-            return False
+        async with self._repos() as (_, __, balance_repo, package_repo):
+            package = await package_repo.get_by_id(package_id)
+            if not package:
+                logger.error(f"Package {package_id} not found")
+                return False
 
-        await self.balance_repo.create(
-            user_id=user_id,
-            balance_type="package",
-            minutes_remaining=package.minutes,
-            source_description=f"Package: {package.name}",
-        )
+            await balance_repo.create(
+                user_id=user_id,
+                balance_type="package",
+                minutes_remaining=package.minutes,
+                source_description=f"Package: {package.name}",
+            )
 
         logger.info(f"Credited {package.minutes} min to user {user_id} (package {package.name})")
         return True
@@ -128,6 +178,7 @@ class PaymentService:
         self, user_id: int, tier_id: int, payment_provider: str
     ) -> bool:
         """Activate subscription for user."""
+        assert self.subscription_service is not None
         await self.subscription_service.create_subscription(
             user_id=user_id,
             tier_id=tier_id,

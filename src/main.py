@@ -189,62 +189,32 @@ async def main() -> None:
     billing_commands = None
     if settings.billing_enabled:
         try:
-            from src.storage.billing_repositories import (
-                BillingConditionRepository,
-                SubscriptionRepository,
-                UserMinuteBalanceRepository,
-                DailyUsageRepository,
-                DeductionLogRepository,
-                PurchaseRepository,
-                MinutePackageRepository,
-            )
             from src.services.billing_service import BillingService
             from src.services.subscription_service import SubscriptionService
             from src.services.payments.payment_service import PaymentService
 
-            # Billing repositories are created per-request via get_session,
-            # but services need shared instances for command handlers.
-            # We create a dedicated session context for billing services.
-            from src.storage.database import get_session as _get_billing_session
+            # Services use per-request sessions via session_factory.
+            # Each method call creates a fresh session, avoiding use-after-free.
+            billing_service = BillingService(
+                session_factory=get_session,
+                billing_enabled=True,
+                warning_threshold=settings.billing_limit_warning_threshold,
+            )
 
-            async with _get_billing_session() as billing_session:
-                condition_repo = BillingConditionRepository(billing_session)
-                subscription_repo = SubscriptionRepository(billing_session)
-                balance_repo = UserMinuteBalanceRepository(billing_session)
-                daily_usage_repo = DailyUsageRepository(billing_session)
-                deduction_log_repo = DeductionLogRepository(billing_session)
-                purchase_repo = PurchaseRepository(billing_session)
-                package_repo = MinutePackageRepository(billing_session)
+            subscription_service = SubscriptionService(
+                session_factory=get_session,
+            )
 
-                billing_service = BillingService(
-                    condition_repo=condition_repo,
-                    subscription_repo=subscription_repo,
-                    balance_repo=balance_repo,
-                    daily_usage_repo=daily_usage_repo,
-                    deduction_log_repo=deduction_log_repo,
-                    billing_enabled=True,
-                    warning_threshold=settings.billing_limit_warning_threshold,
-                )
+            payment_service = PaymentService(
+                session_factory=get_session,
+                subscription_service=subscription_service,
+            )
 
-                subscription_service = SubscriptionService(
-                    subscription_repo=subscription_repo,
-                    balance_repo=balance_repo,
-                    purchase_repo=purchase_repo,
-                )
-
-                payment_service = PaymentService(
-                    purchase_repo=purchase_repo,
-                    subscription_repo=subscription_repo,
-                    balance_repo=balance_repo,
-                    package_repo=package_repo,
-                    subscription_service=subscription_service,
-                )
-
-                billing_commands = BillingCommands(
-                    billing_service=billing_service,
-                    subscription_service=subscription_service,
-                    payment_service=payment_service,
-                )
+            billing_commands = BillingCommands(
+                billing_service=billing_service,
+                subscription_service=subscription_service,
+                payment_service=payment_service,
+            )
 
             logger.info("Billing system initialized")
         except Exception as e:

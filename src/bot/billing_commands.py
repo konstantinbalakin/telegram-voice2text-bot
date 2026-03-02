@@ -64,13 +64,9 @@ class BillingCommands:
         lines.append(f"\nВсего доступно: {balance['total_available']:.1f} мин")
 
         # Subscription info
-        active_sub = await self.subscription_service.subscription_repo.get_active_subscription(
-            db_user.id
-        )
+        active_sub = await self.subscription_service.get_active_subscription(db_user.id)
         if active_sub:
-            tier = await self.subscription_service.subscription_repo.get_tier_by_id(
-                active_sub.tier_id
-            )
+            tier = await self.subscription_service.get_tier_by_id(active_sub.tier_id)
             tier_name = tier.name if tier else "Unknown"
             expires = active_sub.expires_at.strftime("%d.%m.%Y")
             renew_status = "автопродление" if active_sub.auto_renew else "без продления"
@@ -123,7 +119,7 @@ class BillingCommands:
         if not update.message:
             return
 
-        packages = await self.payment_service.package_repo.get_active_packages()
+        packages = await self.payment_service.get_active_packages()
 
         if not packages:
             await update.message.reply_text("Пакеты минут сейчас недоступны. Попробуйте позже.")
