@@ -6,7 +6,7 @@ Also provides billing-enhanced versions of /start and /help.
 import logging
 from typing import TYPE_CHECKING
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from src.services.payments.base import SubscriptionPeriod
@@ -86,7 +86,7 @@ class BillingCommands:
             await update.message.reply_text(BILLING_ERROR_MSG)
 
     async def subscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /subscribe command — show subscription catalog."""
+        """Handle /subscribe command — show subscription catalog with payment buttons."""
         if not update.message:
             return
 
@@ -105,30 +105,34 @@ class BillingCommands:
                 if tier.description:
                     lines.append(f"{tier.description}")
 
+            await update.message.reply_text("\n".join(lines))
+
+            buttons = []
+            for tier in tiers:
                 prices = await self.subscription_service.get_tier_prices(tier.id)
                 if prices:
-                    lines.append("Цены:")
                     for price in prices:
                         period_label = _period_label(price.period)
-                        price_parts = []
-                        if price.amount_rub:
-                            price_parts.append(f"{price.amount_rub:.0f} руб")
+                        button_text = f"{tier.name} ({period_label})"
                         if price.amount_stars:
-                            price_parts.append(f"{price.amount_stars} Stars")
-                        lines.append(f"  {period_label}: {' / '.join(price_parts)}")
-                lines.append("")
+                            button_text += f" - {price.amount_stars} ⭐"
+                        callback_data = f"sub_stars:{tier.id}:{price.period}"
+                        buttons.append(
+                            [InlineKeyboardButton(button_text, callback_data=callback_data)]
+                        )
 
-            lines.append(
-                "Для оформления подписки свяжитесь с @support или используйте кнопки оплаты."
-            )
-
-            await update.message.reply_text("\n".join(lines))
+            if buttons:
+                reply_markup = InlineKeyboardMarkup(buttons)
+                await update.message.reply_text(
+                    "Нажмите на кнопку ниже для оформления подписки:",
+                    reply_markup=reply_markup,
+                )
         except Exception as e:
             logger.error(f"Error in /subscribe command: {e}", exc_info=True)
             await update.message.reply_text(BILLING_ERROR_MSG)
 
     async def buy_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle /buy command — show minute package catalog."""
+        """Handle /buy command — show minute package catalog with payment buttons."""
         if not update.message:
             return
 
@@ -146,12 +150,24 @@ class BillingCommands:
                 if pkg.price_rub:
                     price_parts.append(f"{pkg.price_rub:.0f} руб")
                 if pkg.price_stars:
-                    price_parts.append(f"{pkg.price_stars} Stars")
+                    price_parts.append(f"{pkg.price_stars} ⭐")
                 lines.append(f"{pkg.name} ({pkg.minutes} мин) — {' / '.join(price_parts)}")
 
-            lines.append("\nДля покупки используйте кнопки оплаты.")
-
             await update.message.reply_text("\n".join(lines))
+
+            buttons = []
+            for pkg in packages:
+                if pkg.price_stars:
+                    button_text = f"{pkg.name} ({pkg.price_stars} ⭐)"
+                    callback_data = f"pkg_stars:{pkg.id}"
+                    buttons.append([InlineKeyboardButton(button_text, callback_data=callback_data)])
+
+            if buttons:
+                reply_markup = InlineKeyboardMarkup(buttons)
+                await update.message.reply_text(
+                    "Нажмите на кнопку ниже для покупки пакета минут:",
+                    reply_markup=reply_markup,
+                )
         except Exception as e:
             logger.error(f"Error in /buy command: {e}", exc_info=True)
             await update.message.reply_text(BILLING_ERROR_MSG)

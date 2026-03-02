@@ -46,7 +46,7 @@
 
 ---
 
-## Phase 2: Create Payment Callback Handlers
+## Phase 2: Create Payment Callback Handlers ✅ Complete
 
 Создание обработчиков callback-кнопок для оплаты.
 
@@ -83,27 +83,27 @@
 
 ### Tasks
 
-- [ ] Task 3.1: Написать тесты для обновлённой команды `/subscribe`:
+- [x] Task 3.1: Написать тесты для обновлённой команды `/subscribe`:
   - Проверить что команда возвращает `InlineKeyboardMarkup`
   - Проверить что кнопки имеют правильный callback_data формат
-- [ ] Task 3.2: Обновить метод `BillingCommands.subscribe_command()` в `src/bot/billing_commands.py`:
+- [x] Task 3.2: Обновить метод `BillingCommands.subscribe_command()` в `src/bot/billing_commands.py`:
   - Добавить импорт `InlineKeyboardButton`, `InlineKeyboardMarkup`
   - Создавать кнопки для каждого тарифа с ценой в Stars
   - Формировать InlineKeyboardMarkup с кнопками
-- [ ] Task 3.3: Написать тесты для обновлённой команды `/buy`:
+- [x] Task 3.3: Написать тесты для обновлённой команды `/buy`:
   - Проверить что команда возвращает `InlineKeyboardMarkup`
   - Проверить что кнопки имеют правильный callback_data формат
-- [ ] Task 3.4: Обновить метод `BillingCommands.buy_command()` в `src/bot/billing_commands.py`:
+- [x] Task 3.4: Обновить метод `BillingCommands.buy_command()` в `src/bot/billing_commands.py`:
   - Создавать кнопки для каждого пакета с ценой в Stars
   - Формировать InlineKeyboardMarkup с кнопками
 
 ### Verification
 
-- [ ] Тесты для `/subscribe` проходят
-- [ ] Тесты для `/buy` проходят
-- [ ] Команда `/subscribe` показывает inline кнопки для подписок
-- [ ] Команда `/buy` показывает inline кнопки для пакетов
-- [ ] Callback data кнопок имеет правильный формат
+- [x] Тесты для `/subscribe` проходят
+- [x] Тесты для `/buy` проходят
+- [x] Команда `/subscribe` показывает inline кнопки для подписок
+- [x] Команда `/buy` показывает inline кнопки для пакетов
+- [x] Callback data кнопок имеет правильный формат
 
 ---
 

@@ -222,10 +222,10 @@ class TestSubscribeCommand:
 
         await cmds.subscribe_command(update, context)
 
-        update.message.reply_text.assert_called_once()
-        text = update.message.reply_text.call_args[0][0]
-        assert "Pro" in text
-        assert "30" in text  # daily limit
+        assert update.message.reply_text.call_count >= 1
+        first_call_text = update.message.reply_text.call_args_list[0][0][0]
+        assert "Pro" in first_call_text
+        assert "30" in first_call_text  # daily limit
 
     @pytest.mark.asyncio
     async def test_subscribe_no_tiers(self) -> None:
@@ -248,6 +248,96 @@ class TestSubscribeCommand:
 
         text = update.message.reply_text.call_args[0][0]
         assert "нет" in text.lower() or "недоступн" in text.lower()
+
+    @pytest.mark.asyncio
+    async def test_subscribe_has_inline_buttons(self) -> None:
+        """Test: /subscribe command returns InlineKeyboardMarkup with buttons."""
+        from src.bot.billing_commands import BillingCommands
+        from telegram import InlineKeyboardMarkup
+
+        tier = MagicMock()
+        tier.id = 1
+        tier.name = "Pro"
+        tier.daily_limit_minutes = 30
+        tier.description = "Best option"
+
+        price_month = MagicMock()
+        price_month.period = "month"
+        price_month.amount_rub = None
+        price_month.amount_stars = 100
+
+        subscription_service = AsyncMock()
+        subscription_service.get_available_tiers = AsyncMock(return_value=[tier])
+        subscription_service.get_tier_prices = AsyncMock(return_value=[price_month])
+
+        cmds = BillingCommands(
+            billing_service=AsyncMock(),
+            subscription_service=subscription_service,
+            payment_service=AsyncMock(),
+        )
+
+        update = _make_update()
+        context = _make_context()
+
+        await cmds.subscribe_command(update, context)
+
+        assert update.message.reply_text.call_count >= 1
+
+        last_call = update.message.reply_text.call_args_list[-1]
+        call_kwargs = last_call[1]
+        reply_markup = call_kwargs.get("reply_markup")
+        assert reply_markup is not None
+        assert isinstance(reply_markup, InlineKeyboardMarkup)
+        assert len(reply_markup.inline_keyboard) > 0
+
+    @pytest.mark.asyncio
+    async def test_subscribe_multiple_periods(self) -> None:
+        """Test: /subscribe command creates buttons for multiple subscription periods."""
+        from src.bot.billing_commands import BillingCommands
+        from telegram import InlineKeyboardMarkup
+
+        tier = MagicMock()
+        tier.id = 1
+        tier.name = "Pro"
+        tier.daily_limit_minutes = 30
+
+        price_week = MagicMock()
+        price_week.period = "week"
+        price_week.amount_rub = None
+        price_week.amount_stars = 50
+
+        price_month = MagicMock()
+        price_month.period = "month"
+        price_month.amount_rub = None
+        price_month.amount_stars = 100
+
+        subscription_service = AsyncMock()
+        subscription_service.get_available_tiers = AsyncMock(return_value=[tier])
+        subscription_service.get_tier_prices = AsyncMock(return_value=[price_week, price_month])
+
+        cmds = BillingCommands(
+            billing_service=AsyncMock(),
+            subscription_service=subscription_service,
+            payment_service=AsyncMock(),
+        )
+
+        update = _make_update()
+        context = _make_context()
+
+        await cmds.subscribe_command(update, context)
+
+        last_call = update.message.reply_text.call_args_list[-1]
+        call_kwargs = last_call[1]
+        reply_markup = call_kwargs.get("reply_markup")
+        assert reply_markup is not None
+
+        buttons_with_period = [
+            btn
+            for row in reply_markup.inline_keyboard
+            for btn in row
+            if btn.callback_data and "sub_stars" in str(btn.callback_data)
+        ]
+        assert len(buttons_with_period) == 2
 
 
 # =============================================================================
@@ -291,11 +381,11 @@ class TestBuyCommand:
 
         await cmds.buy_command(update, context)
 
-        update.message.reply_text.assert_called_once()
-        text = update.message.reply_text.call_args[0][0]
-        assert "50" in text
-        assert "100" in text
-        assert "149" in text or "149.0" in text
+        assert update.message.reply_text.call_count >= 1
+        first_call_text = update.message.reply_text.call_args_list[0][0][0]
+        assert "50" in first_call_text
+        assert "100" in first_call_text
+        assert "149" in first_call_text or "149.0" in first_call_text
 
     @pytest.mark.asyncio
     async def test_buy_no_packages(self) -> None:
@@ -318,6 +408,89 @@ class TestBuyCommand:
 
         text = update.message.reply_text.call_args[0][0]
         assert "нет" in text.lower() or "недоступн" in text.lower()
+
+    @pytest.mark.asyncio
+    async def test_buy_has_inline_buttons(self) -> None:
+        """Test: /buy command returns InlineKeyboardMarkup with buttons."""
+        from src.bot.billing_commands import BillingCommands
+        from telegram import InlineKeyboardMarkup
+
+        pkg1 = MagicMock()
+        pkg1.id = 1
+        pkg1.name = "Basic Pack"
+        pkg1.minutes = 30.0
+        pkg1.price_rub = None
+        pkg1.price_stars = 50
+
+        payment_service = AsyncMock()
+        payment_service.get_active_packages = AsyncMock(return_value=[pkg1])
+
+        cmds = BillingCommands(
+            billing_service=AsyncMock(),
+            subscription_service=AsyncMock(),
+            payment_service=payment_service,
+        )
+
+        update = _make_update()
+        context = _make_context()
+
+        await cmds.buy_command(update, context)
+
+        assert update.message.reply_text.call_count >= 1
+
+        last_call = update.message.reply_text.call_args_list[-1]
+        call_kwargs = last_call[1]
+        reply_markup = call_kwargs.get("reply_markup")
+        assert reply_markup is not None
+        assert isinstance(reply_markup, InlineKeyboardMarkup)
+        assert len(reply_markup.inline_keyboard) > 0
+
+    @pytest.mark.asyncio
+    async def test_buy_multiple_packages(self) -> None:
+        """Test: /buy command creates buttons for multiple packages."""
+        from src.bot.billing_commands import BillingCommands
+        from telegram import InlineKeyboardMarkup
+
+        pkg1 = MagicMock()
+        pkg1.id = 1
+        pkg1.name = "Basic"
+        pkg1.minutes = 30.0
+        pkg1.price_rub = None
+        pkg1.price_stars = 50
+
+        pkg2 = MagicMock()
+        pkg2.id = 2
+        pkg2.name = "Premium"
+        pkg2.minutes = 60.0
+        pkg2.price_rub = None
+        pkg2.price_stars = 90
+
+        payment_service = AsyncMock()
+        payment_service.get_active_packages = AsyncMock(return_value=[pkg1, pkg2])
+
+        cmds = BillingCommands(
+            billing_service=AsyncMock(),
+            subscription_service=AsyncMock(),
+            payment_service=payment_service,
+        )
+
+        update = _make_update()
+        context = _make_context()
+
+        await cmds.buy_command(update, context)
+
+        last_call = update.message.reply_text.call_args_list[-1]
+        call_kwargs = last_call[1]
+        reply_markup = call_kwargs.get("reply_markup")
+        assert reply_markup is not None
+
+        buttons_with_stars = [
+            btn
+            for row in reply_markup.inline_keyboard
+            for btn in row
+            if btn.callback_data and "pkg_stars" in str(btn.callback_data)
+        ]
+        assert len(buttons_with_stars) == 2
 
 
 # =============================================================================
