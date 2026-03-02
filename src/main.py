@@ -41,6 +41,7 @@ from src.services.telegram_client import TelegramClientService
 from src.services.transcription_orchestrator import TranscriptionOrchestrator
 from src.services.export_service import ExportService
 from src.services.pdf_generator import PDFGenerator
+from src.bot.billing_commands import BillingCommands
 from src.utils.logging_config import setup_logging, log_deployment_event, get_config_summary
 
 # Setup centralized logging
@@ -183,6 +184,75 @@ async def main() -> None:
     )
     logger.info("TranscriptionOrchestrator created")
 
+    # Initialize billing services (if enabled)
+    billing_service = None
+    billing_commands = None
+    if settings.billing_enabled:
+        try:
+            from src.storage.billing_repositories import (
+                BillingConditionRepository,
+                SubscriptionRepository,
+                UserMinuteBalanceRepository,
+                DailyUsageRepository,
+                DeductionLogRepository,
+                PurchaseRepository,
+                MinutePackageRepository,
+            )
+            from src.services.billing_service import BillingService
+            from src.services.subscription_service import SubscriptionService
+            from src.services.payments.payment_service import PaymentService
+
+            # Billing repositories are created per-request via get_session,
+            # but services need shared instances for command handlers.
+            # We create a dedicated session context for billing services.
+            from src.storage.database import get_session as _get_billing_session
+
+            async with _get_billing_session() as billing_session:
+                condition_repo = BillingConditionRepository(billing_session)
+                subscription_repo = SubscriptionRepository(billing_session)
+                balance_repo = UserMinuteBalanceRepository(billing_session)
+                daily_usage_repo = DailyUsageRepository(billing_session)
+                deduction_log_repo = DeductionLogRepository(billing_session)
+                purchase_repo = PurchaseRepository(billing_session)
+                package_repo = MinutePackageRepository(billing_session)
+
+                billing_service = BillingService(
+                    condition_repo=condition_repo,
+                    subscription_repo=subscription_repo,
+                    balance_repo=balance_repo,
+                    daily_usage_repo=daily_usage_repo,
+                    deduction_log_repo=deduction_log_repo,
+                    billing_enabled=True,
+                    warning_threshold=settings.billing_limit_warning_threshold,
+                )
+
+                subscription_service = SubscriptionService(
+                    subscription_repo=subscription_repo,
+                    balance_repo=balance_repo,
+                    purchase_repo=purchase_repo,
+                )
+
+                payment_service = PaymentService(
+                    purchase_repo=purchase_repo,
+                    subscription_repo=subscription_repo,
+                    balance_repo=balance_repo,
+                    package_repo=package_repo,
+                    subscription_service=subscription_service,
+                )
+
+                billing_commands = BillingCommands(
+                    billing_service=billing_service,
+                    subscription_service=subscription_service,
+                    payment_service=payment_service,
+                )
+
+            logger.info("Billing system initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize billing system: {e}", exc_info=True)
+            logger.warning("Continuing without billing system")
+    else:
+        logger.info("Billing system disabled")
+
     # Create bot handlers
     bot_handlers = BotHandlers(
         transcription_router=transcription_router,
@@ -190,6 +260,7 @@ async def main() -> None:
         queue_manager=queue_manager,
         orchestrator=orchestrator,
         telegram_client=telegram_client,
+        billing_service=billing_service,
     )
 
     # Build telegram bot application
@@ -218,8 +289,19 @@ async def main() -> None:
         application.add_handler(TypeHandler(Update, debug_all_updates), group=999)
 
     # Register handlers
-    application.add_handler(CommandHandler("start", bot_handlers.start_command))
-    application.add_handler(CommandHandler("help", bot_handlers.help_command))
+    if billing_commands and settings.billing_enabled:
+        # Use billing-enhanced /start and /help
+        application.add_handler(
+            CommandHandler("start", billing_commands.start_command_with_billing)
+        )
+        application.add_handler(CommandHandler("help", billing_commands.help_command_with_billing))
+        application.add_handler(CommandHandler("balance", billing_commands.balance_command))
+        application.add_handler(CommandHandler("subscribe", billing_commands.subscribe_command))
+        application.add_handler(CommandHandler("buy", billing_commands.buy_command))
+        logger.info("Billing commands registered (/balance, /subscribe, /buy)")
+    else:
+        application.add_handler(CommandHandler("start", bot_handlers.start_command))
+        application.add_handler(CommandHandler("help", bot_handlers.help_command))
     application.add_handler(CommandHandler("stats", bot_handlers.stats_command))
     application.add_handler(MessageHandler(filters.VOICE, bot_handlers.voice_message_handler))
     application.add_handler(MessageHandler(filters.AUDIO, bot_handlers.audio_message_handler))
