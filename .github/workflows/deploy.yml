@@ -336,6 +336,9 @@ jobs:
             # Billing System
             BILLING_ENABLED=false
             BILLING_LIMIT_WARNING_THRESHOLD=0.8
+            YOOKASSA_SHOP_ID=${{ secrets.YOOKASSA_SHOP_ID }}
+            YOOKASSA_SECRET_KEY=${{ secrets.YOOKASSA_SECRET_KEY }}
+            YOOKASSA_RETURN_URL=${{ secrets.YOOKASSA_RETURN_URL }}
 
             # Buttons
             INTERACTIVE_MODE_ENABLED=true

@@ -192,6 +192,11 @@ class Settings(BaseSettings):
         description="Threshold (0.0-1.0) for daily limit warning notification (default: 80%)",
     )
 
+    # YooKassa Configuration
+    yookassa_shop_id: str = Field(default="", description="YooKassa Shop ID")
+    yookassa_secret_key: str = Field(default="", description="YooKassa Secret Key")
+    yookassa_return_url: str = Field(default="", description="YooKassa return URL after payment")
+
     # LLM Refinement Configuration
     llm_refinement_enabled: bool = Field(default=True, description="Enable LLM text refinement")
     llm_provider: str = Field(
