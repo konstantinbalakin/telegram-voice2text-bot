@@ -42,7 +42,6 @@ from src.services.telegram_client import TelegramClientService
 from src.services.transcription_orchestrator import TranscriptionOrchestrator
 from src.services.export_service import ExportService
 from src.services.pdf_generator import PDFGenerator
-from src.bot.billing_commands import BillingCommands
 from src.bot.payment_callbacks import (
     PaymentCallbackHandlers,
     pre_checkout_query_handler,

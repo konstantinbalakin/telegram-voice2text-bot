@@ -107,7 +107,7 @@
 
 ---
 
-## Phase 4: Register Telegram Stars Provider and Handlers in main.py
+## Phase 4: Register Telegram Stars Provider and Handlers in main.py ✅ Complete
 
 Регистрация провайдера Telegram Stars и обработчиков платежей в main.py.
 
@@ -148,9 +148,9 @@
 
 ### Tasks
 
-- [ ] Task 5.1: Запустить все тесты: `uv run pytest tests/unit/ -v`
-- [ ] Task 5.2: Проверить линтеры: `uv run ruff check src/`
-- [ ] Task 5.3: Проверить форматирование: `uv run black --check src/`
+- [x] Task 5.1: Запустить все тесты: `uv run pytest tests/unit/ -v`
+- [x] Task 5.2: Проверить линтеры: `uv run ruff check src/`
+- [x] Task 5.3: Проверить форматирование: `uv run black --check src/`
 - [ ] Task 5.4: Проверить типы: `uv run mypy src/`
 - [ ] Task 5.5: Ручное тестирование:
   - Проверить уведомление при 80%+ использования

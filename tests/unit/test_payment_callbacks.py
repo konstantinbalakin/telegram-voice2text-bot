@@ -211,7 +211,6 @@ async def test_successful_payment_handler_parses_payload():
     assert call_args.kwargs["provider_transaction_id"] == "charge_123"
 
 
-
 @pytest.mark.asyncio
 async def test_successful_payment_handler_subscription():
     """Test: successful_payment_handler handles subscriptions."""
