@@ -733,13 +733,13 @@ class TranscriptionOrchestrator:
                         for msg in request.draft_messages:
                             try:
                                 await msg.delete()
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug(f"Failed to delete message: {e}")
 
                     try:
                         await request.status_message.delete()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to delete/edit message: {e}")
 
                     await self._send_result_and_update_state(
                         request,
@@ -763,8 +763,8 @@ class TranscriptionOrchestrator:
                             await request.status_message.edit_text(
                                 f"✅ Готово:\n\n{draft_text}\n\nℹ️ (улучшение текста недоступно)"
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Failed to edit status message: {e}")
                     final_text = draft_text
             else:
                 try:
@@ -777,23 +777,24 @@ class TranscriptionOrchestrator:
 
             # Billing: deduct minutes after successful transcription
             # Uses db_user_id (internal DB ID), not user_id (Telegram ID)
+            # Wrapped in try-except: billing errors must not break the pipeline
             if self.billing_service and settings.billing_enabled and request.db_user_id:
-                duration_minutes = request.duration_seconds / 60.0
-                await self.billing_service.deduct_minutes(
-                    user_id=request.db_user_id,
-                    usage_id=request.usage_id,
-                    duration_minutes=duration_minutes,
-                )
+                try:
+                    duration_minutes = request.duration_seconds / 60.0
+                    await self.billing_service.deduct_minutes(
+                        user_id=request.db_user_id,
+                        usage_id=request.usage_id,
+                        duration_minutes=duration_minutes,
+                    )
 
-                # Check and send warning if approaching limit
-                should_warn = await self.billing_service.should_warn_limit(
-                    user_id=request.db_user_id
-                )
-                if should_warn:
-                    balance = await self.billing_service.get_user_balance(
+                    # Check and send warning if approaching limit
+                    should_warn = await self.billing_service.should_warn_limit(
                         user_id=request.db_user_id
                     )
-                    try:
+                    if should_warn:
+                        balance = await self.billing_service.get_user_balance(
+                            user_id=request.db_user_id
+                        )
                         await request.user_message.reply_text(
                             f"⚠️ Дневной лимит почти исчерпан!\n\n"
                             f"Использовано: {balance['daily_used']:.1f} из "
@@ -802,8 +803,11 @@ class TranscriptionOrchestrator:
                             f"Пакетные минуты: {balance['package_minutes']:.1f}\n\n"
                             f"Используйте /buy или /subscribe для пополнения."
                         )
-                    except Exception as warn_err:
-                        logger.warning(f"Failed to send billing warning: {warn_err}")
+                except Exception as billing_err:
+                    logger.error(
+                        f"Billing error for request {request.id}: {billing_err}",
+                        exc_info=True,
+                    )
 
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
@@ -836,8 +840,8 @@ class TranscriptionOrchestrator:
                 await request.status_message.edit_text(
                     "❌ Произошла ошибка при обработке. Пожалуйста, попробуйте еще раз."
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to send error message: {e}")
 
             self.audio_handler.cleanup_file(request.file_path)
             if processed_path != request.file_path:

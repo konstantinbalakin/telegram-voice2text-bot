@@ -157,12 +157,15 @@ class PaymentService:
         return False
 
     async def _credit_package(self, user_id: int, package_id: int) -> bool:
-        """Credit minute package to user."""
+        """Credit minute package to user.
+
+        Raises:
+            ValueError: if package_id not found in database
+        """
         async with self._repos() as (_, __, balance_repo, package_repo):
             package = await package_repo.get_by_id(package_id)
             if not package:
-                logger.error(f"Package {package_id} not found")
-                return False
+                raise ValueError(f"Package {package_id} not found")
 
             await balance_repo.create(
                 user_id=user_id,

@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+BILLING_ERROR_MSG = "Произошла ошибка. Попробуйте позже."
+
 
 class BillingCommands:
     """Billing-related Telegram bot commands."""
@@ -39,105 +41,123 @@ class BillingCommands:
         if not user or not update.message:
             return
 
-        async with get_session() as session:
-            user_repo = UserRepository(session)
-            db_user = await user_repo.get_by_telegram_id(user.id)
+        try:
+            async with get_session() as session:
+                user_repo = UserRepository(session)
+                db_user = await user_repo.get_by_telegram_id(user.id)
 
-        if not db_user:
-            await update.message.reply_text("Пользователь не найден. Используйте /start")
-            return
+            if not db_user:
+                await update.message.reply_text("Пользователь не найден. Используйте /start")
+                return
 
-        balance = await self.billing_service.get_user_balance(db_user.id)
+            balance = await self.billing_service.get_user_balance(db_user.id)
 
-        lines = [
-            "Ваш баланс минут:\n",
-            f"Дневной лимит: {balance['daily_limit']:.1f} мин",
-            f"Использовано сегодня: {balance['daily_used']:.1f} мин",
-            f"Осталось сегодня: {balance['daily_remaining']:.1f} мин",
-        ]
+            lines = [
+                "Ваш баланс минут:\n",
+                f"Дневной лимит: {balance['daily_limit']:.1f} мин",
+                f"Использовано сегодня: {balance['daily_used']:.1f} мин",
+                f"Осталось сегодня: {balance['daily_remaining']:.1f} мин",
+            ]
 
-        if balance["bonus_minutes"] > 0:
-            lines.append(f"Бонусные минуты: {balance['bonus_minutes']:.1f} мин")
-        if balance["package_minutes"] > 0:
-            lines.append(f"Пакетные минуты: {balance['package_minutes']:.1f} мин")
+            if balance["bonus_minutes"] > 0:
+                lines.append(f"Бонусные минуты: {balance['bonus_minutes']:.1f} мин")
+            if balance["package_minutes"] > 0:
+                lines.append(f"Пакетные минуты: {balance['package_minutes']:.1f} мин")
 
-        lines.append(f"\nВсего доступно: {balance['total_available']:.1f} мин")
+            lines.append(f"\nВсего доступно: {balance['total_available']:.1f} мин")
 
-        # Subscription info
-        active_sub = await self.subscription_service.get_active_subscription(db_user.id)
-        if active_sub:
-            tier = await self.subscription_service.get_tier_by_id(active_sub.tier_id)
-            tier_name = tier.name if tier else "Unknown"
-            expires = active_sub.expires_at.strftime("%d.%m.%Y")
-            renew_status = "автопродление" if active_sub.auto_renew else "без продления"
-            lines.append(f"\nПодписка: {tier_name}")
-            lines.append(f"Действует до: {expires} ({renew_status})")
-        else:
-            lines.append("\nПодписка: нет")
-            lines.append("Используйте /subscribe для оформления подписки")
+            # Subscription info
+            active_sub = await self.subscription_service.get_active_subscription(db_user.id)
+            if active_sub:
+                tier = await self.subscription_service.get_tier_by_id(active_sub.tier_id)
+                tier_name = tier.name if tier else "Unknown"
+                expires = active_sub.expires_at.strftime("%d.%m.%Y")
+                renew_status = "автопродление" if active_sub.auto_renew else "без продления"
+                lines.append(f"\nПодписка: {tier_name}")
+                lines.append(f"Действует до: {expires} ({renew_status})")
+            else:
+                lines.append("\nПодписка: нет")
+                lines.append("Используйте /subscribe для оформления подписки")
 
-        await update.message.reply_text("\n".join(lines))
+            await update.message.reply_text("\n".join(lines))
+        except Exception as e:
+            logger.error(f"Error in /balance command: {e}", exc_info=True)
+            await update.message.reply_text(BILLING_ERROR_MSG)
 
     async def subscribe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /subscribe command — show subscription catalog."""
         if not update.message:
             return
 
-        tiers = await self.subscription_service.get_available_tiers()
+        try:
+            tiers = await self.subscription_service.get_available_tiers()
 
-        if not tiers:
-            await update.message.reply_text("Подписки сейчас недоступны. Попробуйте позже.")
-            return
+            if not tiers:
+                await update.message.reply_text(
+                    "Подписки сейчас недоступны. Попробуйте позже."
+                )
+                return
 
-        lines = ["Доступные подписки:\n"]
+            lines = ["Доступные подписки:\n"]
 
-        for tier in tiers:
-            lines.append(f"--- {tier.name} ---")
-            lines.append(f"Дневной лимит: {tier.daily_limit_minutes} мин/день")
-            if tier.description:
-                lines.append(f"{tier.description}")
+            for tier in tiers:
+                lines.append(f"--- {tier.name} ---")
+                lines.append(f"Дневной лимит: {tier.daily_limit_minutes} мин/день")
+                if tier.description:
+                    lines.append(f"{tier.description}")
 
-            prices = await self.subscription_service.get_tier_prices(tier.id)
-            if prices:
-                lines.append("Цены:")
-                for price in prices:
-                    period_label = _period_label(price.period)
-                    price_parts = []
-                    if price.amount_rub:
-                        price_parts.append(f"{price.amount_rub:.0f} руб")
-                    if price.amount_stars:
-                        price_parts.append(f"{price.amount_stars} Stars")
-                    lines.append(f"  {period_label}: {' / '.join(price_parts)}")
-            lines.append("")
+                prices = await self.subscription_service.get_tier_prices(tier.id)
+                if prices:
+                    lines.append("Цены:")
+                    for price in prices:
+                        period_label = _period_label(price.period)
+                        price_parts = []
+                        if price.amount_rub:
+                            price_parts.append(f"{price.amount_rub:.0f} руб")
+                        if price.amount_stars:
+                            price_parts.append(f"{price.amount_stars} Stars")
+                        lines.append(f"  {period_label}: {' / '.join(price_parts)}")
+                lines.append("")
 
-        lines.append("Для оформления подписки свяжитесь с @support или используйте кнопки оплаты.")
+            lines.append(
+                "Для оформления подписки свяжитесь с @support или используйте кнопки оплаты."
+            )
 
-        await update.message.reply_text("\n".join(lines))
+            await update.message.reply_text("\n".join(lines))
+        except Exception as e:
+            logger.error(f"Error in /subscribe command: {e}", exc_info=True)
+            await update.message.reply_text(BILLING_ERROR_MSG)
 
     async def buy_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Handle /buy command — show minute package catalog."""
         if not update.message:
             return
 
-        packages = await self.payment_service.get_active_packages()
+        try:
+            packages = await self.payment_service.get_active_packages()
 
-        if not packages:
-            await update.message.reply_text("Пакеты минут сейчас недоступны. Попробуйте позже.")
-            return
+            if not packages:
+                await update.message.reply_text(
+                    "Пакеты минут сейчас недоступны. Попробуйте позже."
+                )
+                return
 
-        lines = ["Пакеты минут:\n"]
+            lines = ["Пакеты минут:\n"]
 
-        for pkg in packages:
-            price_parts = []
-            if pkg.price_rub:
-                price_parts.append(f"{pkg.price_rub:.0f} руб")
-            if pkg.price_stars:
-                price_parts.append(f"{pkg.price_stars} Stars")
-            lines.append(f"{pkg.name} ({pkg.minutes} мин) — {' / '.join(price_parts)}")
+            for pkg in packages:
+                price_parts = []
+                if pkg.price_rub:
+                    price_parts.append(f"{pkg.price_rub:.0f} руб")
+                if pkg.price_stars:
+                    price_parts.append(f"{pkg.price_stars} Stars")
+                lines.append(f"{pkg.name} ({pkg.minutes} мин) — {' / '.join(price_parts)}")
 
-        lines.append("\nДля покупки используйте кнопки оплаты.")
+            lines.append("\nДля покупки используйте кнопки оплаты.")
 
-        await update.message.reply_text("\n".join(lines))
+            await update.message.reply_text("\n".join(lines))
+        except Exception as e:
+            logger.error(f"Error in /buy command: {e}", exc_info=True)
+            await update.message.reply_text(BILLING_ERROR_MSG)
 
     async def start_command_with_billing(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -147,22 +167,28 @@ class BillingCommands:
         if not user or not update.message:
             return
 
-        is_new_user = False
-        async with get_session() as session:
-            user_repo = UserRepository(session)
-            db_user = await user_repo.get_by_telegram_id(user.id)
-            if not db_user:
-                db_user = await user_repo.create(
-                    telegram_id=user.id,
-                    username=user.username,
-                    first_name=user.first_name,
-                    last_name=user.last_name,
-                )
-                is_new_user = True
+        try:
+            is_new_user = False
+            async with get_session() as session:
+                user_repo = UserRepository(session)
+                db_user = await user_repo.get_by_telegram_id(user.id)
+                if not db_user:
+                    db_user = await user_repo.create(
+                        telegram_id=user.id,
+                        username=user.username,
+                        first_name=user.first_name,
+                        last_name=user.last_name,
+                    )
+                    is_new_user = True
 
-        # Grant welcome bonus for new users
-        if is_new_user and db_user:
-            await self.billing_service.grant_welcome_bonus(db_user.id)
+            # Grant welcome bonus for new users
+            if is_new_user and db_user:
+                try:
+                    await self.billing_service.grant_welcome_bonus(db_user.id)
+                except Exception as bonus_err:
+                    logger.error(f"Failed to grant welcome bonus: {bonus_err}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Error in /start billing setup: {e}", exc_info=True)
 
         welcome_message = (
             "Привет! Я Voice2Text — бот для расшифровки голосовых сообщений.\n\n"

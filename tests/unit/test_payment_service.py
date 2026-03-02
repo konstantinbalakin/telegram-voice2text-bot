@@ -235,18 +235,17 @@ async def test_handle_successful_subscription_payment():
 
 @pytest.mark.asyncio
 async def test_handle_successful_payment_package_not_found():
-    """Test handling when package not found."""
+    """Test handling when package not found raises ValueError."""
     service, mocks = _make_payment_service()
     mocks["package_repo"].get_by_id.return_value = None
 
-    success = await service.handle_successful_payment(
-        provider_name="telegram_stars",
-        user_id=1,
-        payment_type=PaymentType.PACKAGE,
-        item_id=999,
-    )
-
-    assert success is False
+    with pytest.raises(ValueError, match="Package 999 not found"):
+        await service.handle_successful_payment(
+            provider_name="telegram_stars",
+            user_id=1,
+            payment_type=PaymentType.PACKAGE,
+            item_id=999,
+        )
 
 
 def test_available_providers():

@@ -461,24 +461,30 @@ class BotHandlers:
 
         # 4. CHECK QUOTA (skip for document — duration unknown until ffprobe)
         if media_info.duration_seconds is not None:
-            # 4a. Billing system check (new) — needs DB user ID, not Telegram ID
+            # 4a. Billing system check — fail-open: billing errors don't block transcription
             if self.billing_service and settings.billing_enabled:
-                async with get_session() as session:
-                    user_repo = UserRepository(session)
-                    billing_user = await user_repo.get_by_telegram_id(user.id)
-                if billing_user:
-                    duration_minutes = media_info.duration_seconds / 60.0
-                    can_transcribe, billing_msg = await self.billing_service.check_can_transcribe(
-                        user_id=billing_user.id, duration_minutes=duration_minutes
-                    )
-                    if not can_transcribe:
-                        await update.message.reply_text(
-                            f"⚠️ {billing_msg}\n\n"
-                            "Используйте /buy для покупки пакета минут\n"
-                            "или /subscribe для подписки."
+                try:
+                    async with get_session() as session:
+                        user_repo = UserRepository(session)
+                        billing_user = await user_repo.get_by_telegram_id(user.id)
+                    if billing_user:
+                        duration_minutes = media_info.duration_seconds / 60.0
+                        can_transcribe, billing_msg = (
+                            await self.billing_service.check_can_transcribe(
+                                user_id=billing_user.id, duration_minutes=duration_minutes
+                            )
                         )
-                        logger.warning(f"User {user.id} rejected: billing limit exceeded")
-                        return
+                        if not can_transcribe:
+                            await update.message.reply_text(
+                                f"⚠️ {billing_msg}\n\n"
+                                "Используйте /buy для покупки пакета минут\n"
+                                "или /subscribe для подписки."
+                            )
+                            logger.warning(f"User {user.id} rejected: billing limit exceeded")
+                            return
+                except Exception as e:
+                    logger.error(f"Billing check failed, allowing transcription: {e}")
+                    # Fail-open: billing errors should not block transcription
             else:
                 # 4b. Legacy quota check
                 async with get_session() as session:

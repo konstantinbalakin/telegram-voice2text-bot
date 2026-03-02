@@ -236,6 +236,13 @@ class BillingService:
                             from_package += deduct
                         remaining -= deduct
 
+            # Log deduction shortfall if minutes couldn't be fully covered
+            if remaining > 0:
+                logger.warning(
+                    f"Deduction shortfall for user {user_id}: "
+                    f"requested={duration:.1f}, unfunded={remaining:.1f}"
+                )
+
             # Log daily deduction
             if from_daily > 0:
                 await deduction_log_repo.create(
