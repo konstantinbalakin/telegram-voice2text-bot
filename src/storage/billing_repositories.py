@@ -10,9 +10,7 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.payments.base import (
-    BalanceType,
-    DeductionSource,
-    PaymentStatus,
+    PurchaseStatus,
     SubscriptionStatus,
 )
 from src.storage.models import (
@@ -542,7 +540,7 @@ class PurchaseRepository:
             currency=currency,
             payment_provider=payment_provider,
             provider_transaction_id=provider_transaction_id,
-            status=PaymentStatus.PENDING,
+            status=PurchaseStatus.PENDING,
             created_at=datetime.now(timezone.utc),
         )
         self.session.add(purchase)
@@ -556,14 +554,14 @@ class PurchaseRepository:
 
     async def mark_completed(self, purchase: Purchase) -> Purchase:
         """Mark purchase as completed."""
-        purchase.status = "completed"
+        purchase.status = PurchaseStatus.COMPLETED
         purchase.completed_at = datetime.now(timezone.utc)
         await self.session.flush()
         return purchase
 
     async def mark_failed(self, purchase: Purchase) -> Purchase:
         """Mark purchase as failed."""
-        purchase.status = "failed"
+        purchase.status = PurchaseStatus.FAILED
         purchase.completed_at = datetime.now(timezone.utc)
         await self.session.flush()
         return purchase

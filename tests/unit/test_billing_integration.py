@@ -224,5 +224,5 @@ async def test_get_purchase_buttons_text():
     mocks["balance_repo"].get_total_minutes.side_effect = [0.0, 0.0]
 
     balance = await service.get_user_balance(user_id=1)
-    assert balance["total_available"] == 0.0
-    assert balance["daily_remaining"] == 0.0
+    assert balance.total_available == 0.0
+    assert balance.daily_remaining == 0.0

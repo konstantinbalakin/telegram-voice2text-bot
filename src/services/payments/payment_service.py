@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Callable, Optional
 
 from src.services.payments.base import (
+    BalanceType,
     PaymentProvider,
     PaymentRequest,
     PaymentResult,
@@ -194,7 +195,7 @@ class PaymentService:
 
             await balance_repo.create(
                 user_id=user_id,
-                balance_type="package",
+                balance_type=BalanceType.PACKAGE,
                 minutes_remaining=package.minutes,
                 source_description=f"Package: {package.name}",
             )

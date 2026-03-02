@@ -8,6 +8,13 @@ from typing import Optional
 from sqlalchemy import String, Integer, Boolean, DateTime, Date, Float, ForeignKey
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from src.services.payments.base import (
+    Currency,
+    PaymentStatus,
+    PurchaseStatus,
+    SubscriptionStatus,
+)
+
 
 class Base(DeclarativeBase):
     """Base class for all database models."""
@@ -145,13 +152,11 @@ class Transaction(Base):
 
     # Transaction data
     amount: Mapped[int] = mapped_column(Integer, nullable=False)  # Amount in cents
-    currency: Mapped[str] = mapped_column(String(3), default="USD", nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), default=Currency.USD, nullable=False)
     quota_seconds_added: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Status
-    status: Mapped[str] = mapped_column(
-        String(50), default="pending", nullable=False
-    )  # pending, completed, failed, refunded
+    status: Mapped[str] = mapped_column(String(50), default=PaymentStatus.PENDING, nullable=False)
 
     # Payment provider data
     provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
@@ -361,7 +366,7 @@ class SubscriptionPrice(Base):
     tier_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("subscription_tiers.id"), nullable=False, index=True
     )
-    period: Mapped[str] = mapped_column(String(20), nullable=False)  # week, month, year
+    period: Mapped[str] = mapped_column(String(20), nullable=False)
     amount_rub: Mapped[float] = mapped_column(Float, nullable=False)
     amount_stars: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -398,8 +403,8 @@ class UserSubscription(Base):
         Integer, ForeignKey("subscription_tiers.id"), nullable=True
     )
     status: Mapped[str] = mapped_column(
-        String(20), default="active", nullable=False
-    )  # active, cancelled, expired
+        String(20), default=SubscriptionStatus.ACTIVE, nullable=False
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
@@ -454,7 +459,7 @@ class UserMinuteBalance(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False, index=True
     )
-    balance_type: Mapped[str] = mapped_column(String(20), nullable=False)  # bonus, package
+    balance_type: Mapped[str] = mapped_column(String(20), nullable=False)
     minutes_remaining: Mapped[float] = mapped_column(Float, nullable=False)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     source_description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -517,15 +522,13 @@ class Purchase(Base):
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False, index=True
     )
-    purchase_type: Mapped[str] = mapped_column(String(20), nullable=False)  # package, subscription
+    purchase_type: Mapped[str] = mapped_column(String(20), nullable=False)
     item_id: Mapped[int] = mapped_column(Integer, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
     currency: Mapped[str] = mapped_column(String(10), nullable=False)
     payment_provider: Mapped[str] = mapped_column(String(50), nullable=False)
     provider_transaction_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(20), default="pending", nullable=False
-    )  # pending, completed, failed, refunded
+    status: Mapped[str] = mapped_column(String(20), default=PurchaseStatus.PENDING, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
@@ -551,7 +554,7 @@ class DeductionLog(Base):
     usage_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("usage.id"), nullable=False, index=True
     )
-    source_type: Mapped[str] = mapped_column(String(20), nullable=False)  # daily, bonus, package
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False)
     source_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     minutes_deducted: Mapped[float] = mapped_column(Float, nullable=False)
 

@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Callable, Optional
 
+from src.services.payments.base import SubscriptionPeriod
 from src.storage.billing_repositories import (
     SubscriptionRepository,
     UserMinuteBalanceRepository,
@@ -19,12 +20,6 @@ from src.storage.models import (
 )
 
 logger = logging.getLogger(__name__)
-
-PERIOD_DAYS = {
-    "week": 7,
-    "month": 30,
-    "year": 365,
-}
 
 # Type alias for session factory (e.g. database.get_session)
 SessionFactory = Callable[..., Any]
@@ -108,7 +103,7 @@ class SubscriptionService:
                 await subscription_repo.cancel_subscription(existing)
                 logger.info(f"Cancelled existing subscription {existing.id} for user {user_id}")
 
-            days = PERIOD_DAYS.get(period, 30)
+            days = SubscriptionPeriod(period).days
             expires_at = datetime.now(timezone.utc) + timedelta(days=days)
 
             subscription = await subscription_repo.create_subscription(
@@ -148,7 +143,7 @@ class SubscriptionService:
                     f"for user {subscription.user_id}"
                 )
 
-            days = PERIOD_DAYS.get(subscription.period, 30)
+            days = SubscriptionPeriod(subscription.period).days
             expires_at = datetime.now(timezone.utc) + timedelta(days=days)
 
             new_sub = await subscription_repo.create_subscription(

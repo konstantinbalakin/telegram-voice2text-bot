@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, AsyncGenerator, Callable, Optional
 
+from src.services.payments.base import BalanceType, DeductionSource, UserBalance
 from src.storage.billing_repositories import (
     BillingConditionRepository,
     SubscriptionRepository,
@@ -123,7 +124,7 @@ class BillingService:
 
             return DEFAULT_DAILY_FREE_MINUTES
 
-    async def get_user_balance(self, user_id: int) -> dict:
+    async def get_user_balance(self, user_id: int) -> UserBalance:
         """Get full user balance breakdown."""
         async with self._repos() as (
             condition_repo,
@@ -143,22 +144,22 @@ class BillingService:
             daily_remaining = max(0.0, daily_limit - daily_used)
 
             bonus_minutes = await balance_repo.get_total_minutes(
-                user_id=user_id, balance_type="bonus"
+                user_id=user_id, balance_type=BalanceType.BONUS
             )
             package_minutes = await balance_repo.get_total_minutes(
-                user_id=user_id, balance_type="package"
+                user_id=user_id, balance_type=BalanceType.PACKAGE
             )
 
             total_available = daily_remaining + bonus_minutes + package_minutes
 
-            return {
-                "daily_limit": daily_limit,
-                "daily_used": daily_used,
-                "daily_remaining": daily_remaining,
-                "bonus_minutes": bonus_minutes,
-                "package_minutes": package_minutes,
-                "total_available": total_available,
-            }
+            return UserBalance(
+                daily_limit=daily_limit,
+                daily_used=daily_used,
+                daily_remaining=daily_remaining,
+                bonus_minutes=bonus_minutes,
+                package_minutes=package_minutes,
+                total_available=total_available,
+            )
 
     async def check_can_transcribe(
         self, user_id: int, duration_minutes: float
@@ -173,12 +174,12 @@ class BillingService:
         duration = self.round_minutes(duration_minutes)
         balance = await self.get_user_balance(user_id=user_id)
 
-        if balance["total_available"] >= duration:
+        if balance.total_available >= duration:
             return True, None
 
         return False, (
             f"Недостаточно минут. Требуется: {duration:.1f} мин, "
-            f"доступно: {balance['total_available']:.1f} мин."
+            f"доступно: {balance.total_available:.1f} мин."
         )
 
     async def deduct_minutes(self, user_id: int, usage_id: int, duration_minutes: float) -> dict:
@@ -230,7 +231,7 @@ class BillingService:
                             source_id=balance.id,
                             minutes_deducted=deduct,
                         )
-                        if balance.balance_type == "bonus":
+                        if balance.balance_type == BalanceType.BONUS:
                             from_bonus += deduct
                         else:
                             from_package += deduct
@@ -248,7 +249,7 @@ class BillingService:
                 await deduction_log_repo.create(
                     user_id=user_id,
                     usage_id=usage_id,
-                    source_type="daily",
+                    source_type=DeductionSource.DAILY,
                     minutes_deducted=from_daily,
                 )
 
@@ -327,7 +328,7 @@ class BillingService:
 
             balance = await balance_repo.create(
                 user_id=user_id,
-                balance_type="bonus",
+                balance_type=BalanceType.BONUS,
                 minutes_remaining=bonus_minutes,
                 expires_at=expires_at,
                 source_description="Welcome bonus",
@@ -350,7 +351,7 @@ class BillingService:
         ):
             balance = await balance_repo.create(
                 user_id=user_id,
-                balance_type="bonus",
+                balance_type=BalanceType.BONUS,
                 minutes_remaining=minutes,
                 expires_at=None,
                 source_description="Grace period bonus",
@@ -372,9 +373,7 @@ class BillingService:
             if tier:
                 return tier.daily_limit_minutes
 
-        value = await condition_repo.get_effective_value(
-            key="daily_free_minutes", user_id=user_id
-        )
+        value = await condition_repo.get_effective_value(key="daily_free_minutes", user_id=user_id)
         if value is not None:
             return float(value)
 

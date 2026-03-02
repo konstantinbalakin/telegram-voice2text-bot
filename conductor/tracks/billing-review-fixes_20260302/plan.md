@@ -76,20 +76,20 @@
 
 ### Tasks
 
-- [ ] Task 4.1: Создать enum'ы: `SubscriptionStatus`, `SubscriptionPeriod`, `BalanceType`, `DeductionSource`, `PurchaseStatus`, `Currency` (расширить existing `PaymentType`, `PaymentStatus`)
-- [ ] Task 4.2: Применить enum'ы в SQLAlchemy моделях (`storage/models.py`) и миграциях
-- [ ] Task 4.3: Обновить репозитории и сервисы для работы с enum вместо строк
-- [ ] Task 4.4: Заменить `dict` на `UserBalance` dataclass в `get_user_balance`
-- [ ] Task 4.5: Добавить `__post_init__` валидацию в `PaymentResult` — `success=True` несовместим с `error_message`
-- [ ] Task 4.6: Заменить `PERIOD_DAYS.get(period, 30)` на explicit error при невалидном периоде
-- [ ] Task 4.7: Устранить нарушение encapsulation — добавить методы-обёртки в сервисы вместо прямого доступа к `subscription_repo` из commands
-- [ ] Task 4.8: Обновить тесты для работы с enum'ами и новыми типами
+- [x] Task 4.1: Создать enum'ы: `SubscriptionStatus`, `SubscriptionPeriod`, `BalanceType`, `DeductionSource`, `PurchaseStatus`, `Currency` (расширить existing `PaymentType`, `PaymentStatus`)
+- [x] Task 4.2: Применить enum'ы в SQLAlchemy моделях (`storage/models.py`) и миграциях
+- [x] Task 4.3: Обновить репозитории и сервисы для работы с enum вместо строк
+- [x] Task 4.4: Заменить `dict` на `UserBalance` dataclass в `get_user_balance`
+- [x] Task 4.5: Добавить `__post_init__` валидацию в `PaymentResult` — `success=True` несовместим с `error_message`
+- [x] Task 4.6: Заменить `PERIOD_DAYS.get(period, 30)` на explicit error при невалидном периоде
+- [x] Task 4.7: Устранить нарушение encapsulation — добавить методы-обёртки в сервисы вместо прямого доступа к `subscription_repo` из commands
+- [x] Task 4.8: Обновить тесты для работы с enum'ами и новыми типами
 
 ### Verification
 
-- [ ] `uv run mypy src/` без ошибок
-- [ ] Все тесты проходят с enum'ами
-- [ ] Нет строковых литералов для статусов/типов в коде
+- [x] `uv run mypy src/` без ошибок
+- [x] Все тесты проходят с enum'ами
+- [x] Нет строковых литералов для статусов/типов в коде
 
 ## Phase 5: Comments & Documentation
 

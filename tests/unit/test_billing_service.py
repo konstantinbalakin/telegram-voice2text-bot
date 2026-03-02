@@ -104,12 +104,12 @@ async def test_get_user_balance():
 
     balance = await service.get_user_balance(user_id=1)
 
-    assert balance["daily_limit"] == 10.0
-    assert balance["daily_used"] == 3.0
-    assert balance["daily_remaining"] == 7.0
-    assert balance["bonus_minutes"] == 20.0
-    assert balance["package_minutes"] == 50.0
-    assert balance["total_available"] == 77.0  # 7 + 20 + 50
+    assert balance.daily_limit == 10.0
+    assert balance.daily_used == 3.0
+    assert balance.daily_remaining == 7.0
+    assert balance.bonus_minutes == 20.0
+    assert balance.package_minutes == 50.0
+    assert balance.total_available == 77.0  # 7 + 20 + 50
 
 
 @pytest.mark.asyncio
@@ -124,9 +124,9 @@ async def test_get_user_balance_no_usage_today():
 
     balance = await service.get_user_balance(user_id=1)
 
-    assert balance["daily_used"] == 0.0
-    assert balance["daily_remaining"] == 10.0
-    assert balance["total_available"] == 10.0
+    assert balance.daily_used == 0.0
+    assert balance.daily_remaining == 10.0
+    assert balance.total_available == 10.0
 
 
 # =============================================================================

@@ -93,8 +93,8 @@ class TestBillingServicePerRequestSession:
         balance = await service.get_user_balance(user_id=1)
 
         assert factory.call_count() == 1  # type: ignore[attr-defined]
-        assert balance["daily_limit"] == 10.0
-        assert balance["total_available"] == 10.0
+        assert balance.daily_limit == 10.0
+        assert balance.total_available == 10.0
 
     @pytest.mark.asyncio
     @patch("src.services.billing_service.DeductionLogRepository")
@@ -147,9 +147,7 @@ class TestSubscriptionServicePerRequestSession:
 
     @pytest.mark.asyncio
     @patch("src.services.subscription_service.SubscriptionRepository")
-    async def test_get_available_tiers_uses_session(
-        self, mock_sub_cls: MagicMock
-    ) -> None:
+    async def test_get_available_tiers_uses_session(self, mock_sub_cls: MagicMock) -> None:
         """get_available_tiers creates a fresh session."""
         factory = _counting_session_factory()
         mock_sub_cls.return_value.get_active_tiers = AsyncMock(return_value=[])
@@ -162,9 +160,7 @@ class TestSubscriptionServicePerRequestSession:
 
     @pytest.mark.asyncio
     @patch("src.services.subscription_service.SubscriptionRepository")
-    async def test_each_call_creates_new_session(
-        self, mock_sub_cls: MagicMock
-    ) -> None:
+    async def test_each_call_creates_new_session(self, mock_sub_cls: MagicMock) -> None:
         """Each method call creates a separate session."""
         factory = _counting_session_factory()
         mock_sub_cls.return_value.get_active_tiers = AsyncMock(return_value=[])

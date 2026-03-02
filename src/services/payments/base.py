@@ -58,7 +58,32 @@ class DeductionSource(str, Enum):
     PACKAGE = "package"
 
 
+class PurchaseStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REFUNDED = "refunded"
+
+
+class Currency(str, Enum):
+    USD = "USD"
+    RUB = "RUB"
+    XTR = "XTR"
+
+
 # ── Data classes ─────────────────────────────────────────────────────
+
+
+@dataclass
+class UserBalance:
+    """User's minute balance breakdown."""
+
+    daily_limit: float
+    daily_used: float
+    daily_remaining: float
+    bonus_minutes: float
+    package_minutes: float
+    total_available: float
 
 
 @dataclass

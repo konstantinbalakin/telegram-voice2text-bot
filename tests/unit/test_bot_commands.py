@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from telegram import Update, User as TelegramUser, Message, Chat
 
+from src.services.payments.base import UserBalance
+
 
 # =============================================================================
 # Helper to create mock update
@@ -50,14 +52,14 @@ class TestBalanceCommand:
 
         billing_service = AsyncMock()
         billing_service.get_user_balance = AsyncMock(
-            return_value={
-                "daily_limit": 10.0,
-                "daily_used": 3.5,
-                "daily_remaining": 6.5,
-                "bonus_minutes": 45.0,
-                "package_minutes": 100.0,
-                "total_available": 151.5,
-            }
+            return_value=UserBalance(
+                daily_limit=10.0,
+                daily_used=3.5,
+                daily_remaining=6.5,
+                bonus_minutes=45.0,
+                package_minutes=100.0,
+                total_available=151.5,
+            )
         )
 
         subscription_service = AsyncMock()
@@ -130,14 +132,14 @@ class TestBalanceCommand:
 
         billing_service = AsyncMock()
         billing_service.get_user_balance = AsyncMock(
-            return_value={
-                "daily_limit": 30.0,
-                "daily_used": 5.0,
-                "daily_remaining": 25.0,
-                "bonus_minutes": 0.0,
-                "package_minutes": 0.0,
-                "total_available": 25.0,
-            }
+            return_value=UserBalance(
+                daily_limit=30.0,
+                daily_used=5.0,
+                daily_remaining=25.0,
+                bonus_minutes=0.0,
+                package_minutes=0.0,
+                total_available=25.0,
+            )
         )
 
         subscription_service = AsyncMock()

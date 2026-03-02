@@ -797,10 +797,10 @@ class TranscriptionOrchestrator:
                         )
                         await request.user_message.reply_text(
                             f"⚠️ Дневной лимит почти исчерпан!\n\n"
-                            f"Использовано: {balance['daily_used']:.1f} из "
-                            f"{balance['daily_limit']:.1f} мин\n"
-                            f"Бонусные минуты: {balance['bonus_minutes']:.1f}\n"
-                            f"Пакетные минуты: {balance['package_minutes']:.1f}\n\n"
+                            f"Использовано: {balance.daily_used:.1f} из "
+                            f"{balance.daily_limit:.1f} мин\n"
+                            f"Бонусные минуты: {balance.bonus_minutes:.1f}\n"
+                            f"Пакетные минуты: {balance.package_minutes:.1f}\n\n"
                             f"Используйте /buy или /subscribe для пополнения."
                         )
                 except Exception as billing_err:
@@ -840,8 +840,8 @@ class TranscriptionOrchestrator:
                 await request.status_message.edit_text(
                     "❌ Произошла ошибка при обработке. Пожалуйста, попробуйте еще раз."
                 )
-            except Exception as e:
-                logger.debug(f"Failed to send error message: {e}")
+            except Exception as notify_err:
+                logger.debug(f"Failed to send error message: {notify_err}")
 
             self.audio_handler.cleanup_file(request.file_path)
             if processed_path != request.file_path:

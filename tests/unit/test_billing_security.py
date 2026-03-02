@@ -29,7 +29,6 @@ class TestYooKassaWebhookVerification:
     async def test_webhook_verifies_payment(self, mock_to_thread: MagicMock) -> None:
         """handle_callback verifies payment.succeeded via verify_payment."""
         from src.services.payments.yookassa_provider import YooKassaProvider
-        from src.services.payments.base import PaymentResult
 
         # verify_payment returns succeeded
         mock_payment = MagicMock()
@@ -222,11 +221,13 @@ class TestParseMethodsLogging:
         """parse_metadata works for valid input."""
         from src.services.payments.yookassa_provider import YooKassaProvider
 
-        result = YooKassaProvider.parse_metadata({
-            "payment_type": "package",
-            "item_id": "1",
-            "user_id": "42",
-        })
+        result = YooKassaProvider.parse_metadata(
+            {
+                "payment_type": "package",
+                "item_id": "1",
+                "user_id": "42",
+            }
+        )
         assert result is not None
         assert result["item_id"] == 1
         assert result["user_id"] == 42

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from src.services.payments.base import SubscriptionPeriod
 from src.storage.database import get_session
 from src.storage.repositories import UserRepository
 
@@ -54,17 +55,17 @@ class BillingCommands:
 
             lines = [
                 "Ваш баланс минут:\n",
-                f"Дневной лимит: {balance['daily_limit']:.1f} мин",
-                f"Использовано сегодня: {balance['daily_used']:.1f} мин",
-                f"Осталось сегодня: {balance['daily_remaining']:.1f} мин",
+                f"Дневной лимит: {balance.daily_limit:.1f} мин",
+                f"Использовано сегодня: {balance.daily_used:.1f} мин",
+                f"Осталось сегодня: {balance.daily_remaining:.1f} мин",
             ]
 
-            if balance["bonus_minutes"] > 0:
-                lines.append(f"Бонусные минуты: {balance['bonus_minutes']:.1f} мин")
-            if balance["package_minutes"] > 0:
-                lines.append(f"Пакетные минуты: {balance['package_minutes']:.1f} мин")
+            if balance.bonus_minutes > 0:
+                lines.append(f"Бонусные минуты: {balance.bonus_minutes:.1f} мин")
+            if balance.package_minutes > 0:
+                lines.append(f"Пакетные минуты: {balance.package_minutes:.1f} мин")
 
-            lines.append(f"\nВсего доступно: {balance['total_available']:.1f} мин")
+            lines.append(f"\nВсего доступно: {balance.total_available:.1f} мин")
 
             # Subscription info
             active_sub = await self.subscription_service.get_active_subscription(db_user.id)
@@ -93,9 +94,7 @@ class BillingCommands:
             tiers = await self.subscription_service.get_available_tiers()
 
             if not tiers:
-                await update.message.reply_text(
-                    "Подписки сейчас недоступны. Попробуйте позже."
-                )
+                await update.message.reply_text("Подписки сейчас недоступны. Попробуйте позже.")
                 return
 
             lines = ["Доступные подписки:\n"]
@@ -137,9 +136,7 @@ class BillingCommands:
             packages = await self.payment_service.get_active_packages()
 
             if not packages:
-                await update.message.reply_text(
-                    "Пакеты минут сейчас недоступны. Попробуйте позже."
-                )
+                await update.message.reply_text("Пакеты минут сейчас недоступны. Попробуйте позже.")
                 return
 
             lines = ["Пакеты минут:\n"]
@@ -237,8 +234,11 @@ class BillingCommands:
 def _period_label(period: str) -> str:
     """Convert period code to human-readable label."""
     labels = {
-        "week": "Неделя",
-        "month": "Месяц",
-        "year": "Год",
+        SubscriptionPeriod.WEEK: "Неделя",
+        SubscriptionPeriod.MONTH: "Месяц",
+        SubscriptionPeriod.YEAR: "Год",
     }
-    return labels.get(period, period)
+    try:
+        return labels[SubscriptionPeriod(period)]
+    except (ValueError, KeyError):
+        return period
