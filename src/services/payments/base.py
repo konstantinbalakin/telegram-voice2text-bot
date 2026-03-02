@@ -1,5 +1,7 @@
 """
 Payment provider protocol and data models.
+
+Billing enums are centralised here to avoid circular imports.
 """
 
 from dataclasses import dataclass
@@ -7,20 +9,56 @@ from enum import Enum
 from typing import Optional, Protocol
 
 
-class PaymentType(str, Enum):
-    """Payment type."""
+# ── Enums ────────────────────────────────────────────────────────────
 
+
+class PaymentType(str, Enum):
     PACKAGE = "package"
     SUBSCRIPTION = "subscription"
 
 
 class PaymentStatus(str, Enum):
-    """Payment status."""
-
     PENDING = "pending"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class SubscriptionStatus(str, Enum):
+    ACTIVE = "active"
+    EXPIRED = "expired"
+    CANCELLED = "cancelled"
+
+
+class SubscriptionPeriod(str, Enum):
+    WEEK = "week"
+    MONTH = "month"
+    YEAR = "year"
+
+    @property
+    def days(self) -> int:
+        return _PERIOD_DAYS[self]
+
+
+_PERIOD_DAYS = {
+    SubscriptionPeriod.WEEK: 7,
+    SubscriptionPeriod.MONTH: 30,
+    SubscriptionPeriod.YEAR: 365,
+}
+
+
+class BalanceType(str, Enum):
+    BONUS = "bonus"
+    PACKAGE = "package"
+
+
+class DeductionSource(str, Enum):
+    DAILY = "daily"
+    BONUS = "bonus"
+    PACKAGE = "package"
+
+
+# ── Data classes ─────────────────────────────────────────────────────
 
 
 @dataclass
@@ -44,6 +82,10 @@ class PaymentResult:
     provider_transaction_id: Optional[str] = None
     payment_url: Optional[str] = None
     error_message: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.success and self.error_message:
+            raise ValueError("success=True is incompatible with error_message")
 
 
 class PaymentProvider(Protocol):

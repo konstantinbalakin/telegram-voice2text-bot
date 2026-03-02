@@ -25,9 +25,9 @@
 
 ### Verification
 
-- [ ] Все существующие тесты проходят
-- [ ] Новые тесты на session/ID/async проходят
-- [ ] `uv run mypy src/` без ошибок
+- [x] Все существующие тесты проходят
+- [x] Новые тесты на session/ID/async проходят
+- [x] `uv run mypy src/` без ошибок
 
 ## Phase 2: Error Handling & Resilience
 
@@ -35,19 +35,19 @@
 
 ### Tasks
 
-- [ ] Task 2.1: Обернуть `deduct_minutes` в try-except в `transcription_orchestrator.py` — ошибка биллинга не должна ронять pipeline
-- [ ] Task 2.2: Добавить try-except в `check_can_transcribe` в `handlers.py` — fail-open при ошибке биллинга
-- [ ] Task 2.3: Добавить try-except во все команды `billing_commands.py` (`/balance`, `/subscribe`, `/buy`, `/start`, `/help`) — понятное сообщение пользователю при ошибке
-- [ ] Task 2.4: Добавить проверку `remaining > 0` после цикла списания в `deduct_minutes` — логировать дефицит
-- [ ] Task 2.5: Исправить `_credit_package` — бросать исключение вместо `return False` при отсутствии пакета
-- [ ] Task 2.6: Обернуть `grant_welcome_bonus` в try-except в `billing_commands.py`
-- [ ] Task 2.7: Заменить `except Exception: pass` на `logger.debug()` в orchestrator (4 места)
-- [ ] Task 2.8: Написать тесты на error handling — ошибки БД, сетевые ошибки, edge cases
+- [x] Task 2.1: Обернуть `deduct_minutes` в try-except в `transcription_orchestrator.py` — ошибка биллинга не должна ронять pipeline
+- [x] Task 2.2: Добавить try-except в `check_can_transcribe` в `handlers.py` — fail-open при ошибке биллинга
+- [x] Task 2.3: Добавить try-except во все команды `billing_commands.py` (`/balance`, `/subscribe`, `/buy`, `/start`, `/help`) — понятное сообщение пользователю при ошибке
+- [x] Task 2.4: Добавить проверку `remaining > 0` после цикла списания в `deduct_minutes` — логировать дефицит
+- [x] Task 2.5: Исправить `_credit_package` — бросать исключение вместо `return False` при отсутствии пакета
+- [x] Task 2.6: Обернуть `grant_welcome_bonus` в try-except в `billing_commands.py`
+- [x] Task 2.7: Заменить `except Exception: pass` на `logger.debug()` в orchestrator (4 места)
+- [x] Task 2.8: Написать тесты на error handling — ошибки БД, сетевые ошибки, edge cases
 
 ### Verification
 
-- [ ] Тесты на error handling проходят
-- [ ] Ошибка биллинга не прерывает транскрипцию (тест)
+- [x] Тесты на error handling проходят
+- [x] Ошибка биллинга не прерывает транскрипцию (тест)
 
 ## Phase 3: Security & Payment Logic
 
@@ -55,20 +55,20 @@
 
 ### Tasks
 
-- [ ] Task 3.1: Добавить верификацию webhook YooKassa — проверка через `Payment.find_one(payment_id)` после callback
-- [ ] Task 3.2: Добавить вызов `mark_completed` для Purchase после успешной оплаты в `handle_successful_payment`
-- [ ] Task 3.3: Исправить `cancel_subscription` — `auto_renew=False` без смены статуса, чтобы подписка работала до `expires_at`
-- [ ] Task 3.4: Убрать hardcoded `period="month"` из `_activate_subscription` — передавать period из данных платежа
-- [ ] Task 3.5: Добавить `ORDER BY` в `get_active_balances` для гарантии порядка bonus -> package
-- [ ] Task 3.6: Исправить seed-миграцию: `welcome_bonus_days` = NULL вместо пустой строки, `tier_id` через подзапрос, `now` внутри `upgrade()`
-- [ ] Task 3.7: Добавить логирование в `parse_payload` и `parse_metadata` — WARNING при ошибке парсинга; убрать дефолтные `0`
-- [ ] Task 3.8: Написать тесты на все исправления фазы 3
+- [x] Task 3.1: Добавить верификацию webhook YooKassa — проверка через `Payment.find_one(payment_id)` после callback
+- [x] Task 3.2: Добавить вызов `mark_completed` для Purchase после успешной оплаты в `handle_successful_payment`
+- [x] Task 3.3: Исправить `cancel_subscription` — `auto_renew=False` без смены статуса, чтобы подписка работала до `expires_at`
+- [x] Task 3.4: Убрать hardcoded `period="month"` из `_activate_subscription` — передавать period из данных платежа
+- [x] Task 3.5: Добавить `ORDER BY` в `get_active_balances` для гарантии порядка bonus -> package
+- [x] Task 3.6: Исправить seed-миграцию: `welcome_bonus_days` = NULL вместо пустой строки, `tier_id` через подзапрос, `now` внутри `upgrade()`
+- [x] Task 3.7: Добавить логирование в `parse_payload` и `parse_metadata` — WARNING при ошибке парсинга; убрать дефолтные `0`
+- [x] Task 3.8: Написать тесты на все исправления фазы 3
 
 ### Verification
 
-- [ ] Webhook верификация тест проходит
-- [ ] Purchase корректно переходит в completed (тест)
-- [ ] Отмена подписки сохраняет лимит до expires_at (тест)
+- [x] Webhook верификация тест проходит
+- [x] Purchase корректно переходит в completed (тест)
+- [x] Отмена подписки сохраняет лимит до expires_at (тест)
 
 ## Phase 4: Type Design & Enums
 

@@ -9,6 +9,12 @@ from typing import Optional
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.services.payments.base import (
+    BalanceType,
+    DeductionSource,
+    PaymentStatus,
+    SubscriptionStatus,
+)
 from src.storage.models import (
     BillingCondition,
     SubscriptionTier,
@@ -199,7 +205,7 @@ class SubscriptionRepository:
             expires_at=expires_at,
             auto_renew=auto_renew,
             payment_provider=payment_provider,
-            status="active",
+            status=SubscriptionStatus.ACTIVE,
         )
         self.session.add(subscription)
         await self.session.flush()
@@ -212,7 +218,7 @@ class SubscriptionRepository:
             select(UserSubscription).where(
                 and_(
                     UserSubscription.user_id == user_id,
-                    UserSubscription.status == "active",
+                    UserSubscription.status == SubscriptionStatus.ACTIVE,
                     UserSubscription.expires_at > now,
                 )
             )
@@ -244,7 +250,7 @@ class SubscriptionRepository:
         result = await self.session.execute(
             select(UserSubscription).where(
                 and_(
-                    UserSubscription.status == "active",
+                    UserSubscription.status == SubscriptionStatus.ACTIVE,
                     UserSubscription.expires_at <= now,
                 )
             )
@@ -253,7 +259,7 @@ class SubscriptionRepository:
 
     async def expire_subscription(self, subscription: UserSubscription) -> UserSubscription:
         """Mark a subscription as expired."""
-        subscription.status = "expired"
+        subscription.status = SubscriptionStatus.EXPIRED
         subscription.auto_renew = False
         subscription.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
@@ -266,7 +272,7 @@ class SubscriptionRepository:
         result = await self.session.execute(
             select(UserSubscription).where(
                 and_(
-                    UserSubscription.status == "active",
+                    UserSubscription.status == SubscriptionStatus.ACTIVE,
                     UserSubscription.expires_at <= cutoff,
                     UserSubscription.expires_at > now,
                 )
@@ -536,7 +542,7 @@ class PurchaseRepository:
             currency=currency,
             payment_provider=payment_provider,
             provider_transaction_id=provider_transaction_id,
-            status="pending",
+            status=PaymentStatus.PENDING,
             created_at=datetime.now(timezone.utc),
         )
         self.session.add(purchase)
