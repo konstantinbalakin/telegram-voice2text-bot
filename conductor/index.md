@@ -23,6 +23,8 @@ Navigation hub for project context.
 - [ ] [billing-review-fixes_20260302](./tracks/billing-review-fixes_20260302/index.md) — Billing System PR Review Fixes
 - [ ] [billing-ux-fixes_20260302](./tracks/billing-ux-fixes_20260302/index.md) — Billing UX Fixes
 
+- [ ] [yookassa-native_20260303](./tracks/yookassa-native_20260303/index.md) — YooKassa Native Telegram Payments Integration
+
 <!-- Auto-populated by /conductor:new-track -->
 
 ## Getting Started
