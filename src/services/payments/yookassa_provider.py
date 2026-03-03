@@ -1,15 +1,14 @@
 """
-YooKassa payment provider.
+YooKassa payment provider (Native Telegram Payments).
 
-Integrates with YooKassa (Russian payment gateway) for processing payments
-via bank cards, SBP, and other methods. Requires the `yookassa` package.
-Sync SDK calls are wrapped in asyncio.to_thread() to avoid blocking the event loop.
+Uses Telegram Payments API with provider_token from BotFather.
+Works identically to TelegramStarsProvider but with currency=RUB.
 """
 
-import asyncio
 import logging
-import uuid
 from typing import Optional
+
+from telegram import Bot, LabeledPrice
 
 from src.services.payments.base import (
     PaymentRequest,
@@ -20,198 +19,75 @@ logger = logging.getLogger(__name__)
 
 
 class YooKassaProvider:
-    """Payment provider for YooKassa (Russian payment gateway).
+    """Payment provider for YooKassa via native Telegram Payments.
 
-    Supports: bank cards, SBP, recurring payments, 54-FZ receipts.
-    Sync SDK calls are wrapped in asyncio.to_thread() to avoid blocking the event loop.
+    Uses sendInvoice with provider_token and currency=RUB.
     """
 
-    def __init__(
-        self,
-        shop_id: str,
-        secret_key: str,
-        return_url: str = "",
-    ):
-        self.shop_id = shop_id
-        self.secret_key = secret_key
-        self.return_url = return_url
-        self._configured = False
-
-        try:
-            from yookassa import Configuration  # type: ignore[import-not-found]
-
-            Configuration.account_id = shop_id
-            Configuration.secret_key = secret_key
-            self._configured = True
-            logger.info("YooKassa SDK configured successfully")
-        except ImportError:
-            logger.warning("yookassa package not installed, YooKassa payments unavailable")
+    def __init__(self, bot: Bot, provider_token: str):
+        self.bot = bot
+        self.provider_token = provider_token
 
     @property
     def provider_name(self) -> str:
         return "yookassa"
 
     async def create_payment(self, request: PaymentRequest) -> PaymentResult:
-        """Create a YooKassa payment."""
-        if not self._configured:
-            return PaymentResult(
-                success=False,
-                error_message="YooKassa not configured (missing yookassa package)",
-            )
-
+        """Create a YooKassa invoice via Telegram Payments API."""
         try:
-            from yookassa import Payment  # type: ignore[import-not-found]
+            prices = [LabeledPrice(label=request.description, amount=int(request.amount))]
 
-            idempotency_key = str(uuid.uuid4())
-
-            receipt = {
-                "customer": {"email": request.customer_email} if request.customer_email else {},
-                "items": [
-                    {
-                        "description": request.description,
-                        "quantity": "1.00",
-                        "amount": {
-                            "value": f"{request.amount:.2f}",
-                            "currency": "RUB",
-                        },
-                        "vat_code": 1,
-                        "payment_subject": "service",
-                        "payment_mode": "full_payment",
-                    }
-                ],
-            }
-
-            payment_data: dict = {
-                "amount": {
-                    "value": f"{request.amount:.2f}",
-                    "currency": "RUB",
-                },
-                "confirmation": {
-                    "type": "redirect",
-                    "return_url": self.return_url,
-                },
-                "capture": True,
-                "description": request.description,
-                "metadata": {
-                    "payment_type": request.payment_type.value,
-                    "item_id": str(request.item_id),
-                    "user_id": str(request.user_id),
-                },
-            }
-
-            # Only include receipt if customer email is provided (54-FZ requirement)
-            if request.customer_email:
-                payment_data["receipt"] = receipt
-
-            # Wrap sync SDK call in asyncio.to_thread to avoid blocking event loop
-            payment = await asyncio.to_thread(Payment.create, payment_data, idempotency_key)
-
-            confirmation_url = None
-            if payment.confirmation:
-                confirmation_url = payment.confirmation.confirmation_url
+            invoice_link = await self.bot.create_invoice_link(
+                title=request.description,
+                description=request.description,
+                payload=f"{request.payment_type.value}:{request.item_id}:{request.user_id}",
+                provider_token=self.provider_token,
+                currency="RUB",
+                prices=prices,
+            )
 
             return PaymentResult(
                 success=True,
-                provider_transaction_id=payment.id,
-                payment_url=confirmation_url,
+                payment_url=invoice_link,
             )
         except Exception as e:
-            logger.error(f"Failed to create YooKassa payment: {e}")
+            logger.error(f"Failed to create YooKassa invoice: {e}")
             return PaymentResult(
                 success=False,
                 error_message=str(e),
             )
 
     async def handle_callback(self, data: dict) -> PaymentResult:
-        """Handle YooKassa webhook notification.
+        """Handle YooKassa payment callback.
 
-        Verifies the payment via Payment.find_one() to prevent spoofed callbacks.
+        Native Telegram Payments are fully managed by Telegram.
+        The bot receives pre_checkout_query and successful_payment updates directly.
         """
-        try:
-            event = data.get("event", "")
-            payment_obj = data.get("object", {})
-            payment_id = payment_obj.get("id", "")
-
-            if event == "payment.succeeded":
-                # Verify payment status with YooKassa API to prevent spoofed webhooks
-                if self._configured and payment_id:
-                    verification = await self.verify_payment(payment_id)
-                    if not verification.success:
-                        logger.warning(
-                            f"Webhook verification failed for payment {payment_id}: "
-                            f"{verification.error_message}"
-                        )
-                        return verification
-
-                return PaymentResult(
-                    success=True,
-                    provider_transaction_id=payment_id,
-                )
-            elif event == "payment.canceled":
-                return PaymentResult(
-                    success=False,
-                    provider_transaction_id=payment_id,
-                    error_message="Payment cancelled",
-                )
-            else:
-                return PaymentResult(
-                    success=False,
-                    error_message=f"Unknown event: {event}",
-                )
-        except Exception as e:
-            logger.error(f"Failed to handle YooKassa callback: {e}")
-            return PaymentResult(success=False, error_message=str(e))
+        return PaymentResult(success=True)
 
     async def verify_payment(self, transaction_id: str) -> PaymentResult:
-        """Verify payment status with YooKassa."""
-        if not self._configured:
-            return PaymentResult(
-                success=False,
-                error_message="YooKassa not configured",
-            )
-
-        try:
-            from yookassa import Payment  # type: ignore[import-not-found]
-
-            # Wrap sync SDK call in asyncio.to_thread to avoid blocking event loop
-            payment = await asyncio.to_thread(Payment.find_one, transaction_id)
-
-            if payment.status == "succeeded":
-                return PaymentResult(
-                    success=True,
-                    provider_transaction_id=transaction_id,
-                )
-            else:
-                return PaymentResult(
-                    success=False,
-                    provider_transaction_id=transaction_id,
-                    error_message=f"Payment status: {payment.status}",
-                )
-        except Exception as e:
-            logger.error(f"Failed to verify YooKassa payment: {e}")
-            return PaymentResult(success=False, error_message=str(e))
+        """Verify YooKassa payment. Native Telegram Payments are verified by Telegram."""
+        return PaymentResult(success=True, provider_transaction_id=transaction_id)
 
     @staticmethod
-    def parse_metadata(metadata: dict) -> Optional[dict]:
-        """Parse payment metadata from YooKassa payment object.
+    def parse_payload(payload: str) -> Optional[dict]:
+        """Parse payment payload string into components.
+
+        Payload format: {payment_type}:{item_id}:{user_id}
 
         Returns:
-            Parsed dict or None on malformed metadata.
+            Parsed dict or None on malformed payload.
         """
         try:
-            payment_type = metadata.get("payment_type")
-            item_id_raw = metadata.get("item_id")
-            user_id_raw = metadata.get("user_id")
-
-            if not payment_type or item_id_raw is None or user_id_raw is None:
-                logger.warning(f"Incomplete YooKassa metadata: {metadata}")
+            parts = payload.split(":")
+            if len(parts) != 3:
+                logger.warning(f"Malformed YooKassa payload (expected 3 parts): {payload!r}")
                 return None
-
             return {
-                "payment_type": payment_type,
-                "item_id": int(item_id_raw),
-                "user_id": int(user_id_raw),
+                "payment_type": parts[0],
+                "item_id": int(parts[1]),
+                "user_id": int(parts[2]),
             }
-        except (ValueError, TypeError) as e:
-            logger.warning(f"Failed to parse YooKassa metadata {metadata}: {e}")
+        except (ValueError, IndexError) as e:
+            logger.warning(f"Failed to parse YooKassa payload {payload!r}: {e}")
             return None

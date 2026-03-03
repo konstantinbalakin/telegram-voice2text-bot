@@ -192,10 +192,10 @@ class Settings(BaseSettings):
         description="Threshold (0.0-1.0) for daily limit warning notification (default: 80%)",
     )
 
-    # YooKassa Configuration
-    yookassa_shop_id: str = Field(default="", description="YooKassa Shop ID")
-    yookassa_secret_key: str = Field(default="", description="YooKassa Secret Key")
-    yookassa_return_url: str = Field(default="", description="YooKassa return URL after payment")
+    # YooKassa Configuration (native Telegram Payments via provider_token)
+    yookassa_provider_token: str = Field(
+        default="", description="YooKassa provider token from BotFather for native Telegram Payments"
+    )
 
     # LLM Refinement Configuration
     llm_refinement_enabled: bool = Field(default=True, description="Enable LLM text refinement")

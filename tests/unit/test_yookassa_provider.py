@@ -1,9 +1,14 @@
 """
-Tests for YooKassaProvider (Phase 9)
+Tests for YooKassaProvider (Native Telegram Payments via provider_token).
+
+The new YooKassaProvider uses Telegram Payments API (sendInvoice)
+with currency=RUB and provider_token, similar to TelegramStarsProvider.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
+from telegram import Bot
 
 from src.services.payments.base import PaymentRequest, PaymentType
 from src.services.payments.yookassa_provider import YooKassaProvider
@@ -16,9 +21,16 @@ from src.services.payments.yookassa_provider import YooKassaProvider
 
 def test_provider_name():
     """Test provider name is yookassa."""
-    # Create without SDK (will log warning but not fail)
-    provider = YooKassaProvider(shop_id="test", secret_key="test")
+    bot = MagicMock(spec=Bot)
+    provider = YooKassaProvider(bot=bot, provider_token="test_token")
     assert provider.provider_name == "yookassa"
+
+
+def test_provider_stores_token():
+    """Test provider stores provider_token."""
+    bot = MagicMock(spec=Bot)
+    provider = YooKassaProvider(bot=bot, provider_token="tok_123")
+    assert provider.provider_token == "tok_123"
 
 
 # =============================================================================
@@ -27,117 +39,94 @@ def test_provider_name():
 
 
 @pytest.mark.asyncio
-async def test_create_payment_not_configured():
-    """Test payment creation when SDK not installed."""
-    provider = YooKassaProvider(shop_id="test", secret_key="test")
-    # _configured will be False since yookassa package is not installed
+async def test_create_payment_creates_invoice_link():
+    """Test create_payment calls bot.create_invoice_link with RUB currency."""
+    bot = MagicMock(spec=Bot)
+    bot.create_invoice_link = AsyncMock(return_value="https://t.me/invoice/abc")
+    provider = YooKassaProvider(bot=bot, provider_token="tok_test")
+
+    request = PaymentRequest(
+        user_id=1,
+        payment_type=PaymentType.PACKAGE,
+        item_id=42,
+        amount=14900,  # Amount in kopecks (149.00 RUB)
+        currency="RUB",
+        description="50 минут транскрипции",
+    )
+
+    result = await provider.create_payment(request)
+
+    assert result.success is True
+    assert result.payment_url == "https://t.me/invoice/abc"
+    bot.create_invoice_link.assert_awaited_once()
+
+    # Verify the invoice was created with correct parameters
+    call_kwargs = bot.create_invoice_link.await_args.kwargs
+    assert call_kwargs["currency"] == "RUB"
+    assert call_kwargs["provider_token"] == "tok_test"
+    assert "package:42:1" in call_kwargs["payload"]
+
+
+@pytest.mark.asyncio
+async def test_create_payment_subscription():
+    """Test create_payment for subscription type."""
+    bot = MagicMock(spec=Bot)
+    bot.create_invoice_link = AsyncMock(return_value="https://t.me/invoice/xyz")
+    provider = YooKassaProvider(bot=bot, provider_token="tok_test")
+
+    request = PaymentRequest(
+        user_id=10,
+        payment_type=PaymentType.SUBSCRIPTION,
+        item_id=2,
+        amount=29900,
+        currency="RUB",
+        description="Подписка на месяц",
+    )
+
+    result = await provider.create_payment(request)
+
+    assert result.success is True
+    assert result.payment_url == "https://t.me/invoice/xyz"
+
+    call_kwargs = bot.create_invoice_link.await_args.kwargs
+    assert "subscription:2:10" in call_kwargs["payload"]
+
+
+@pytest.mark.asyncio
+async def test_create_payment_failure():
+    """Test create_payment handles errors gracefully."""
+    bot = MagicMock(spec=Bot)
+    bot.create_invoice_link = AsyncMock(side_effect=Exception("Telegram API error"))
+    provider = YooKassaProvider(bot=bot, provider_token="tok_test")
 
     request = PaymentRequest(
         user_id=1,
         payment_type=PaymentType.PACKAGE,
         item_id=1,
-        amount=149.0,
+        amount=14900,
         currency="RUB",
-        description="50 minutes",
+        description="Test",
     )
 
     result = await provider.create_payment(request)
+
     assert result.success is False
-    assert "not configured" in result.error_message
-
-
-@pytest.mark.asyncio
-async def test_create_payment_with_mock_sdk():
-    """Test payment creation with mocked YooKassa SDK."""
-    provider = YooKassaProvider(shop_id="test", secret_key="test")
-    provider._configured = True  # Force configured
-
-    mock_payment = MagicMock()
-    mock_payment.id = "pay_123"
-    mock_payment.confirmation = MagicMock()
-    mock_payment.confirmation.confirmation_url = "https://yookassa.ru/pay/123"
-
-    with patch(
-        "src.services.payments.yookassa_provider.Payment",
-        create=True,
-    ):
-        # Patch the import inside create_payment
-        import sys
-
-        mock_yookassa = MagicMock()
-        mock_yookassa.Payment = MagicMock()
-        mock_yookassa.Payment.create = MagicMock(return_value=mock_payment)
-        sys.modules["yookassa"] = mock_yookassa
-
-        try:
-            request = PaymentRequest(
-                user_id=1,
-                payment_type=PaymentType.PACKAGE,
-                item_id=1,
-                amount=149.0,
-                currency="RUB",
-                description="50 minutes",
-            )
-
-            result = await provider.create_payment(request)
-            assert result.success is True
-            assert result.provider_transaction_id == "pay_123"
-            assert result.payment_url == "https://yookassa.ru/pay/123"
-        finally:
-            del sys.modules["yookassa"]
+    assert "Telegram API error" in result.error_message
 
 
 # =============================================================================
-# handle_callback (webhook) Tests
+# handle_callback Tests
 # =============================================================================
 
 
 @pytest.mark.asyncio
-async def test_handle_callback_payment_succeeded():
-    """Test handling successful payment webhook."""
-    provider = YooKassaProvider(shop_id="test", secret_key="test")
+async def test_handle_callback_returns_success():
+    """Test handle_callback returns success (managed by Telegram)."""
+    bot = MagicMock(spec=Bot)
+    provider = YooKassaProvider(bot=bot, provider_token="tok_test")
 
-    result = await provider.handle_callback(
-        {
-            "event": "payment.succeeded",
-            "object": {"id": "pay_123", "status": "succeeded"},
-        }
-    )
-
+    result = await provider.handle_callback({})
     assert result.success is True
-    assert result.provider_transaction_id == "pay_123"
-
-
-@pytest.mark.asyncio
-async def test_handle_callback_payment_canceled():
-    """Test handling cancelled payment webhook."""
-    provider = YooKassaProvider(shop_id="test", secret_key="test")
-
-    result = await provider.handle_callback(
-        {
-            "event": "payment.canceled",
-            "object": {"id": "pay_456", "status": "canceled"},
-        }
-    )
-
-    assert result.success is False
-    assert "cancelled" in result.error_message.lower()
-
-
-@pytest.mark.asyncio
-async def test_handle_callback_unknown_event():
-    """Test handling unknown event."""
-    provider = YooKassaProvider(shop_id="test", secret_key="test")
-
-    result = await provider.handle_callback(
-        {
-            "event": "refund.succeeded",
-            "object": {"id": "ref_789"},
-        }
-    )
-
-    assert result.success is False
-    assert "Unknown event" in result.error_message
 
 
 # =============================================================================
@@ -146,46 +135,46 @@ async def test_handle_callback_unknown_event():
 
 
 @pytest.mark.asyncio
-async def test_verify_payment_not_configured():
-    """Test verify when SDK not configured."""
-    provider = YooKassaProvider(shop_id="test", secret_key="test")
+async def test_verify_payment_returns_success():
+    """Test verify_payment returns success (managed by Telegram)."""
+    bot = MagicMock(spec=Bot)
+    provider = YooKassaProvider(bot=bot, provider_token="tok_test")
 
-    result = await provider.verify_payment("pay_123")
-    assert result.success is False
+    result = await provider.verify_payment("tx_123")
+    assert result.success is True
+    assert result.provider_transaction_id == "tx_123"
 
 
 # =============================================================================
-# parse_metadata Tests
+# parse_payload Tests
 # =============================================================================
 
 
-def test_parse_metadata_valid():
-    """Test parsing valid metadata."""
-    result = YooKassaProvider.parse_metadata(
-        {"payment_type": "package", "item_id": "1", "user_id": "123"}
-    )
+def test_parse_payload_valid():
+    """Test parsing valid payload."""
+    result = YooKassaProvider.parse_payload("package:1:123")
     assert result is not None
     assert result["payment_type"] == "package"
     assert result["item_id"] == 1
     assert result["user_id"] == 123
 
 
-def test_parse_metadata_subscription():
-    """Test parsing subscription metadata."""
-    result = YooKassaProvider.parse_metadata(
-        {"payment_type": "subscription", "item_id": "2", "user_id": "456"}
-    )
+def test_parse_payload_subscription():
+    """Test parsing subscription payload."""
+    result = YooKassaProvider.parse_payload("subscription:2:456")
     assert result is not None
     assert result["payment_type"] == "subscription"
+    assert result["item_id"] == 2
+    assert result["user_id"] == 456
 
 
-def test_parse_metadata_invalid():
-    """Test parsing incomplete metadata returns None."""
-    result = YooKassaProvider.parse_metadata({"invalid": "data"})
-    assert result is None  # Missing required fields
+def test_parse_payload_invalid():
+    """Test parsing invalid payload returns None."""
+    result = YooKassaProvider.parse_payload("invalid")
+    assert result is None
 
 
-def test_parse_metadata_none_values():
-    """Test parsing empty metadata returns None."""
-    result = YooKassaProvider.parse_metadata({})
-    assert result is None  # Missing required fields
+def test_parse_payload_malformed():
+    """Test parsing malformed payload returns None."""
+    result = YooKassaProvider.parse_payload("a:b:c")
+    assert result is None
