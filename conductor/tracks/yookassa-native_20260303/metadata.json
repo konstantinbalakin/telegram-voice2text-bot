@@ -2,18 +2,21 @@
   "id": "yookassa-native_20260303",
   "title": "YooKassa Native Telegram Payments Integration",
   "type": "feature",
-  "status": "in_progress",
+  "status": "complete",
   "created": "2026-03-03T00:00:00Z",
   "updated": "2026-03-04T00:00:00Z",
-  "current_phase": 1,
-  "current_task": "1.1",
+  "current_phase": 3,
+  "current_task": "3.4",
   "phases": {
     "total": 3,
-    "completed": 0
+    "completed": 3
   },
   "tasks": {
     "total": 13,
-    "completed": 0
+    "completed": 13
   },
-  "commits": []
+  "commits": [
+    "8e1e37e: feat: rewrite YooKassaProvider to native Telegram Payments API (yookassa-native_20260303)",
+    "60c24cb: feat: wire YooKassa provider and replace card payment stubs (yookassa-native_20260303)"
+  ]
 }

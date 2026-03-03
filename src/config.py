@@ -194,7 +194,8 @@ class Settings(BaseSettings):
 
     # YooKassa Configuration (native Telegram Payments via provider_token)
     yookassa_provider_token: str = Field(
-        default="", description="YooKassa provider token from BotFather for native Telegram Payments"
+        default="",
+        description="YooKassa provider token from BotFather for native Telegram Payments",
     )
 
     # LLM Refinement Configuration

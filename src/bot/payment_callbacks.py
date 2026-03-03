@@ -16,9 +16,7 @@ logger = logging.getLogger(__name__)
 
 def _back_button(callback_data: str) -> InlineKeyboardMarkup:
     """Create a single 'Back' button markup."""
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("« Назад", callback_data=callback_data)]]
-    )
+    return InlineKeyboardMarkup([[InlineKeyboardButton("« Назад", callback_data=callback_data)]])
 
 
 class PaymentCallbackHandlers:
@@ -319,9 +317,7 @@ def successful_payment_handler(payment_service):
             telegram_user_id = payload_data["user_id"]
 
             # Detect provider by currency
-            provider_name = (
-                "yookassa" if payment.currency == "RUB" else "telegram_stars"
-            )
+            provider_name = "yookassa" if payment.currency == "RUB" else "telegram_stars"
 
             db_user_id = await _get_user_db_id(telegram_user_id)
 

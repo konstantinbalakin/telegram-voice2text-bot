@@ -2,74 +2,44 @@
 Tests for billing security and payment logic (Phase 3).
 """
 
-import sys
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
-
-@pytest.fixture(autouse=True)
-def mock_yookassa_module():
-    """Mock the yookassa module."""
-    mock_module = MagicMock()
-    sys.modules["yookassa"] = mock_module
-    yield
-    sys.modules.pop("yookassa", None)
+from unittest.mock import AsyncMock, MagicMock
 
 
 # =============================================================================
-# Task 3.1: Webhook verification
+# Task 3.1: Native Telegram Payments verification (via Telegram, not webhooks)
 # =============================================================================
 
 
-class TestYooKassaWebhookVerification:
-    """YooKassa webhook must verify payment via API before accepting."""
+class TestYooKassaNativePayments:
+    """YooKassa native Telegram Payments are verified by Telegram itself."""
 
     @pytest.mark.asyncio
-    @patch("src.services.payments.yookassa_provider.asyncio.to_thread")
-    async def test_webhook_verifies_payment(self, mock_to_thread: MagicMock) -> None:
-        """handle_callback verifies payment.succeeded via verify_payment."""
+    async def test_handle_callback_returns_success(self) -> None:
+        """handle_callback returns success (managed by Telegram)."""
+        from telegram import Bot
+
         from src.services.payments.yookassa_provider import YooKassaProvider
 
-        # verify_payment returns succeeded
-        mock_payment = MagicMock()
-        mock_payment.status = "succeeded"
-        mock_to_thread.return_value = mock_payment
+        bot = MagicMock(spec=Bot)
+        provider = YooKassaProvider(bot=bot, provider_token="tok_test")
 
-        provider = YooKassaProvider.__new__(YooKassaProvider)
-        provider._configured = True
-        provider.return_url = ""
-
-        data = {
-            "event": "payment.succeeded",
-            "object": {"id": "pay_123"},
-        }
-
-        result = await provider.handle_callback(data)
+        result = await provider.handle_callback({})
         assert result.success is True
-        # verify_payment should have been called via to_thread
-        mock_to_thread.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("src.services.payments.yookassa_provider.asyncio.to_thread")
-    async def test_webhook_rejects_unverified_payment(self, mock_to_thread: MagicMock) -> None:
-        """handle_callback rejects if verify_payment fails."""
+    async def test_verify_payment_returns_success(self) -> None:
+        """verify_payment returns success (managed by Telegram)."""
+        from telegram import Bot
+
         from src.services.payments.yookassa_provider import YooKassaProvider
 
-        mock_payment = MagicMock()
-        mock_payment.status = "pending"
-        mock_to_thread.return_value = mock_payment
+        bot = MagicMock(spec=Bot)
+        provider = YooKassaProvider(bot=bot, provider_token="tok_test")
 
-        provider = YooKassaProvider.__new__(YooKassaProvider)
-        provider._configured = True
-        provider.return_url = ""
-
-        data = {
-            "event": "payment.succeeded",
-            "object": {"id": "pay_fake"},
-        }
-
-        result = await provider.handle_callback(data)
-        assert result.success is False
+        result = await provider.verify_payment("pay_123")
+        assert result.success is True
+        assert result.provider_transaction_id == "pay_123"
 
 
 # =============================================================================
@@ -210,24 +180,18 @@ class TestParseMethodsLogging:
         assert result["item_id"] == 1
         assert result["user_id"] == 42
 
-    def test_parse_metadata_logs_on_incomplete(self) -> None:
-        """parse_metadata returns None on incomplete data."""
+    def test_yookassa_parse_payload_logs_on_malformed(self) -> None:
+        """YooKassa parse_payload returns None on malformed data."""
         from src.services.payments.yookassa_provider import YooKassaProvider
 
-        result = YooKassaProvider.parse_metadata({})
+        result = YooKassaProvider.parse_payload("bad")
         assert result is None
 
-    def test_parse_metadata_valid(self) -> None:
-        """parse_metadata works for valid input."""
+    def test_yookassa_parse_payload_valid(self) -> None:
+        """YooKassa parse_payload works for valid input."""
         from src.services.payments.yookassa_provider import YooKassaProvider
 
-        result = YooKassaProvider.parse_metadata(
-            {
-                "payment_type": "package",
-                "item_id": "1",
-                "user_id": "42",
-            }
-        )
+        result = YooKassaProvider.parse_payload("package:1:42")
         assert result is not None
         assert result["item_id"] == 1
         assert result["user_id"] == 42
