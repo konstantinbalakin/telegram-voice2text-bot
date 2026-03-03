@@ -112,31 +112,44 @@ async def test_buy_subscription_stars_callback_creates_payment():
 
 
 @pytest.mark.asyncio
-async def test_buy_package_card_callback_shows_stub():
-    """Test: buy_package_card_callback shows stub message."""
+async def test_buy_package_card_callback_creates_payment():
+    """Test: buy_package_card_callback creates payment via PaymentService with yookassa provider."""
     payment_service = AsyncMock()
+    payment_service.create_payment = AsyncMock(
+        return_value=MagicMock(success=True, payment_url="https://t.me/invoice/card")
+    )
+
     handlers = PaymentCallbackHandlers(payment_service=payment_service)
 
     callback_query = _make_callback_query("pkg_card:1")
     update = _make_update(callback_query)
     context = MagicMock()
 
-    await handlers.buy_package_card_callback(update, context)
+    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+        await handlers.buy_package_card_callback(update, context)
 
-    payment_service.create_payment.assert_not_awaited()
-    callback_query.edit_message_text.assert_awaited_once()
-    call_args = callback_query.edit_message_text.await_args
-    assert "карт" in call_args.args[0].lower()
+    payment_service.create_payment.assert_awaited_once()
+    call_args = payment_service.create_payment.await_args
+    assert call_args.kwargs["provider_name"] == "yookassa"
+    request = call_args.kwargs["request"]
+    assert request.payment_type == PaymentType.PACKAGE
+    assert request.item_id == 1
+    assert request.currency == "RUB"
 
 
 @pytest.mark.asyncio
-async def test_buy_package_card_callback_has_back_button():
-    """Test: buy_package_card_callback includes a back:buy button."""
-    handlers = PaymentCallbackHandlers(payment_service=AsyncMock())
+async def test_buy_package_card_callback_error_has_back_button():
+    """Test: buy_package_card_callback error response includes back:buy button."""
+    payment_service = AsyncMock()
+    payment_service.create_payment = AsyncMock(
+        return_value=MagicMock(success=False, payment_url=None, error_message="fail")
+    )
+    handlers = PaymentCallbackHandlers(payment_service=payment_service)
     callback_query = _make_callback_query("pkg_card:1")
     update = _make_update(callback_query)
 
-    await handlers.buy_package_card_callback(update, MagicMock())
+    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+        await handlers.buy_package_card_callback(update, MagicMock())
 
     call_args = callback_query.edit_message_text.await_args
     markup = call_args.kwargs["reply_markup"]
@@ -144,35 +157,47 @@ async def test_buy_package_card_callback_has_back_button():
         btn for row in markup.inline_keyboard for btn in row if btn.callback_data == "back:buy"
     ]
     assert len(back_buttons) == 1
-    assert "назад" in back_buttons[0].text.lower()
 
 
 @pytest.mark.asyncio
-async def test_buy_subscription_card_callback_shows_stub():
-    """Test: buy_subscription_card_callback shows stub message."""
+async def test_buy_subscription_card_callback_creates_payment():
+    """Test: buy_subscription_card_callback creates payment via PaymentService with yookassa."""
     payment_service = AsyncMock()
+    payment_service.create_payment = AsyncMock(
+        return_value=MagicMock(success=True, payment_url="https://t.me/invoice/card")
+    )
+
     handlers = PaymentCallbackHandlers(payment_service=payment_service)
 
     callback_query = _make_callback_query("sub_card:2:month")
     update = _make_update(callback_query)
     context = MagicMock()
 
-    await handlers.buy_subscription_card_callback(update, context)
+    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+        await handlers.buy_subscription_card_callback(update, context)
 
-    payment_service.create_payment.assert_not_awaited()
-    callback_query.edit_message_text.assert_awaited_once()
-    call_args = callback_query.edit_message_text.await_args
-    assert "карт" in call_args.args[0].lower()
+    payment_service.create_payment.assert_awaited_once()
+    call_args = payment_service.create_payment.await_args
+    assert call_args.kwargs["provider_name"] == "yookassa"
+    request = call_args.kwargs["request"]
+    assert request.payment_type == PaymentType.SUBSCRIPTION
+    assert request.item_id == 2
+    assert request.currency == "RUB"
 
 
 @pytest.mark.asyncio
-async def test_buy_subscription_card_callback_has_back_button():
-    """Test: buy_subscription_card_callback includes a back:subscribe button."""
-    handlers = PaymentCallbackHandlers(payment_service=AsyncMock())
+async def test_buy_subscription_card_callback_error_has_back_button():
+    """Test: buy_subscription_card_callback error response includes back:subscribe button."""
+    payment_service = AsyncMock()
+    payment_service.create_payment = AsyncMock(
+        return_value=MagicMock(success=False, payment_url=None, error_message="fail")
+    )
+    handlers = PaymentCallbackHandlers(payment_service=payment_service)
     callback_query = _make_callback_query("sub_card:2:month")
     update = _make_update(callback_query)
 
-    await handlers.buy_subscription_card_callback(update, MagicMock())
+    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+        await handlers.buy_subscription_card_callback(update, MagicMock())
 
     call_args = callback_query.edit_message_text.await_args
     markup = call_args.kwargs["reply_markup"]
@@ -183,7 +208,6 @@ async def test_buy_subscription_card_callback_has_back_button():
         if btn.callback_data == "back:subscribe"
     ]
     assert len(back_buttons) == 1
-    assert "назад" in back_buttons[0].text.lower()
 
 
 @pytest.mark.asyncio
@@ -263,8 +287,8 @@ async def test_pre_checkout_query_handler_approves():
 
 
 @pytest.mark.asyncio
-async def test_successful_payment_handler_parses_payload():
-    """Test: successful_payment_handler parses payload and calls handle_successful_payment."""
+async def test_successful_payment_handler_stars():
+    """Test: successful_payment_handler detects Stars by XTR currency."""
     payment_service = AsyncMock()
     payment_service.handle_successful_payment = AsyncMock(return_value=True)
 
@@ -273,6 +297,7 @@ async def test_successful_payment_handler_parses_payload():
     successful_payment = MagicMock()
     successful_payment.invoice_payload = "package:1:123"
     successful_payment.telegram_payment_charge_id = "charge_123"
+    successful_payment.currency = "XTR"
 
     message = MagicMock()
     message.reply_text = AsyncMock()
@@ -298,8 +323,8 @@ async def test_successful_payment_handler_parses_payload():
 
 
 @pytest.mark.asyncio
-async def test_successful_payment_handler_subscription():
-    """Test: successful_payment_handler handles subscriptions."""
+async def test_successful_payment_handler_yookassa():
+    """Test: successful_payment_handler detects YooKassa by RUB currency."""
     payment_service = AsyncMock()
     payment_service.handle_successful_payment = AsyncMock(return_value=True)
 
@@ -308,6 +333,7 @@ async def test_successful_payment_handler_subscription():
     successful_payment = MagicMock()
     successful_payment.invoice_payload = "subscription:2:999"
     successful_payment.telegram_payment_charge_id = "charge_456"
+    successful_payment.currency = "RUB"
 
     message = MagicMock()
     message.reply_text = AsyncMock()
@@ -325,7 +351,7 @@ async def test_successful_payment_handler_subscription():
 
     payment_service.handle_successful_payment.assert_awaited_once()
     call_args = payment_service.handle_successful_payment.await_args
-    assert call_args.kwargs["provider_name"] == "telegram_stars"
+    assert call_args.kwargs["provider_name"] == "yookassa"
     assert call_args.kwargs["user_id"] == 999
     assert call_args.kwargs["payment_type"] == PaymentType.SUBSCRIPTION
     assert call_args.kwargs["item_id"] == 2

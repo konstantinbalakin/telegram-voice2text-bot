@@ -204,6 +204,7 @@ async def main() -> None:
             from src.services.subscription_service import SubscriptionService
             from src.services.payments.payment_service import PaymentService
             from src.services.payments.telegram_stars import TelegramStarsProvider
+            from src.services.payments.yookassa_provider import YooKassaProvider
 
             # Services use per-request sessions via session_factory.
             # Each method call creates a fresh session, avoiding use-after-free.
@@ -274,6 +275,15 @@ async def main() -> None:
             telegram_stars_provider_instance = telegram_stars_provider(bot=application.bot)
             payment_service.register_provider(telegram_stars_provider_instance)
             logger.info("Telegram Stars provider registered")
+
+            # Register YooKassa provider (native Telegram Payments with provider_token)
+            if settings.yookassa_provider_token:
+                yookassa_provider_instance = YooKassaProvider(
+                    bot=application.bot,
+                    provider_token=settings.yookassa_provider_token,
+                )
+                payment_service.register_provider(yookassa_provider_instance)
+                logger.info("YooKassa provider registered (native Telegram Payments)")
 
             # Store payment_service in application_data for handlers
             if hasattr(application, "application_data"):

@@ -34,11 +34,11 @@
 
 ### Tasks
 
-- [ ] Task 2.1: Написать/обновить тесты для card-callback хендлеров в `payment_callbacks.py` (TDD: red)
-- [ ] Task 2.2: Обновить `main.py` — создать и зарегистрировать `YooKassaProvider` при наличии `yookassa_provider_token`
-- [ ] Task 2.3: Обновить `payment_callbacks.py` — `buy_package_card_callback` и `buy_subscription_card_callback` должны создавать реальные инвойсы через `PaymentService`
-- [ ] Task 2.4: Обновить/расширить `pre_checkout_query_handler` и `successful_payment_handler` для поддержки RUB-платежей (если нужно различать Stars и YooKassa)
-- [ ] Task 2.5: Убрать заглушки "Оплата картой скоро будет доступна" из UI
+- [x] Task 2.1: Написать/обновить тесты для card-callback хендлеров в `payment_callbacks.py` (TDD: red)
+- [x] Task 2.2: Обновить `main.py` — создать и зарегистрировать `YooKassaProvider` при наличии `yookassa_provider_token`
+- [x] Task 2.3: Обновить `payment_callbacks.py` — `buy_package_card_callback` и `buy_subscription_card_callback` должны создавать реальные инвойсы через `PaymentService`
+- [x] Task 2.4: Обновить/расширить `pre_checkout_query_handler` и `successful_payment_handler` для поддержки RUB-платежей (если нужно различать Stars и YooKassa)
+- [x] Task 2.5: Убрать заглушки "Оплата картой скоро будет доступна" из UI
 
 ### Verification
 

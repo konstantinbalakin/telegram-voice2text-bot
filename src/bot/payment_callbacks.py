@@ -8,7 +8,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from src.services.payments.base import PaymentRequest, PaymentType
-from src.services.payments.telegram_stars import TelegramStarsProvider
 from src.storage.database import get_session
 from src.storage.repositories import UserRepository
 
@@ -163,44 +162,121 @@ class PaymentCallbackHandlers:
     async def buy_package_card_callback(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Handle 'Buy package with card' callback (YooKassa stub).
+        """Handle 'Buy package with card' callback (YooKassa native Telegram Payments).
 
         Callback data format: pkg_card:{package_id}
-
-        Shows a stub message as YooKassa is not fully integrated.
         """
         if not update.callback_query or not update.callback_query.data:
             return
 
         try:
             await update.callback_query.answer()
+
+            data = update.callback_query.data
+            parts = data.split(":")
+            if len(parts) != 2:
+                await update.callback_query.edit_message_text("Ошибка: неверный формат данных")
+                return
+
+            package_id = int(parts[1])
+            telegram_user_id = update.effective_user.id
+            db_user_id = await self._get_db_user_id(telegram_user_id)
+
+            request = PaymentRequest(
+                user_id=db_user_id,
+                payment_type=PaymentType.PACKAGE,
+                item_id=package_id,
+                amount=0,
+                currency="RUB",
+                description="Покупка пакета минут",
+            )
+
+            result = await self.payment_service.create_payment(
+                provider_name="yookassa",
+                request=request,
+            )
+
+            back = _back_button("back:buy")
+            if result.success and result.payment_url:
+                await update.callback_query.message.reply_text(
+                    f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
+                )
+            else:
+                error_msg = result.error_message or "Неизвестная ошибка"
+                await update.callback_query.edit_message_text(
+                    f"Ошибка создания платежа: {error_msg}", reply_markup=back
+                )
+        except ValueError as e:
+            logger.error(f"User lookup error in buy_package_card_callback: {e}")
             await update.callback_query.edit_message_text(
-                "💳 Оплата картой скоро будет доступна",
-                reply_markup=_back_button("back:buy"),
+                "Ошибка: пользователь не найден", reply_markup=_back_button("back:buy")
             )
         except Exception as e:
             logger.error(f"Error in buy_package_card_callback: {e}", exc_info=True)
+            await update.callback_query.edit_message_text(
+                "Произошла ошибка. Попробуйте позже.", reply_markup=_back_button("back:buy")
+            )
 
     async def buy_subscription_card_callback(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
-        """Handle 'Buy subscription with card' callback (YooKassa stub).
+        """Handle 'Buy subscription with card' callback (YooKassa native Telegram Payments).
 
         Callback data format: sub_card:{tier_id}:{period}
-
-        Shows a stub message as YooKassa is not fully integrated.
         """
         if not update.callback_query or not update.callback_query.data:
             return
 
         try:
             await update.callback_query.answer()
+
+            data = update.callback_query.data
+            parts = data.split(":")
+            if len(parts) != 3:
+                await update.callback_query.edit_message_text("Ошибка: неверный формат данных")
+                return
+
+            tier_id = int(parts[1])
+            period = parts[2]
+            telegram_user_id = update.effective_user.id
+            db_user_id = await self._get_db_user_id(telegram_user_id)
+
+            request = PaymentRequest(
+                user_id=db_user_id,
+                payment_type=PaymentType.SUBSCRIPTION,
+                item_id=tier_id,
+                amount=0,
+                currency="RUB",
+                description=f"Подписка на {period}",
+            )
+
+            result = await self.payment_service.create_payment(
+                provider_name="yookassa",
+                request=request,
+            )
+
+            back = _back_button("back:subscribe")
+            if result.success and result.payment_url:
+                await update.callback_query.message.reply_text(
+                    f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
+                )
+            else:
+                error_msg = result.error_message or "Неизвестная ошибка"
+                await update.callback_query.edit_message_text(
+                    f"Ошибка создания платежа: {error_msg}", reply_markup=back
+                )
+        except ValueError as e:
+            logger.error(f"User lookup error in buy_subscription_card_callback: {e}")
             await update.callback_query.edit_message_text(
-                "💳 Оплата картой скоро будет доступна",
+                "Ошибка: пользователь не найден",
                 reply_markup=_back_button("back:subscribe"),
             )
         except Exception as e:
             logger.error(f"Error in buy_subscription_card_callback: {e}", exc_info=True)
+            await update.callback_query.edit_message_text(
+                "Произошла ошибка. Попробуйте позже.",
+                reply_markup=_back_button("back:subscribe"),
+            )
 
 
 def pre_checkout_query_handler(payment_service):
@@ -219,9 +295,10 @@ def pre_checkout_query_handler(payment_service):
 
 
 def successful_payment_handler(payment_service):
-    """Create a handler for successful Telegram Stars payments.
+    """Create a handler for successful Telegram payments (Stars and YooKassa).
 
     Parses payload and calls PaymentService.handle_successful_payment().
+    Detects provider by currency: XTR = telegram_stars, RUB = yookassa.
     """
 
     async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -231,7 +308,7 @@ def successful_payment_handler(payment_service):
         payment = update.successful_payment
 
         try:
-            payload_data = TelegramStarsProvider.parse_payload(payment.invoice_payload)
+            payload_data = _parse_payment_payload(payment.invoice_payload)
             if not payload_data:
                 logger.error(f"Failed to parse payment payload: {payment.invoice_payload}")
                 await update.message.reply_text("Ошибка обработки платежа. Свяжитесь с поддержкой.")
@@ -241,10 +318,15 @@ def successful_payment_handler(payment_service):
             item_id = payload_data["item_id"]
             telegram_user_id = payload_data["user_id"]
 
+            # Detect provider by currency
+            provider_name = (
+                "yookassa" if payment.currency == "RUB" else "telegram_stars"
+            )
+
             db_user_id = await _get_user_db_id(telegram_user_id)
 
             success = await payment_service.handle_successful_payment(
-                provider_name="telegram_stars",
+                provider_name=provider_name,
                 user_id=db_user_id,
                 payment_type=payment_type,
                 item_id=item_id,
@@ -260,6 +342,27 @@ def successful_payment_handler(payment_service):
             await update.message.reply_text("Ошибка обработки платежа. Попробуйте позже.")
 
     return handler
+
+
+def _parse_payment_payload(payload: str) -> dict | None:
+    """Parse payment payload string into components.
+
+    Payload format: {payment_type}:{item_id}:{user_id}
+    Used by both Telegram Stars and YooKassa native payments.
+    """
+    try:
+        parts = payload.split(":")
+        if len(parts) != 3:
+            logger.warning(f"Malformed payment payload (expected 3 parts): {payload!r}")
+            return None
+        return {
+            "payment_type": parts[0],
+            "item_id": int(parts[1]),
+            "user_id": int(parts[2]),
+        }
+    except (ValueError, IndexError) as e:
+        logger.warning(f"Failed to parse payment payload {payload!r}: {e}")
+        return None
 
 
 async def _get_user_db_id(telegram_user_id: int) -> int:
