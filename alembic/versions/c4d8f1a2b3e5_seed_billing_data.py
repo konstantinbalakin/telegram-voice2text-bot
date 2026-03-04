@@ -58,56 +58,77 @@ def upgrade() -> None:
     op.execute(
         sa.text(
             "INSERT OR IGNORE INTO subscription_prices "
-            "(tier_id, period, amount_rub, amount_stars, is_active, created_at) "
+            "(tier_id, period, amount_rub, amount_stars, description, is_active, created_at) "
             "VALUES ((SELECT id FROM subscription_tiers WHERE name = 'Pro'), "
-            "'week', 99, 50, 1, :now)"
-        ).bindparams(now=now)
+            "'week', 99, 50, :desc, 1, :now)"
+        ).bindparams(
+            desc="Pro на неделю — 30 мин/день для транскрибации голосовых сообщений",
+            now=now,
+        )
     )
     op.execute(
         sa.text(
             "INSERT OR IGNORE INTO subscription_prices "
-            "(tier_id, period, amount_rub, amount_stars, is_active, created_at) "
+            "(tier_id, period, amount_rub, amount_stars, description, is_active, created_at) "
             "VALUES ((SELECT id FROM subscription_tiers WHERE name = 'Pro'), "
-            "'month', 299, 150, 1, :now)"
-        ).bindparams(now=now)
+            "'month', 299, 150, :desc, 1, :now)"
+        ).bindparams(
+            desc="Pro на месяц — 30 мин/день для транскрибации голосовых сообщений",
+            now=now,
+        )
     )
     op.execute(
         sa.text(
             "INSERT OR IGNORE INTO subscription_prices "
-            "(tier_id, period, amount_rub, amount_stars, is_active, created_at) "
+            "(tier_id, period, amount_rub, amount_stars, description, is_active, created_at) "
             "VALUES ((SELECT id FROM subscription_tiers WHERE name = 'Pro'), "
-            "'year', 2490, 1250, 1, :now)"
-        ).bindparams(now=now)
+            "'year', 2490, 1250, :desc, 1, :now)"
+        ).bindparams(
+            desc="Pro на год — 30 мин/день для транскрибации голосовых сообщений. Лучшая цена!",
+            now=now,
+        )
     )
 
     # Minute packages
     op.execute(
         sa.text(
             "INSERT OR IGNORE INTO minute_packages "
-            "(name, minutes, price_rub, price_stars, display_order, is_active, created_at) "
-            "VALUES ('50 минут', 50, 149, 75, 1, 1, :now)"
-        ).bindparams(now=now)
+            "(name, minutes, price_rub, price_stars, description, display_order, is_active, created_at) "
+            "VALUES ('50 минут', 50, 149, 75, :desc, 1, 1, :now)"
+        ).bindparams(
+            desc="50 минут транскрибации — подойдёт, чтобы попробовать",
+            now=now,
+        )
     )
     op.execute(
         sa.text(
             "INSERT OR IGNORE INTO minute_packages "
-            "(name, minutes, price_rub, price_stars, display_order, is_active, created_at) "
-            "VALUES ('100 минут', 100, 249, 125, 2, 1, :now)"
-        ).bindparams(now=now)
+            "(name, minutes, price_rub, price_stars, description, display_order, is_active, created_at) "
+            "VALUES ('100 минут', 100, 249, 125, :desc, 2, 1, :now)"
+        ).bindparams(
+            desc="100 минут транскрибации — хватит на пару недель активного использования",
+            now=now,
+        )
     )
     op.execute(
         sa.text(
             "INSERT OR IGNORE INTO minute_packages "
-            "(name, minutes, price_rub, price_stars, display_order, is_active, created_at) "
-            "VALUES ('500 минут', 500, 999, 500, 3, 1, :now)"
-        ).bindparams(now=now)
+            "(name, minutes, price_rub, price_stars, description, display_order, is_active, created_at) "
+            "VALUES ('500 минут', 500, 999, 500, :desc, 3, 1, :now)"
+        ).bindparams(
+            desc="500 минут транскрибации — выгодный пакет для регулярного использования",
+            now=now,
+        )
     )
     op.execute(
         sa.text(
             "INSERT OR IGNORE INTO minute_packages "
-            "(name, minutes, price_rub, price_stars, display_order, is_active, created_at) "
-            "VALUES ('5000 минут', 5000, 4990, 2500, 4, 1, :now)"
-        ).bindparams(now=now)
+            "(name, minutes, price_rub, price_stars, description, display_order, is_active, created_at) "
+            "VALUES ('5000 минут', 5000, 4990, 2500, :desc, 4, 1, :now)"
+        ).bindparams(
+            desc="5000 минут транскрибации — максимальный пакет по лучшей цене за минуту",
+            now=now,
+        )
     )
 
 
