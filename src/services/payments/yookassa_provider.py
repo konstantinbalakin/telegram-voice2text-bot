@@ -35,10 +35,12 @@ class YooKassaProvider:
     async def create_payment(self, request: PaymentRequest) -> PaymentResult:
         """Create a YooKassa invoice via Telegram Payments API."""
         try:
-            prices = [LabeledPrice(label=request.description, amount=int(request.amount))]
+            title = request.title or request.description
+            label = request.price_label or request.description
+            prices = [LabeledPrice(label=label, amount=int(request.amount))]
 
             invoice_link = await self.bot.create_invoice_link(
-                title=request.description,
+                title=title,
                 description=request.description,
                 payload=f"{request.payment_type.value}:{request.item_id}:{request.user_id}",
                 provider_token=self.provider_token,

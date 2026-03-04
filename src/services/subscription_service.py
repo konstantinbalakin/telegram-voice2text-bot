@@ -112,6 +112,7 @@ class SubscriptionService:
                 period=period,
                 payment_provider=payment_provider,
                 expires_at=expires_at,
+                auto_renew=False,
             )
 
             logger.info(
@@ -152,6 +153,7 @@ class SubscriptionService:
                 period=subscription.period,
                 payment_provider=subscription.payment_provider,
                 expires_at=expires_at,
+                auto_renew=False,
             )
 
             logger.info(

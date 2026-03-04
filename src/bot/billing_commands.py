@@ -73,9 +73,8 @@ class BillingCommands:
                 tier = await self.subscription_service.get_tier_by_id(active_sub.tier_id)
                 tier_name = tier.name if tier else "Unknown"
                 expires = active_sub.expires_at.strftime("%d.%m.%Y")
-                renew_status = "автопродление" if active_sub.auto_renew else "без продления"
                 lines.append(f"\nПодписка: {tier_name}")
-                lines.append(f"Действует до: {expires} ({renew_status})")
+                lines.append(f"Действует до: {expires}")
             else:
                 lines.append("\nПодписка: нет")
                 lines.append("Используйте /subscribe для оформления подписки")

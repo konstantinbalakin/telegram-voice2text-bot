@@ -96,6 +96,8 @@ class PaymentRequest:
     amount: float
     currency: str
     description: str
+    title: Optional[str] = None
+    price_label: Optional[str] = None
     customer_email: Optional[str] = None
 
 

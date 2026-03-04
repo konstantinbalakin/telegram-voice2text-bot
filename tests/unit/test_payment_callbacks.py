@@ -75,7 +75,12 @@ async def test_buy_package_stars_callback_creates_payment():
     update = _make_update(callback_query)
     context = MagicMock()
 
-    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+    with (
+        patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
+        patch.object(
+            handlers, "_get_package_name", new_callable=AsyncMock, return_value="30 минут"
+        ),
+    ):
         await handlers.buy_package_stars_callback(update, context)
 
     payment_service.create_payment.assert_awaited_once()
@@ -100,7 +105,13 @@ async def test_buy_subscription_stars_callback_creates_payment():
     update = _make_update(callback_query)
     context = MagicMock()
 
-    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+    with (
+        patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
+        patch.object(
+            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(299.0, 50)
+        ),
+        patch.object(handlers, "_get_tier_name", new_callable=AsyncMock, return_value="Pro"),
+    ):
         await handlers.buy_subscription_stars_callback(update, context)
 
     payment_service.create_payment.assert_awaited_once()
@@ -125,7 +136,12 @@ async def test_buy_package_card_callback_creates_payment():
     update = _make_update(callback_query)
     context = MagicMock()
 
-    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+    with (
+        patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
+        patch.object(
+            handlers, "_get_package_name", new_callable=AsyncMock, return_value="30 минут"
+        ),
+    ):
         await handlers.buy_package_card_callback(update, context)
 
     payment_service.create_payment.assert_awaited_once()
@@ -148,7 +164,12 @@ async def test_buy_package_card_callback_error_has_back_button():
     callback_query = _make_callback_query("pkg_card:1")
     update = _make_update(callback_query)
 
-    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+    with (
+        patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
+        patch.object(
+            handlers, "_get_package_name", new_callable=AsyncMock, return_value="30 минут"
+        ),
+    ):
         await handlers.buy_package_card_callback(update, MagicMock())
 
     call_args = callback_query.edit_message_text.await_args
@@ -173,7 +194,13 @@ async def test_buy_subscription_card_callback_creates_payment():
     update = _make_update(callback_query)
     context = MagicMock()
 
-    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+    with (
+        patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
+        patch.object(
+            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(299.0, 50)
+        ),
+        patch.object(handlers, "_get_tier_name", new_callable=AsyncMock, return_value="Pro"),
+    ):
         await handlers.buy_subscription_card_callback(update, context)
 
     payment_service.create_payment.assert_awaited_once()
@@ -196,7 +223,13 @@ async def test_buy_subscription_card_callback_error_has_back_button():
     callback_query = _make_callback_query("sub_card:2:month")
     update = _make_update(callback_query)
 
-    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+    with (
+        patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
+        patch.object(
+            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(299.0, 50)
+        ),
+        patch.object(handlers, "_get_tier_name", new_callable=AsyncMock, return_value="Pro"),
+    ):
         await handlers.buy_subscription_card_callback(update, MagicMock())
 
     call_args = callback_query.edit_message_text.await_args
@@ -221,7 +254,12 @@ async def test_buy_package_stars_error_has_back_button():
     callback_query = _make_callback_query("pkg_stars:1")
     update = _make_update(callback_query)
 
-    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+    with (
+        patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
+        patch.object(
+            handlers, "_get_package_name", new_callable=AsyncMock, return_value="30 минут"
+        ),
+    ):
         await handlers.buy_package_stars_callback(update, MagicMock())
 
     call_args = callback_query.edit_message_text.await_args
@@ -243,7 +281,13 @@ async def test_buy_subscription_stars_error_has_back_button():
     callback_query = _make_callback_query("sub_stars:2:month")
     update = _make_update(callback_query)
 
-    with patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999):
+    with (
+        patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
+        patch.object(
+            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(299.0, 50)
+        ),
+        patch.object(handlers, "_get_tier_name", new_callable=AsyncMock, return_value="Pro"),
+    ):
         await handlers.buy_subscription_stars_callback(update, MagicMock())
 
     call_args = callback_query.edit_message_text.await_args
@@ -301,22 +345,19 @@ async def test_successful_payment_handler_stars():
 
     message = MagicMock()
     message.reply_text = AsyncMock()
+    message.successful_payment = successful_payment
 
     update = MagicMock()
-    update.successful_payment = successful_payment
     update.message = message
     update.effective_user = User(id=123, is_bot=False, first_name="Test")
     context = MagicMock()
 
-    with patch(
-        "src.bot.payment_callbacks._get_user_db_id", new_callable=AsyncMock, return_value=999
-    ):
-        await handler(update, context)
+    await handler(update, context)
 
     payment_service.handle_successful_payment.assert_awaited_once()
     call_args = payment_service.handle_successful_payment.await_args
     assert call_args.kwargs["provider_name"] == "telegram_stars"
-    assert call_args.kwargs["user_id"] == 999
+    assert call_args.kwargs["user_id"] == 123
     assert call_args.kwargs["payment_type"] == PaymentType.PACKAGE
     assert call_args.kwargs["item_id"] == 1
     assert call_args.kwargs["provider_transaction_id"] == "charge_123"
@@ -337,17 +378,14 @@ async def test_successful_payment_handler_yookassa():
 
     message = MagicMock()
     message.reply_text = AsyncMock()
+    message.successful_payment = successful_payment
 
     update = MagicMock()
-    update.successful_payment = successful_payment
     update.message = message
     update.effective_user = User(id=123, is_bot=False, first_name="Test")
     context = MagicMock()
 
-    with patch(
-        "src.bot.payment_callbacks._get_user_db_id", new_callable=AsyncMock, return_value=999
-    ):
-        await handler(update, context)
+    await handler(update, context)
 
     payment_service.handle_successful_payment.assert_awaited_once()
     call_args = payment_service.handle_successful_payment.await_args
