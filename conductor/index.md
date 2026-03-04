@@ -25,6 +25,8 @@ Navigation hub for project context.
 
 - [ ] [yookassa-native_20260303](./tracks/yookassa-native_20260303/index.md) — YooKassa Native Telegram Payments Integration
 
+- [ ] [billing-ux-polish_20260305](./tracks/billing-ux-polish_20260305/index.md) — Billing UX Polish — Unified Screens, Descriptions & Bot Menu
+
 <!-- Auto-populated by /conductor:new-track -->
 
 ## Getting Started
