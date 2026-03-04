@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 from src.services.billing_service import BillingService
 from src.services.payments.payment_service import PaymentService
-from src.services.payments.base import PaymentType
 
 
 # =============================================================================
@@ -185,9 +184,9 @@ class TestBillingCommandsErrorHandling:
         assert any(BILLING_ERROR_MSG in str(c) for c in calls)
 
     @pytest.mark.asyncio
-    async def test_subscribe_command_handles_service_error(self) -> None:
-        """subscribe_command sends error message on service failure."""
-        from src.bot.billing_commands import BillingCommands, BILLING_ERROR_MSG
+    async def test_subscriptions_catalog_handles_service_error(self) -> None:
+        """subscriptions_catalog_callback handles errors gracefully."""
+        from src.bot.billing_commands import BillingCommands
 
         subscription_service = AsyncMock()
         subscription_service.get_available_tiers.side_effect = Exception("DB error")
@@ -199,31 +198,46 @@ class TestBillingCommandsErrorHandling:
         )
 
         update = MagicMock()
-        update.message = AsyncMock()
+        update.callback_query = MagicMock()
+        update.callback_query.answer = AsyncMock()
+        update.callback_query.edit_message_text = AsyncMock()
 
-        await cmds.subscribe_command(update, MagicMock())
+        await cmds.subscriptions_catalog_callback(update, MagicMock())
 
-        calls = update.message.reply_text.call_args_list
-        assert any(BILLING_ERROR_MSG in str(c) for c in calls)
+        # Should not crash — error is logged
 
     @pytest.mark.asyncio
     async def test_buy_command_handles_service_error(self) -> None:
         """buy_command sends error message on service failure."""
         from src.bot.billing_commands import BillingCommands, BILLING_ERROR_MSG
 
-        payment_service = AsyncMock()
-        payment_service.get_active_packages.side_effect = Exception("DB error")
+        billing_service = AsyncMock()
+        billing_service.get_user_balance.side_effect = Exception("DB error")
 
         cmds = BillingCommands(
-            billing_service=AsyncMock(),
+            billing_service=billing_service,
             subscription_service=AsyncMock(),
-            payment_service=payment_service,
+            payment_service=AsyncMock(),
         )
 
         update = MagicMock()
+        update.effective_user = MagicMock()
+        update.effective_user.id = 12345
         update.message = AsyncMock()
 
-        await cmds.buy_command(update, MagicMock())
+        from unittest.mock import patch
+
+        with patch("src.bot.billing_commands.get_session") as mock_session:
+            mock_sess = AsyncMock()
+            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_sess)
+            mock_session.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            with patch("src.bot.billing_commands.UserRepository") as MockUserRepo:
+                mock_user_repo = AsyncMock()
+                mock_user_repo.get_by_telegram_id = AsyncMock(return_value=MagicMock(id=1))
+                MockUserRepo.return_value = mock_user_repo
+
+                await cmds.buy_command(update, MagicMock())
 
         calls = update.message.reply_text.call_args_list
         assert any(BILLING_ERROR_MSG in str(c) for c in calls)

@@ -369,6 +369,7 @@ class SubscriptionPrice(Base):
     period: Mapped[str] = mapped_column(String(20), nullable=False)
     amount_rub: Mapped[float] = mapped_column(Float, nullable=False)
     amount_stars: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -439,6 +440,7 @@ class MinutePackage(Base):
     minutes: Mapped[float] = mapped_column(Float, nullable=False)
     price_rub: Mapped[float] = mapped_column(Float, nullable=False)
     price_stars: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

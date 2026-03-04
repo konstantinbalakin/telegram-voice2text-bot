@@ -157,6 +157,7 @@ class SubscriptionRepository:
         period: str,
         amount_rub: float,
         amount_stars: int,
+        description: Optional[str] = None,
         is_active: bool = True,
     ) -> SubscriptionPrice:
         """Create a subscription price."""
@@ -165,6 +166,7 @@ class SubscriptionRepository:
             period=period,
             amount_rub=amount_rub,
             amount_stars=amount_stars,
+            description=description,
             is_active=is_active,
         )
         self.session.add(price)
@@ -291,6 +293,7 @@ class MinutePackageRepository:
         minutes: float,
         price_rub: float,
         price_stars: int,
+        description: Optional[str] = None,
         display_order: int = 0,
         is_active: bool = True,
     ) -> MinutePackage:
@@ -300,6 +303,7 @@ class MinutePackageRepository:
             minutes=minutes,
             price_rub=price_rub,
             price_stars=price_stars,
+            description=description,
             display_order=display_order,
             is_active=is_active,
         )

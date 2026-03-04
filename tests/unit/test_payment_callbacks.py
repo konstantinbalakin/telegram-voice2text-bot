@@ -6,10 +6,13 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from telegram import Update, User
-from telegram.ext import ContextTypes
 
-from src.services.payments.base import PaymentType, SubscriptionPeriod
-from src.bot.payment_callbacks import PaymentCallbackHandlers
+from src.services.payments.base import PaymentType
+from src.bot.payment_callbacks import (
+    PaymentCallbackHandlers,
+    pre_checkout_query_handler,
+    successful_payment_handler,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -175,7 +178,10 @@ async def test_buy_package_card_callback_error_has_back_button():
     call_args = callback_query.edit_message_text.await_args
     markup = call_args.kwargs["reply_markup"]
     back_buttons = [
-        btn for row in markup.inline_keyboard for btn in row if btn.callback_data == "back:buy"
+        btn
+        for row in markup.inline_keyboard
+        for btn in row
+        if btn.callback_data == "billing:packages"
     ]
     assert len(back_buttons) == 1
 
@@ -238,7 +244,7 @@ async def test_buy_subscription_card_callback_error_has_back_button():
         btn
         for row in markup.inline_keyboard
         for btn in row
-        if btn.callback_data == "back:subscribe"
+        if btn.callback_data == "billing:subscriptions"
     ]
     assert len(back_buttons) == 1
 
@@ -265,7 +271,10 @@ async def test_buy_package_stars_error_has_back_button():
     call_args = callback_query.edit_message_text.await_args
     markup = call_args.kwargs["reply_markup"]
     back_buttons = [
-        btn for row in markup.inline_keyboard for btn in row if btn.callback_data == "back:buy"
+        btn
+        for row in markup.inline_keyboard
+        for btn in row
+        if btn.callback_data == "billing:packages"
     ]
     assert len(back_buttons) == 1
 
@@ -296,7 +305,7 @@ async def test_buy_subscription_stars_error_has_back_button():
         btn
         for row in markup.inline_keyboard
         for btn in row
-        if btn.callback_data == "back:subscribe"
+        if btn.callback_data == "billing:subscriptions"
     ]
     assert len(back_buttons) == 1
 
@@ -304,12 +313,6 @@ async def test_buy_subscription_stars_error_has_back_button():
 # =============================================================================
 # Task 2.3: PreCheckout and Successful Payment Handlers Tests
 # =============================================================================
-
-
-from src.bot.payment_callbacks import (
-    pre_checkout_query_handler,
-    successful_payment_handler,
-)
 
 
 @pytest.mark.asyncio

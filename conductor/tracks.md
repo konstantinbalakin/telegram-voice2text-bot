@@ -16,6 +16,6 @@
 
 | [x] | yookassa-native_20260303 | YooKassa Native Telegram Payments Integration | 2026-03-03 | 2026-03-04 |
 
-| [ ] | billing-ux-polish_20260305 | Billing UX Polish — Unified Screens, Descriptions & Bot Menu | 2026-03-05 | 2026-03-05 |
+| [~] | billing-ux-polish_20260305 | Billing UX Polish — Unified Screens, Descriptions & Bot Menu | 2026-03-05 | 2026-03-05 |
 
 <!-- Tracks registered by /conductor:new-track -->

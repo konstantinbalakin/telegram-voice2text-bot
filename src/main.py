@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 from urllib.parse import quote, urlparse
 
-from telegram import Update
+from telegram import Update, BotCommand
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -349,17 +349,36 @@ async def main() -> None:
         )
         application.add_handler(CommandHandler("help", billing_commands.help_command_with_billing))
         application.add_handler(CommandHandler("balance", billing_commands.balance_command))
-        application.add_handler(CommandHandler("subscribe", billing_commands.subscribe_command))
         application.add_handler(CommandHandler("buy", billing_commands.buy_command))
+
+        # Billing navigation callbacks
         application.add_handler(
-            CallbackQueryHandler(billing_commands.back_to_buy_callback, pattern=r"^back:buy$")
+            CallbackQueryHandler(
+                billing_commands.subscriptions_catalog_callback, pattern=r"^billing:subscriptions$"
+            )
         )
         application.add_handler(
             CallbackQueryHandler(
-                billing_commands.back_to_subscribe_callback, pattern=r"^back:subscribe$"
+                billing_commands.packages_catalog_callback, pattern=r"^billing:packages$"
             )
         )
-        logger.info("Billing commands registered (/balance, /subscribe, /buy)")
+        application.add_handler(
+            CallbackQueryHandler(
+                billing_commands.back_to_main_callback, pattern=r"^billing:back_main$"
+            )
+        )
+        application.add_handler(
+            CallbackQueryHandler(
+                billing_commands.subscription_detail_callback,
+                pattern=r"^billing:sub_detail:\d+:(week|month|year)$",
+            )
+        )
+        application.add_handler(
+            CallbackQueryHandler(
+                billing_commands.package_detail_callback, pattern=r"^billing:pkg_detail:\d+$"
+            )
+        )
+        logger.info("Billing commands registered (/balance, /buy)")
     else:
         application.add_handler(CommandHandler("start", bot_handlers.start_command))
         application.add_handler(CommandHandler("help", bot_handlers.help_command))
@@ -437,6 +456,18 @@ async def main() -> None:
             logger.info("Starting bot in polling mode...")
             await application.initialize()
             await application.start()
+
+            # Set bot commands menu
+            commands = [
+                BotCommand("help", "❓ Помощь"),
+                BotCommand("balance", "💰 Баланс"),
+                BotCommand("stats", "📊 Статистика"),
+            ]
+            if settings.billing_enabled:
+                commands.insert(2, BotCommand("buy", "🛒 Купить минуты"))
+            await application.bot.set_my_commands(commands)
+            logger.info(f"Bot menu commands set ({len(commands)} commands)")
+
             if application.updater:
                 # IMPORTANT: allowed_updates must include "callback_query" for inline buttons to work
                 await application.updater.start_polling(

@@ -2,15 +2,15 @@
   "id": "billing-ux-polish_20260305",
   "title": "Billing UX Polish — Unified Screens, Descriptions & Bot Menu",
   "type": "feature",
-  "status": "pending",
+  "status": "complete",
   "created": "2026-03-05T00:00:00Z",
-  "updated": "2026-03-05T00:00:00Z",
+  "updated": "2026-03-05T01:30:00Z",
   "phases": {
     "total": 4,
-    "completed": 0
+    "completed": 4
   },
   "tasks": {
     "total": 21,
-    "completed": 0
+    "completed": 21
   }
 }

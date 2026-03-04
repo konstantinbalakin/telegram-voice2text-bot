@@ -63,6 +63,13 @@ class PaymentCallbackHandlers:
                 raise ValueError(f"Package {package_id} not found")
             return package.price_rub, package.price_stars
 
+    async def _get_package_description(self, package_id: int) -> str | None:
+        """Get package description from DB."""
+        async with get_session() as session:
+            repo = MinutePackageRepository(session)
+            package = await repo.get_by_id(package_id)
+            return package.description if package else None
+
     async def _get_subscription_price(self, tier_id: int, period: str) -> tuple[float, int]:
         """Get subscription price (rub, stars) for tier+period. Raises ValueError if not found."""
         async with get_session() as session:
@@ -72,6 +79,17 @@ class PaymentCallbackHandlers:
                 if price.period == period:
                     return price.amount_rub, price.amount_stars
             raise ValueError(f"Price not found for tier {tier_id}, period {period}")
+
+    async def _get_subscription_description(self, tier_id: int, period: str) -> str | None:
+        """Get subscription description from price or tier."""
+        async with get_session() as session:
+            repo = SubscriptionRepository(session)
+            prices = await repo.get_tier_prices(tier_id=tier_id)
+            for price in prices:
+                if price.period == period and price.description:
+                    return price.description
+            tier = await repo.get_tier_by_id(tier_id=tier_id)
+            return tier.description if tier else None
 
     async def _get_tier_name(self, tier_id: int) -> str:
         """Get subscription tier name by ID."""
@@ -115,6 +133,7 @@ class PaymentCallbackHandlers:
             db_user_id = await self._get_db_user_id(telegram_user_id)
             _, price_stars = await self._get_package_price(package_id)
             pkg_name = await self._get_package_name(package_id)
+            pkg_desc = await self._get_package_description(package_id)
 
             request = PaymentRequest(
                 user_id=db_user_id,
@@ -123,7 +142,7 @@ class PaymentCallbackHandlers:
                 amount=price_stars,
                 currency="XTR",
                 title=f"Пакет «{pkg_name}»",
-                description=f"Дополнительные {pkg_name} для транскрибации",
+                description=pkg_desc or f"Дополнительные {pkg_name} для транскрибации",
                 price_label=pkg_name,
             )
 
@@ -132,7 +151,7 @@ class PaymentCallbackHandlers:
                 request=request,
             )
 
-            back = _back_button("back:buy")
+            back = _back_button("billing:packages")
             if result.success and result.payment_url:
                 await update.callback_query.message.reply_text(
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
@@ -145,12 +164,12 @@ class PaymentCallbackHandlers:
         except ValueError as e:
             logger.error(f"User lookup error in buy_package_stars_callback: {e}")
             await update.callback_query.edit_message_text(
-                "Ошибка: пользователь не найден", reply_markup=_back_button("back:buy")
+                "Ошибка: пользователь не найден", reply_markup=_back_button("billing:packages")
             )
         except Exception as e:
             logger.error(f"Error in buy_package_stars_callback: {e}", exc_info=True)
             await update.callback_query.edit_message_text(
-                "Произошла ошибка. Попробуйте позже.", reply_markup=_back_button("back:buy")
+                "Произошла ошибка. Попробуйте позже.", reply_markup=_back_button("billing:packages")
             )
 
     async def buy_subscription_stars_callback(
@@ -179,6 +198,7 @@ class PaymentCallbackHandlers:
             _, price_stars = await self._get_subscription_price(tier_id, period)
             tier_name = await self._get_tier_name(tier_id)
             period_ru = _period_label(period)
+            sub_desc = await self._get_subscription_description(tier_id, period)
 
             request = PaymentRequest(
                 user_id=db_user_id,
@@ -187,7 +207,7 @@ class PaymentCallbackHandlers:
                 amount=price_stars,
                 currency="XTR",
                 title=f"Подписка {tier_name}",
-                description=f"Тариф «{tier_name}» — {period_ru.lower()}",
+                description=sub_desc or f"Тариф «{tier_name}» — {period_ru.lower()}",
                 price_label=f"{tier_name} ({period_ru})",
             )
 
@@ -196,7 +216,7 @@ class PaymentCallbackHandlers:
                 request=request,
             )
 
-            back = _back_button("back:subscribe")
+            back = _back_button("billing:subscriptions")
             if result.success and result.payment_url:
                 await update.callback_query.message.reply_text(
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
@@ -210,13 +230,13 @@ class PaymentCallbackHandlers:
             logger.error(f"User lookup error in buy_subscription_stars_callback: {e}")
             await update.callback_query.edit_message_text(
                 "Ошибка: пользователь не найден",
-                reply_markup=_back_button("back:subscribe"),
+                reply_markup=_back_button("billing:subscriptions"),
             )
         except Exception as e:
             logger.error(f"Error in buy_subscription_stars_callback: {e}", exc_info=True)
             await update.callback_query.edit_message_text(
                 "Произошла ошибка. Попробуйте позже.",
-                reply_markup=_back_button("back:subscribe"),
+                reply_markup=_back_button("billing:subscriptions"),
             )
 
     async def buy_package_card_callback(
@@ -244,6 +264,7 @@ class PaymentCallbackHandlers:
             price_rub, _ = await self._get_package_price(package_id)
             amount_kopecks = int(price_rub * 100)
             pkg_name = await self._get_package_name(package_id)
+            pkg_desc = await self._get_package_description(package_id)
 
             request = PaymentRequest(
                 user_id=db_user_id,
@@ -252,7 +273,7 @@ class PaymentCallbackHandlers:
                 amount=amount_kopecks,
                 currency="RUB",
                 title=f"Пакет «{pkg_name}»",
-                description=f"Дополнительные {pkg_name} для транскрибации",
+                description=pkg_desc or f"Дополнительные {pkg_name} для транскрибации",
                 price_label=pkg_name,
             )
 
@@ -261,7 +282,7 @@ class PaymentCallbackHandlers:
                 request=request,
             )
 
-            back = _back_button("back:buy")
+            back = _back_button("billing:packages")
             if result.success and result.payment_url:
                 await update.callback_query.message.reply_text(
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
@@ -274,12 +295,12 @@ class PaymentCallbackHandlers:
         except ValueError as e:
             logger.error(f"User lookup error in buy_package_card_callback: {e}")
             await update.callback_query.edit_message_text(
-                "Ошибка: пользователь не найден", reply_markup=_back_button("back:buy")
+                "Ошибка: пользователь не найден", reply_markup=_back_button("billing:packages")
             )
         except Exception as e:
             logger.error(f"Error in buy_package_card_callback: {e}", exc_info=True)
             await update.callback_query.edit_message_text(
-                "Произошла ошибка. Попробуйте позже.", reply_markup=_back_button("back:buy")
+                "Произошла ошибка. Попробуйте позже.", reply_markup=_back_button("billing:packages")
             )
 
     async def buy_subscription_card_callback(
@@ -309,6 +330,7 @@ class PaymentCallbackHandlers:
             amount_kopecks = int(price_rub * 100)
             tier_name = await self._get_tier_name(tier_id)
             period_ru = _period_label(period)
+            sub_desc = await self._get_subscription_description(tier_id, period)
 
             request = PaymentRequest(
                 user_id=db_user_id,
@@ -317,7 +339,7 @@ class PaymentCallbackHandlers:
                 amount=amount_kopecks,
                 currency="RUB",
                 title=f"Подписка {tier_name}",
-                description=f"Тариф «{tier_name}» — {period_ru.lower()}",
+                description=sub_desc or f"Тариф «{tier_name}» — {period_ru.lower()}",
                 price_label=f"{tier_name} ({period_ru})",
             )
 
@@ -326,7 +348,7 @@ class PaymentCallbackHandlers:
                 request=request,
             )
 
-            back = _back_button("back:subscribe")
+            back = _back_button("billing:subscriptions")
             if result.success and result.payment_url:
                 await update.callback_query.message.reply_text(
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
@@ -340,13 +362,13 @@ class PaymentCallbackHandlers:
             logger.error(f"User lookup error in buy_subscription_card_callback: {e}")
             await update.callback_query.edit_message_text(
                 "Ошибка: пользователь не найден",
-                reply_markup=_back_button("back:subscribe"),
+                reply_markup=_back_button("billing:subscriptions"),
             )
         except Exception as e:
             logger.error(f"Error in buy_subscription_card_callback: {e}", exc_info=True)
             await update.callback_query.edit_message_text(
                 "Произошла ошибка. Попробуйте позже.",
-                reply_markup=_back_button("back:subscribe"),
+                reply_markup=_back_button("billing:subscriptions"),
             )
 
 
