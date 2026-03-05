@@ -9,8 +9,6 @@ from sqlalchemy import String, Integer, Boolean, DateTime, Date, Float, ForeignK
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from src.services.payments.base import (
-    Currency,
-    PaymentStatus,
     PurchaseStatus,
     SubscriptionStatus,
 )
@@ -36,15 +34,6 @@ class User(Base):
     first_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
-    # Quota settings
-    daily_quota_seconds: Mapped[int] = mapped_column(Integer, default=60, nullable=False)
-    is_unlimited: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-
-    # Usage tracking
-    today_usage_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_reset_date: Mapped[date] = mapped_column(Date, nullable=False)
-    total_usage_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
@@ -59,9 +48,6 @@ class User(Base):
     # Relationships
     usage_records: Mapped[list["Usage"]] = relationship(
         "Usage", back_populates="user", cascade="all, delete-orphan"
-    )
-    transactions: Mapped[list["Transaction"]] = relationship(
-        "Transaction", back_populates="user", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:
@@ -98,7 +84,6 @@ class Usage(Base):
 
     # Whisper settings used
     model_size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Stage 3
-    language: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
 
     # LLM refinement tracking (hybrid mode)
     llm_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Stage 3
@@ -135,44 +120,6 @@ class Usage(Base):
 
     def __repr__(self) -> str:
         return f"<Usage(id={self.id}, user_id={self.user_id}, duration={self.voice_duration_seconds}s)>"
-
-
-class Transaction(Base):
-    """Transaction model - represents a payment transaction (future billing)."""
-
-    __tablename__ = "transactions"
-
-    # Primary key
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-
-    # Foreign key
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
-
-    # Transaction data
-    amount: Mapped[int] = mapped_column(Integer, nullable=False)  # Amount in cents
-    currency: Mapped[str] = mapped_column(String(3), default=Currency.USD, nullable=False)
-    quota_seconds_added: Mapped[int] = mapped_column(Integer, nullable=False)
-
-    # Status
-    status: Mapped[str] = mapped_column(String(50), default=PaymentStatus.PENDING, nullable=False)
-
-    # Payment provider data
-    provider: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    provider_transaction_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-
-    # Timestamps
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
-    )
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-
-    # Relationships
-    user: Mapped["User"] = relationship("User", back_populates="transactions")
-
-    def __repr__(self) -> str:
-        return f"<Transaction(id={self.id}, user_id={self.user_id}, amount={self.amount}, status={self.status})>"
 
 
 class TranscriptionState(Base):
@@ -398,7 +345,7 @@ class UserSubscription(Base):
     period: Mapped[str] = mapped_column(String(20), nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    auto_renew: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    auto_renew: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     payment_provider: Mapped[str] = mapped_column(String(50), nullable=False)
     next_subscription_tier_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("subscription_tiers.id"), nullable=True

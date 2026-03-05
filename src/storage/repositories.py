@@ -3,7 +3,7 @@ Repository pattern for database access
 """
 
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, and_, delete, func
@@ -14,7 +14,6 @@ from sqlalchemy.engine import CursorResult
 from src.storage.models import (
     User,
     Usage,
-    Transaction,
     TranscriptionState,
     TranscriptionVariant,
     TranscriptionSegment,
@@ -48,64 +47,20 @@ class UserRepository:
         username: Optional[str] = None,
         first_name: Optional[str] = None,
         last_name: Optional[str] = None,
-        daily_quota_seconds: int = 60,
     ) -> User:
         """Create a new user."""
-        logger.debug(
-            f"UserRepository.create(telegram_id={telegram_id}, quota={daily_quota_seconds}s)"
-        )
+        logger.debug(f"UserRepository.create(telegram_id={telegram_id})")
         user = User(
             telegram_id=telegram_id,
             username=username,
             first_name=first_name,
             last_name=last_name,
-            daily_quota_seconds=daily_quota_seconds,
-            is_unlimited=False,
-            today_usage_seconds=0,
-            last_reset_date=date.today(),
-            total_usage_seconds=0,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
         self.session.add(user)
         await self.session.flush()
         logger.debug(f"User created: id={user.id}, telegram_id={telegram_id}")
-        return user
-
-    async def update_usage(self, user: User, duration_seconds: int) -> User:
-        """Update user's usage statistics."""
-        logger.debug(
-            f"UserRepository.update_usage(user_id={user.id}, duration={duration_seconds}s)"
-        )
-        user.today_usage_seconds += duration_seconds
-        user.total_usage_seconds += duration_seconds
-        user.updated_at = datetime.now(timezone.utc)
-        await self.session.flush()
-        logger.debug(
-            f"Usage updated: today={user.today_usage_seconds}s, total={user.total_usage_seconds}s"
-        )
-        return user
-
-    async def reset_daily_quota(self, user: User) -> User:
-        """Reset user's daily quota."""
-        user.today_usage_seconds = 0
-        user.last_reset_date = date.today()
-        user.updated_at = datetime.now(timezone.utc)
-        await self.session.flush()
-        return user
-
-    async def set_unlimited(self, user: User, is_unlimited: bool) -> User:
-        """Set user's unlimited status."""
-        user.is_unlimited = is_unlimited
-        user.updated_at = datetime.now(timezone.utc)
-        await self.session.flush()
-        return user
-
-    async def update_quota(self, user: User, new_quota_seconds: int) -> User:
-        """Update user's daily quota limit."""
-        user.daily_quota_seconds = new_quota_seconds
-        user.updated_at = datetime.now(timezone.utc)
-        await self.session.flush()
         return user
 
 
@@ -130,7 +85,6 @@ class UsageRepository:
         model_size: Optional[str] = None,
         processing_time_seconds: Optional[float] = None,
         transcription_length: Optional[int] = None,
-        language: Optional[str] = None,
         llm_model: Optional[str] = None,
         llm_processing_time_seconds: Optional[float] = None,
         original_file_path: Optional[str] = None,
@@ -149,7 +103,6 @@ class UsageRepository:
             model_size=model_size,
             processing_time_seconds=processing_time_seconds,
             transcription_length=transcription_length,
-            language=language,
             llm_model=llm_model,
             llm_processing_time_seconds=llm_processing_time_seconds,
             original_file_path=original_file_path,
@@ -175,7 +128,6 @@ class UsageRepository:
         model_size: Optional[str] = None,
         processing_time_seconds: Optional[float] = None,
         transcription_length: Optional[int] = None,
-        language: Optional[str] = None,
         llm_model: Optional[str] = None,
         llm_processing_time_seconds: Optional[float] = None,
         original_file_path: Optional[str] = None,
@@ -202,8 +154,6 @@ class UsageRepository:
             usage.processing_time_seconds = processing_time_seconds
         if transcription_length is not None:
             usage.transcription_length = transcription_length
-        if language is not None:
-            usage.language = language
         if llm_model is not None:
             usage.llm_model = llm_model
         if llm_processing_time_seconds is not None:
@@ -290,68 +240,6 @@ class UsageRepository:
         await self.session.flush()
         logger.info(f"Cleanup completed: {count} files deleted")
         return count
-
-
-class TransactionRepository:
-    """Repository for Transaction model operations."""
-
-    def __init__(self, session: AsyncSession):
-        self.session = session
-
-    async def create(
-        self,
-        user_id: int,
-        amount: int,
-        currency: str,
-        quota_seconds_added: int,
-        provider: Optional[str] = None,
-        provider_transaction_id: Optional[str] = None,
-    ) -> Transaction:
-        """Create a new transaction record."""
-        transaction = Transaction(
-            user_id=user_id,
-            amount=amount,
-            currency=currency,
-            quota_seconds_added=quota_seconds_added,
-            status="pending",
-            provider=provider,
-            provider_transaction_id=provider_transaction_id,
-            created_at=datetime.now(timezone.utc),
-        )
-        self.session.add(transaction)
-        await self.session.flush()
-        return transaction
-
-    async def get_by_id(self, transaction_id: int) -> Optional[Transaction]:
-        """Get transaction by ID."""
-        result = await self.session.execute(
-            select(Transaction).where(Transaction.id == transaction_id)
-        )
-        return result.scalar_one_or_none()
-
-    async def mark_completed(self, transaction: Transaction) -> Transaction:
-        """Mark transaction as completed."""
-        transaction.status = "completed"
-        transaction.completed_at = datetime.now(timezone.utc)
-        await self.session.flush()
-        return transaction
-
-    async def mark_failed(self, transaction: Transaction) -> Transaction:
-        """Mark transaction as failed."""
-        transaction.status = "failed"
-        transaction.completed_at = datetime.now(timezone.utc)
-        await self.session.flush()
-        return transaction
-
-    async def get_by_user_id(self, user_id: int, limit: int = 10) -> list[Transaction]:
-        """Get transactions for a user (most recent first)."""
-        result = await self.session.execute(
-            select(Transaction)
-            .where(Transaction.user_id == user_id)
-            .order_by(Transaction.created_at.desc())
-            .limit(limit)
-        )
-        return list(result.scalars().all())
 
 
 class TranscriptionStateRepository:

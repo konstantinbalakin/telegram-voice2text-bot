@@ -29,11 +29,6 @@ def _make_user(telegram_id: int = 123456789, **kwargs) -> User:
     defaults = dict(
         telegram_id=telegram_id,
         username="testuser",
-        daily_quota_seconds=60,
-        is_unlimited=False,
-        today_usage_seconds=0,
-        last_reset_date=date.today(),
-        total_usage_seconds=0,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )

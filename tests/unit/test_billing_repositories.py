@@ -30,11 +30,6 @@ async def _create_user(session: AsyncSession, telegram_id: int = 123456789) -> U
     user = User(
         telegram_id=telegram_id,
         username="testuser",
-        daily_quota_seconds=60,
-        is_unlimited=False,
-        today_usage_seconds=0,
-        last_reset_date=date.today(),
-        total_usage_seconds=0,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
@@ -234,7 +229,7 @@ async def test_subscription_create_user_subscription(async_session):
 
     assert sub.id is not None
     assert sub.status == "active"
-    assert sub.auto_renew is True
+    assert sub.auto_renew is False
 
 
 @pytest.mark.asyncio

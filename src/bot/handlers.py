@@ -4,7 +4,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING, Optional
 
 from telegram import Update
@@ -13,7 +13,6 @@ from telegram.error import BadRequest
 
 from src.config import settings, SUPPORTED_AUDIO_MIMES
 from src.storage.database import get_session
-from src.storage.models import User
 from src.storage.repositories import (
     UserRepository,
     UsageRepository,
@@ -155,42 +154,6 @@ class BotHandlers:
         asyncio.create_task(
             self.queue_manager.start_worker(self.orchestrator.process_transcription)
         )
-
-    def _check_quota(self, user: User, duration: int) -> tuple[bool, str]:
-        """Check if user has enough daily quota for the transcription.
-
-        Args:
-            user: Database user object
-            duration: Audio duration in seconds
-
-        Returns:
-            Tuple of (allowed, message). If allowed is False, message contains
-            the rejection reason to send to the user.
-        """
-        if not settings.enable_quota_check:
-            return (True, "")
-
-        if user.is_unlimited:
-            return (True, "")
-
-        # Reset daily usage if last_reset_date is not today
-        today = date.today()
-        if user.last_reset_date != today:
-            user.today_usage_seconds = 0
-            user.last_reset_date = today
-
-        remaining = user.daily_quota_seconds - user.today_usage_seconds
-        if user.today_usage_seconds + duration > user.daily_quota_seconds:
-            return (
-                False,
-                f"⚠️ Достигнут дневной лимит ({user.daily_quota_seconds} сек).\n\n"
-                f"Использовано: {user.today_usage_seconds} сек\n"
-                f"Остаток: {max(0, remaining)} сек\n"
-                f"Запрошено: {duration} сек\n\n"
-                f"Лимит сбросится завтра.",
-            )
-
-        return (True, "")
 
     async def _update_queue_messages(self) -> None:
         """Update all pending queue messages with new positions and wait times.
@@ -485,23 +448,6 @@ class BotHandlers:
                 except Exception as e:
                     logger.error(f"Billing check failed, allowing transcription: {e}")
                     # Fail-open: billing errors should not block transcription
-            else:
-                # 4b. Legacy quota check
-                async with get_session() as session:
-                    user_repo = UserRepository(session)
-                    db_user = await user_repo.get_by_telegram_id(user.id)
-                    if not db_user:
-                        db_user = await user_repo.create(
-                            telegram_id=user.id,
-                            username=user.username,
-                            first_name=user.first_name,
-                            last_name=user.last_name,
-                        )
-                    quota_ok, quota_msg = self._check_quota(db_user, media_info.duration_seconds)
-                    if not quota_ok:
-                        await update.message.reply_text(quota_msg)
-                        logger.warning(f"User {user.id} rejected: quota exceeded")
-                        return
 
         # Send initial status
         status_msg = await update.message.reply_text("📥 Загружаю файл...")
@@ -596,18 +542,6 @@ class BotHandlers:
                     )
                     self.audio_handler.cleanup_file(file_path)
                     return
-
-                # Check quota after duration is known
-                async with get_session() as session:
-                    user_repo = UserRepository(session)
-                    quota_user = await user_repo.get_by_telegram_id(user.id)
-                    if quota_user:
-                        quota_ok, quota_msg = self._check_quota(quota_user, duration_seconds)
-                        if not quota_ok:
-                            await status_msg.edit_text(quota_msg)
-                            logger.warning(f"User {user.id} rejected: quota exceeded")
-                            self.audio_handler.cleanup_file(file_path)
-                            return
 
             # Update usage with duration
             async with get_session() as session:

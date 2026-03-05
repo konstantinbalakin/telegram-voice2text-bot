@@ -69,7 +69,7 @@ class TestPurchaseCompletion:
         mocks["package_repo"].get_by_id.return_value = mock_pkg
 
         mock_purchase = MagicMock()
-        mocks["purchase_repo"].get_by_id.return_value = mock_purchase
+        mocks["purchase_repo"].find_pending_purchase.return_value = mock_purchase
 
         service = PaymentService(
             purchase_repo=mocks["purchase_repo"],
@@ -83,7 +83,6 @@ class TestPurchaseCompletion:
             user_id=1,
             payment_type=PaymentType.PACKAGE,
             item_id=1,
-            purchase_id=42,
         )
 
         assert result is True

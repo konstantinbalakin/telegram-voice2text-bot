@@ -217,6 +217,9 @@ class BillingService:
             )
             daily_available = max(0.0, daily_limit - daily_usage.minutes_used)
 
+            # Get active subscription for source_id on daily deduction
+            active_sub = await subscription_repo.get_active_subscription(user_id=user_id)
+
             # 1. Deduct from daily
             from_daily = min(remaining, daily_available)
             remaining -= from_daily
@@ -259,6 +262,7 @@ class BillingService:
                     user_id=user_id,
                     usage_id=usage_id,
                     source_type=DeductionSource.DAILY,
+                    source_id=active_sub.id if active_sub else None,
                     minutes_deducted=from_daily,
                 )
 

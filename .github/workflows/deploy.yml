@@ -330,9 +330,6 @@ jobs:
             PROGRESS_RTF=0.05
             PROGRESS_UPDATE_INTERVAL=3
 
-            # Quota
-            DEFAULT_DAILY_QUOTA_SECONDS=60 #еще не внедрено
-
             # Billing System
             BILLING_ENABLED=true
             BILLING_LIMIT_WARNING_THRESHOLD=0.8

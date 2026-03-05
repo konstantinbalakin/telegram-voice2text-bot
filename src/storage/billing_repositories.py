@@ -194,7 +194,7 @@ class SubscriptionRepository:
         period: str,
         payment_provider: str,
         expires_at: datetime,
-        auto_renew: bool = True,
+        auto_renew: bool = False,
     ) -> UserSubscription:
         """Create a user subscription."""
         subscription = UserSubscription(
@@ -212,7 +212,10 @@ class SubscriptionRepository:
         return subscription
 
     async def get_active_subscription(self, user_id: int) -> Optional[UserSubscription]:
-        """Get the active subscription for a user."""
+        """Get the active subscription for a user.
+
+        Raises MultipleResultsFound if duplicates exist (fail-fast).
+        """
         now = datetime.now(timezone.utc)
         result = await self.session.execute(
             select(UserSubscription).where(
@@ -224,6 +227,18 @@ class SubscriptionRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def deactivate_subscription(self, subscription: UserSubscription) -> UserSubscription:
+        """Deactivate a subscription immediately (e.g. replaced by a new one).
+
+        Sets status to CANCELLED and disables auto-renewal.
+        Unlike cancel_subscription, the subscription stops being active right away.
+        """
+        subscription.status = SubscriptionStatus.CANCELLED
+        subscription.auto_renew = False
+        subscription.updated_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return subscription
 
     async def cancel_subscription(self, subscription: UserSubscription) -> UserSubscription:
         """Cancel a subscription: disable auto-renewal but keep active until expiry.
@@ -579,3 +594,25 @@ class PurchaseRepository:
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def find_pending_purchase(
+        self,
+        user_id: int,
+        purchase_type: str,
+        item_id: int,
+    ) -> Optional[Purchase]:
+        """Find the most recent pending purchase by user, type, and item."""
+        result = await self.session.execute(
+            select(Purchase)
+            .where(
+                and_(
+                    Purchase.user_id == user_id,
+                    Purchase.purchase_type == purchase_type,
+                    Purchase.item_id == item_id,
+                    Purchase.status == PurchaseStatus.PENDING,
+                )
+            )
+            .order_by(Purchase.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
