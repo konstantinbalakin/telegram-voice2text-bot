@@ -159,12 +159,12 @@ async def test_create_subscription_new_user():
 
 @pytest.mark.asyncio
 async def test_create_subscription_replaces_existing():
-    """Test creating subscription when user already has one — old is cancelled."""
+    """Test creating subscription when user already has one — old is deactivated."""
     service, mocks = _make_subscription_service()
 
     old_sub = _mock_subscription(sub_id=10, status="active")
     mocks["subscription_repo"].get_active_subscription.return_value = old_sub
-    mocks["subscription_repo"].cancel_subscription.return_value = old_sub
+    mocks["subscription_repo"].deactivate_subscription.return_value = old_sub
 
     new_sub = _mock_subscription(sub_id=11)
     mocks["subscription_repo"].create_subscription.return_value = new_sub
@@ -174,7 +174,7 @@ async def test_create_subscription_replaces_existing():
     )
 
     assert result is not None
-    mocks["subscription_repo"].cancel_subscription.assert_called_once_with(old_sub)
+    mocks["subscription_repo"].deactivate_subscription.assert_called_once_with(old_sub)
 
 
 # =============================================================================
@@ -335,7 +335,7 @@ async def test_handle_upgrade_immediate():
 
     old_sub = _mock_subscription(sub_id=1, tier_id=1, period="month")
     mocks["subscription_repo"].get_active_subscription.return_value = old_sub
-    mocks["subscription_repo"].cancel_subscription.return_value = old_sub
+    mocks["subscription_repo"].deactivate_subscription.return_value = old_sub
 
     new_sub = _mock_subscription(sub_id=2, tier_id=2, period="month")
     mocks["subscription_repo"].create_subscription.return_value = new_sub
@@ -347,8 +347,8 @@ async def test_handle_upgrade_immediate():
         user_id=1, new_tier_id=2, new_period="month", payment_provider="telegram_stars"
     )
     assert result is not None
-    # Old subscription should be cancelled (via create_subscription)
-    mocks["subscription_repo"].cancel_subscription.assert_called_once()
+    # Old subscription should be deactivated (via create_subscription)
+    mocks["subscription_repo"].deactivate_subscription.assert_called_once()
     # New subscription should be created
     mocks["subscription_repo"].create_subscription.assert_called_once()
 
@@ -370,7 +370,7 @@ async def test_handle_upgrade_no_existing_subscription():
         user_id=1, new_tier_id=2, new_period="month", payment_provider="telegram_stars"
     )
     assert result is not None
-    mocks["subscription_repo"].cancel_subscription.assert_not_called()
+    mocks["subscription_repo"].deactivate_subscription.assert_not_called()
 
 
 # =============================================================================

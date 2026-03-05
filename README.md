@@ -77,6 +77,11 @@ uv run alembic upgrade head
 uv run python -m src.main
 ```
 
+P.S. Посмотреть порядок миграций
+```bash
+uv run alembic history
+```
+
 **Подробнее:** [📖 Installation Guide](docs/getting-started/installation.md)
 
 ## 📚 Документация

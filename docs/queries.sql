@@ -1,0 +1,400 @@
+-- ============================================================================
+-- Voice2Text Bot — Полезные SQL-запросы для DBeaver
+-- ============================================================================
+
+
+-- ############################################################################
+-- ЧАСТЬ 1: ОБЗОР ВСЕХ ТАБЛИЦ (SELECT * с лимитом)
+-- ############################################################################
+
+-- 1. Пользователи бота
+SELECT * FROM users ORDER BY created_at DESC LIMIT 100;
+
+-- 2. Записи использования (каждая транскрипция)
+SELECT * FROM usage ORDER BY created_at DESC LIMIT 100;
+
+-- 3. Транзакции (платежи — старая таблица)
+SELECT * FROM transactions ORDER BY created_at DESC LIMIT 100;
+
+-- 4. Состояния UI транскрипций (какая кнопка активна у сообщения)
+SELECT * FROM transcription_states ORDER BY created_at DESC LIMIT 100;
+
+-- 5. Кеш вариантов текста (структурирование, "сделать красиво" и т.д.)
+SELECT * FROM transcription_variants ORDER BY created_at DESC LIMIT 100;
+
+-- 6. Сегменты с таймкодами (faster-whisper)
+SELECT * FROM transcription_segments ORDER BY created_at DESC LIMIT 100;
+
+-- 7. Биллинг: общие и индивидуальные условия (key-value)
+SELECT * FROM billing_conditions ORDER BY id;
+
+-- 8. Биллинг: тарифные планы подписок
+SELECT * FROM subscription_tiers ORDER BY display_order;
+
+-- 9. Биллинг: цены подписок (по периодам)
+SELECT * FROM subscription_prices ORDER BY tier_id, period;
+
+-- 10. Биллинг: активные подписки пользователей
+SELECT * FROM user_subscriptions ORDER BY created_at DESC LIMIT 100;
+
+-- 11. Биллинг: каталог пакетов минут
+SELECT * FROM minute_packages ORDER BY display_order;
+
+-- 12. Биллинг: балансы минут пользователей (бонусные + пакетные)
+SELECT * FROM user_minute_balances ORDER BY created_at DESC LIMIT 100;
+
+-- 13. Биллинг: дневное использование минут
+SELECT * FROM daily_usage ORDER BY date DESC, user_id LIMIT 100;
+
+-- 14. Биллинг: история покупок (подписки + пакеты)
+SELECT * FROM purchases ORDER BY created_at DESC LIMIT 100;
+
+-- 15. Биллинг: лог списаний минут (детально по источникам)
+SELECT * FROM deduction_log ORDER BY created_at DESC LIMIT 100;
+
+
+-- ############################################################################
+-- ЧАСТЬ 2: ПОЛЕЗНЫЕ АНАЛИТИЧЕСКИЕ ЗАПРОСЫ
+-- ############################################################################
+
+-- ==========================================================================
+-- ПОЛЬЗОВАТЕЛИ
+-- ==========================================================================
+
+-- Все пользователи с читаемой информацией
+SELECT
+    u.id,
+    u.telegram_id,
+    u.username,
+    u.first_name || ' ' || COALESCE(u.last_name, '') AS full_name,
+    u.is_unlimited,
+    u.daily_quota_seconds / 60.0 AS daily_quota_min,
+    u.today_usage_seconds / 60.0 AS today_usage_min,
+    u.total_usage_seconds / 60.0 AS total_usage_min,
+    u.created_at,
+    u.updated_at
+FROM users u
+ORDER BY u.created_at DESC;
+
+-- Топ пользователей по общему использованию
+SELECT
+    u.telegram_id,
+    u.username,
+    u.first_name,
+    ROUND(u.total_usage_seconds / 60.0, 1) AS total_minutes,
+    COUNT(us.id) AS transcription_count,
+    u.is_unlimited,
+    u.created_at
+FROM users u
+LEFT JOIN usage us ON us.user_id = u.id
+GROUP BY u.id
+ORDER BY u.total_usage_seconds DESC
+LIMIT 20;
+
+-- Новые пользователи за последние 7 дней
+SELECT
+    u.telegram_id,
+    u.username,
+    u.first_name,
+    u.created_at,
+    COUNT(us.id) AS transcriptions
+FROM users u
+LEFT JOIN usage us ON us.user_id = u.id
+WHERE u.created_at >= datetime('now', '-7 days')
+GROUP BY u.id
+ORDER BY u.created_at DESC;
+
+
+-- ==========================================================================
+-- ИСПОЛЬЗОВАНИЕ / ТРАНСКРИПЦИИ
+-- ==========================================================================
+
+-- Последние транскрипции с инфо о пользователе
+SELECT
+    us.id AS usage_id,
+    u.username,
+    u.first_name,
+    us.voice_duration_seconds,
+    ROUND(us.voice_duration_seconds / 60.0, 1) AS duration_min,
+    us.model_size,
+    us.llm_model,
+    ROUND(us.processing_time_seconds, 2) AS process_sec,
+    us.transcription_length AS text_len,
+    us.created_at
+FROM usage us
+JOIN users u ON u.id = us.user_id
+ORDER BY us.created_at DESC
+LIMIT 50;
+
+-- Статистика по дням (количество транскрипций и суммарная длительность)
+SELECT
+    DATE(us.created_at) AS day,
+    COUNT(*) AS transcriptions,
+    COUNT(DISTINCT us.user_id) AS unique_users,
+    ROUND(SUM(us.voice_duration_seconds) / 60.0, 1) AS total_minutes,
+    ROUND(AVG(us.voice_duration_seconds) / 60.0, 1) AS avg_duration_min,
+    ROUND(AVG(us.processing_time_seconds), 2) AS avg_process_sec
+FROM usage us
+WHERE us.voice_duration_seconds IS NOT NULL
+GROUP BY DATE(us.created_at)
+ORDER BY day DESC
+LIMIT 30;
+
+-- Статистика по моделям Whisper
+SELECT
+    us.model_size,
+    COUNT(*) AS count,
+    ROUND(AVG(us.voice_duration_seconds), 1) AS avg_duration_sec,
+    ROUND(AVG(us.processing_time_seconds), 2) AS avg_process_sec,
+    ROUND(AVG(us.transcription_length), 0) AS avg_text_len
+FROM usage us
+WHERE us.model_size IS NOT NULL
+GROUP BY us.model_size
+ORDER BY count DESC;
+
+-- Использование LLM-моделей (для интерактивных кнопок)
+SELECT
+    us.llm_model,
+    COUNT(*) AS count,
+    ROUND(AVG(us.llm_processing_time_seconds), 2) AS avg_llm_sec
+FROM usage us
+WHERE us.llm_model IS NOT NULL
+GROUP BY us.llm_model
+ORDER BY count DESC;
+
+
+-- ==========================================================================
+-- ИНТЕРАКТИВНЫЕ КНОПКИ (варианты и состояния)
+-- ==========================================================================
+
+-- Популярность режимов (какие кнопки нажимают чаще)
+SELECT
+    tv.mode,
+    tv.length_level,
+    tv.emoji_level,
+    tv.timestamps_enabled,
+    COUNT(*) AS variant_count,
+    tv.generated_by,
+    tv.llm_model
+FROM transcription_variants tv
+GROUP BY tv.mode, tv.length_level, tv.emoji_level, tv.timestamps_enabled
+ORDER BY variant_count DESC;
+
+-- Текущие активные состояния UI
+SELECT
+    ts.id,
+    ts.usage_id,
+    ts.message_id,
+    ts.chat_id,
+    ts.active_mode,
+    ts.length_level,
+    ts.emoji_level,
+    ts.timestamps_enabled,
+    ts.is_file_message,
+    ts.updated_at
+FROM transcription_states ts
+ORDER BY ts.updated_at DESC
+LIMIT 30;
+
+
+-- ==========================================================================
+-- БИЛЛИНГ: ПОДПИСКИ
+-- ==========================================================================
+
+-- Тарифы с ценами (каталог)
+SELECT
+    st.name AS tier,
+    st.daily_limit_minutes AS daily_limit_min,
+    st.description AS tier_desc,
+    sp.period,
+    sp.amount_rub AS rub,
+    sp.amount_stars AS stars,
+    sp.description AS price_desc,
+    sp.is_active
+FROM subscription_tiers st
+JOIN subscription_prices sp ON sp.tier_id = st.id
+WHERE st.is_active = 1
+ORDER BY st.display_order, sp.period;
+
+-- Активные подписки пользователей
+SELECT
+    us2.id AS sub_id,
+    u.telegram_id,
+    u.username,
+    st.name AS tier,
+    us2.period,
+    us2.status,
+    us2.started_at,
+    us2.expires_at,
+    us2.auto_renew,
+    us2.payment_provider,
+    CASE
+        WHEN us2.expires_at < datetime('now') THEN 'EXPIRED'
+        ELSE 'VALID'
+    END AS validity
+FROM user_subscriptions us2
+JOIN users u ON u.id = us2.user_id
+JOIN subscription_tiers st ON st.id = us2.tier_id
+ORDER BY us2.created_at DESC;
+
+
+-- ==========================================================================
+-- БИЛЛИНГ: ПАКЕТЫ МИНУТ
+-- ==========================================================================
+
+-- Каталог пакетов
+SELECT
+    mp.name,
+    mp.minutes,
+    mp.price_rub AS rub,
+    mp.price_stars AS stars,
+    mp.description,
+    mp.is_active
+FROM minute_packages mp
+ORDER BY mp.display_order;
+
+-- Балансы минут пользователей
+SELECT
+    umb.id,
+    u.telegram_id,
+    u.username,
+    umb.balance_type,
+    ROUND(umb.minutes_remaining, 1) AS minutes_left,
+    umb.expires_at,
+    umb.source_description,
+    umb.created_at
+FROM user_minute_balances umb
+JOIN users u ON u.id = umb.user_id
+WHERE umb.minutes_remaining > 0
+ORDER BY umb.created_at DESC;
+
+
+-- ==========================================================================
+-- БИЛЛИНГ: ПОКУПКИ И ПЛАТЕЖИ
+-- ==========================================================================
+
+-- История покупок с именами пользователей
+SELECT
+    p.id,
+    u.telegram_id,
+    u.username,
+    p.purchase_type,
+    p.item_id,
+    p.amount,
+    p.currency,
+    p.payment_provider,
+    p.provider_transaction_id,
+    p.status,
+    p.created_at,
+    p.completed_at
+FROM purchases p
+JOIN users u ON u.id = p.user_id
+ORDER BY p.created_at DESC
+LIMIT 50;
+
+-- Сводка по покупкам (выручка)
+SELECT
+    p.purchase_type,
+    p.currency,
+    p.payment_provider,
+    COUNT(*) AS total_purchases,
+    SUM(CASE WHEN p.status = 'completed' THEN 1 ELSE 0 END) AS completed,
+    SUM(CASE WHEN p.status = 'completed' THEN p.amount ELSE 0 END) AS revenue
+FROM purchases p
+GROUP BY p.purchase_type, p.currency, p.payment_provider
+ORDER BY revenue DESC;
+
+
+-- ==========================================================================
+-- БИЛЛИНГ: ДНЕВНОЕ ИСПОЛЬЗОВАНИЕ
+-- ==========================================================================
+
+-- Использование минут по дням (по пользователям)
+SELECT
+    du.date,
+    u.telegram_id,
+    u.username,
+    ROUND(du.minutes_used, 1) AS total_min,
+    ROUND(du.minutes_from_daily, 1) AS from_daily,
+    ROUND(du.minutes_from_bonus, 1) AS from_bonus,
+    ROUND(du.minutes_from_package, 1) AS from_package
+FROM daily_usage du
+JOIN users u ON u.id = du.user_id
+ORDER BY du.date DESC, du.minutes_used DESC
+LIMIT 50;
+
+-- Агрегат по дням (все пользователи)
+SELECT
+    du.date,
+    COUNT(DISTINCT du.user_id) AS active_users,
+    ROUND(SUM(du.minutes_used), 1) AS total_min,
+    ROUND(SUM(du.minutes_from_daily), 1) AS from_daily,
+    ROUND(SUM(du.minutes_from_bonus), 1) AS from_bonus,
+    ROUND(SUM(du.minutes_from_package), 1) AS from_package
+FROM daily_usage du
+GROUP BY du.date
+ORDER BY du.date DESC
+LIMIT 30;
+
+
+-- ==========================================================================
+-- БИЛЛИНГ: ЛОГ СПИСАНИЙ
+-- ==========================================================================
+
+-- Последние списания минут (откуда списано)
+SELECT
+    dl.id,
+    u.telegram_id,
+    u.username,
+    dl.usage_id,
+    dl.source_type,
+    dl.source_id,
+    ROUND(dl.minutes_deducted, 2) AS minutes,
+    dl.created_at
+FROM deduction_log dl
+JOIN users u ON u.id = dl.user_id
+ORDER BY dl.created_at DESC
+LIMIT 50;
+
+
+-- ==========================================================================
+-- БИЛЛИНГ: УСЛОВИЯ
+-- ==========================================================================
+
+-- Общие условия (без user_id = глобальные)
+SELECT
+    bc.key,
+    bc.value,
+    bc.valid_from,
+    bc.valid_to
+FROM billing_conditions bc
+WHERE bc.user_id IS NULL
+ORDER BY bc.key;
+
+-- Индивидуальные условия (конкретным пользователям)
+SELECT
+    bc.key,
+    bc.value,
+    u.telegram_id,
+    u.username,
+    bc.valid_from,
+    bc.valid_to
+FROM billing_conditions bc
+JOIN users u ON u.id = bc.user_id
+WHERE bc.user_id IS NOT NULL
+ORDER BY u.telegram_id, bc.key;
+
+
+-- ==========================================================================
+-- ОБЩАЯ СВОДКА ПО ПРОЕКТУ
+-- ==========================================================================
+
+-- Дашборд: ключевые метрики
+SELECT
+    (SELECT COUNT(*) FROM users) AS total_users,
+    (SELECT COUNT(*) FROM users WHERE created_at >= datetime('now', '-7 days')) AS new_users_7d,
+    (SELECT COUNT(*) FROM usage) AS total_transcriptions,
+    (SELECT COUNT(*) FROM usage WHERE created_at >= datetime('now', '-24 hours')) AS transcriptions_24h,
+    (SELECT ROUND(SUM(voice_duration_seconds) / 3600.0, 1) FROM usage) AS total_hours_transcribed,
+    (SELECT COUNT(*) FROM user_subscriptions WHERE status = 'active') AS active_subscriptions,
+    (SELECT COUNT(*) FROM purchases WHERE status = 'completed') AS completed_purchases;

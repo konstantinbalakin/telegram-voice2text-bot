@@ -100,8 +100,8 @@ class SubscriptionService:
         async with self._repos() as (subscription_repo, _, __):
             existing = await subscription_repo.get_active_subscription(user_id=user_id)
             if existing:
-                await subscription_repo.cancel_subscription(existing)
-                logger.info(f"Cancelled existing subscription {existing.id} for user {user_id}")
+                await subscription_repo.deactivate_subscription(existing)
+                logger.info(f"Deactivated existing subscription {existing.id} for user {user_id}")
 
             days = SubscriptionPeriod(period).days
             expires_at = datetime.now(timezone.utc) + timedelta(days=days)
