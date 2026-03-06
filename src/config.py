@@ -186,6 +186,11 @@ class Settings(BaseSettings):
         description="Threshold (0.0-1.0) for daily limit warning notification (default: 80%)",
     )
 
+    billing_test_mode: bool = Field(
+        default=False,
+        description="Test mode: billing UI works but /start shows old greeting, no minute deduction",
+    )
+
     # YooKassa Configuration (native Telegram Payments via provider_token)
     yookassa_provider_token: str = Field(
         default="",
