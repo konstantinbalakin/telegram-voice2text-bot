@@ -360,7 +360,13 @@ class BillingService:
             bonus_minutes_str = await condition_repo.get_effective_value(
                 key="welcome_bonus_minutes", user_id=user_id
             )
-            bonus_minutes = float(bonus_minutes_str) if bonus_minutes_str else 60.0
+            if bonus_minutes_str:
+                bonus_minutes = float(bonus_minutes_str)
+            else:
+                logger.warning(
+                    "welcome_bonus_minutes not found in billing_conditions, using default 60.0"
+                )
+                bonus_minutes = 60.0
 
             # Get bonus expiry days
             bonus_days_str = await condition_repo.get_effective_value(
@@ -422,4 +428,8 @@ class BillingService:
         if value is not None:
             return float(value)
 
+        logger.warning(
+            "daily_free_minutes not found in billing_conditions, using default %.1f",
+            DEFAULT_DAILY_FREE_MINUTES,
+        )
         return DEFAULT_DAILY_FREE_MINUTES

@@ -66,11 +66,12 @@ class BillingConditionRepository:
         Priority: individual (user_id match) > global (user_id is None).
         Only returns conditions where valid_from <= now and (valid_to is None or valid_to > now).
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
 
         validity_filter = and_(
-            BillingCondition.valid_from <= now,
-            (BillingCondition.valid_to.is_(None)) | (BillingCondition.valid_to > now),
+            func.datetime(BillingCondition.valid_from) <= func.datetime(now),
+            (BillingCondition.valid_to.is_(None))
+            | (func.datetime(BillingCondition.valid_to) > func.datetime(now)),
         )
 
         # Try individual condition first
@@ -189,13 +190,14 @@ class SubscriptionRepository:
         Priority: individual (user_id match) > global (user_id IS NULL).
         Only returns prices where valid_from <= now and (valid_to IS NULL or valid_to > now).
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
 
         validity_filter = and_(
             SubscriptionPrice.tier_id == tier_id,
             SubscriptionPrice.is_active.is_(True),
-            SubscriptionPrice.valid_from <= now,
-            (SubscriptionPrice.valid_to.is_(None)) | (SubscriptionPrice.valid_to > now),
+            func.datetime(SubscriptionPrice.valid_from) <= func.datetime(now),
+            (SubscriptionPrice.valid_to.is_(None))
+            | (func.datetime(SubscriptionPrice.valid_to) > func.datetime(now)),
         )
 
         # Try individual prices first
@@ -248,13 +250,13 @@ class SubscriptionRepository:
 
         Raises MultipleResultsFound if duplicates exist (fail-fast).
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
         result = await self.session.execute(
             select(UserSubscription).where(
                 and_(
                     UserSubscription.user_id == user_id,
                     UserSubscription.status == SubscriptionStatus.ACTIVE,
-                    UserSubscription.expires_at > now,
+                    func.datetime(UserSubscription.expires_at) > func.datetime(now),
                 )
             )
         )
@@ -266,7 +268,7 @@ class SubscriptionRepository:
         Returns subscription with tier already populated, so accessing
         subscription.tier does not trigger an additional SELECT.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
         result = await self.session.execute(
             select(UserSubscription)
             .options(joinedload(UserSubscription.tier))
@@ -274,7 +276,7 @@ class SubscriptionRepository:
                 and_(
                     UserSubscription.user_id == user_id,
                     UserSubscription.status == SubscriptionStatus.ACTIVE,
-                    UserSubscription.expires_at > now,
+                    func.datetime(UserSubscription.expires_at) > func.datetime(now),
                 )
             )
         )
@@ -313,12 +315,12 @@ class SubscriptionRepository:
 
     async def get_expired_subscriptions(self) -> list[UserSubscription]:
         """Get active subscriptions that have expired."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
         result = await self.session.execute(
             select(UserSubscription).where(
                 and_(
                     UserSubscription.status == SubscriptionStatus.ACTIVE,
-                    UserSubscription.expires_at <= now,
+                    func.datetime(UserSubscription.expires_at) <= func.datetime(now),
                 )
             )
         )
@@ -334,14 +336,14 @@ class SubscriptionRepository:
 
     async def get_expiring_subscriptions(self, days_ahead: int = 3) -> list[UserSubscription]:
         """Get subscriptions expiring within N days."""
-        now = datetime.now(timezone.utc)
-        cutoff = now + timedelta(days=days_ahead)
+        now = datetime.now(timezone.utc).isoformat()
+        cutoff = (datetime.now(timezone.utc) + timedelta(days=days_ahead)).isoformat()
         result = await self.session.execute(
             select(UserSubscription).where(
                 and_(
                     UserSubscription.status == SubscriptionStatus.ACTIVE,
-                    UserSubscription.expires_at <= cutoff,
-                    UserSubscription.expires_at > now,
+                    func.datetime(UserSubscription.expires_at) <= func.datetime(cutoff),
+                    func.datetime(UserSubscription.expires_at) > func.datetime(now),
                 )
             )
         )
@@ -391,12 +393,13 @@ class MinutePackageRepository:
         Priority: individual (user_id match) > global (user_id IS NULL).
         Only returns packages where valid_from <= now and (valid_to IS NULL or valid_to > now).
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
 
         validity_filter = and_(
             MinutePackage.is_active.is_(True),
-            MinutePackage.valid_from <= now,
-            (MinutePackage.valid_to.is_(None)) | (MinutePackage.valid_to > now),
+            func.datetime(MinutePackage.valid_from) <= func.datetime(now),
+            (MinutePackage.valid_to.is_(None))
+            | (func.datetime(MinutePackage.valid_to) > func.datetime(now)),
         )
 
         # Try individual packages first
@@ -458,14 +461,15 @@ class UserMinuteBalanceRepository:
         Ordered: bonus first, then package (deduction priority).
         Within same type, oldest first (FIFO).
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
         result = await self.session.execute(
             select(UserMinuteBalance)
             .where(
                 and_(
                     UserMinuteBalance.user_id == user_id,
                     UserMinuteBalance.minutes_remaining > 0,
-                    (UserMinuteBalance.expires_at.is_(None)) | (UserMinuteBalance.expires_at > now),
+                    (UserMinuteBalance.expires_at.is_(None))
+                    | (func.datetime(UserMinuteBalance.expires_at) > func.datetime(now)),
                 )
             )
             .order_by(
@@ -478,12 +482,13 @@ class UserMinuteBalanceRepository:
 
     async def get_total_minutes(self, user_id: int, balance_type: Optional[str] = None) -> float:
         """Get total remaining minutes for a user, optionally filtered by type."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc).isoformat()
         query = select(func.coalesce(func.sum(UserMinuteBalance.minutes_remaining), 0.0)).where(
             and_(
                 UserMinuteBalance.user_id == user_id,
                 UserMinuteBalance.minutes_remaining > 0,
-                (UserMinuteBalance.expires_at.is_(None)) | (UserMinuteBalance.expires_at > now),
+                (UserMinuteBalance.expires_at.is_(None))
+                | (func.datetime(UserMinuteBalance.expires_at) > func.datetime(now)),
             )
         )
         if balance_type is not None:
