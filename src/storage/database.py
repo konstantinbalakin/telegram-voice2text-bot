@@ -3,7 +3,7 @@ Database connection and session management
 """
 
 import asyncio
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
@@ -22,9 +22,9 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
-def _set_sqlite_pragmas(dbapi_conn: object, connection_record: object) -> None:
+def _set_sqlite_pragmas(dbapi_conn: Any, connection_record: Any) -> None:
     """Enable foreign keys on every new SQLite connection."""
-    cursor = dbapi_conn.cursor()  # type: ignore[union-attr]
+    cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
