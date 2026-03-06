@@ -13,43 +13,40 @@ SELECT * FROM users ORDER BY created_at DESC LIMIT 100;
 -- 2. Записи использования (каждая транскрипция)
 SELECT * FROM usage ORDER BY created_at DESC LIMIT 100;
 
--- 3. Транзакции (платежи — старая таблица)
-SELECT * FROM transactions ORDER BY created_at DESC LIMIT 100;
-
--- 4. Состояния UI транскрипций (какая кнопка активна у сообщения)
+-- 3. Состояния UI транскрипций (какая кнопка активна у сообщения)
 SELECT * FROM transcription_states ORDER BY created_at DESC LIMIT 100;
 
--- 5. Кеш вариантов текста (структурирование, "сделать красиво" и т.д.)
+-- 4. Кеш вариантов текста (структурирование, "сделать красиво" и т.д.)
 SELECT * FROM transcription_variants ORDER BY created_at DESC LIMIT 100;
 
--- 6. Сегменты с таймкодами (faster-whisper)
+-- 5. Сегменты с таймкодами (faster-whisper)
 SELECT * FROM transcription_segments ORDER BY created_at DESC LIMIT 100;
 
--- 7. Биллинг: общие и индивидуальные условия (key-value)
+-- 6. Биллинг: общие и индивидуальные условия (key-value)
 SELECT * FROM billing_conditions ORDER BY id;
 
--- 8. Биллинг: тарифные планы подписок
+-- 7. Биллинг: тарифные планы подписок
 SELECT * FROM subscription_tiers ORDER BY display_order;
 
--- 9. Биллинг: цены подписок (по периодам)
+-- 8. Биллинг: цены подписок (по периодам)
 SELECT * FROM subscription_prices ORDER BY tier_id, period;
 
--- 10. Биллинг: активные подписки пользователей
+-- 9. Биллинг: активные подписки пользователей
 SELECT * FROM user_subscriptions ORDER BY created_at DESC LIMIT 100;
 
--- 11. Биллинг: каталог пакетов минут
+-- 10. Биллинг: каталог пакетов минут
 SELECT * FROM minute_packages ORDER BY display_order;
 
--- 12. Биллинг: балансы минут пользователей (бонусные + пакетные)
+-- 11. Биллинг: балансы минут пользователей (бонусные + пакетные)
 SELECT * FROM user_minute_balances ORDER BY created_at DESC LIMIT 100;
 
--- 13. Биллинг: дневное использование минут
+-- 12. Биллинг: дневное использование минут
 SELECT * FROM daily_usage ORDER BY date DESC, user_id LIMIT 100;
 
--- 14. Биллинг: история покупок (подписки + пакеты)
+-- 13. Биллинг: история покупок (подписки + пакеты)
 SELECT * FROM purchases ORDER BY created_at DESC LIMIT 100;
 
--- 15. Биллинг: лог списаний минут (детально по источникам)
+-- 14. Биллинг: лог списаний минут (детально по источникам)
 SELECT * FROM deduction_log ORDER BY created_at DESC LIMIT 100;
 
 
@@ -67,10 +64,6 @@ SELECT
     u.telegram_id,
     u.username,
     u.first_name || ' ' || COALESCE(u.last_name, '') AS full_name,
-    u.is_unlimited,
-    u.daily_quota_seconds / 60.0 AS daily_quota_min,
-    u.today_usage_seconds / 60.0 AS today_usage_min,
-    u.total_usage_seconds / 60.0 AS total_usage_min,
     u.created_at,
     u.updated_at
 FROM users u
@@ -81,14 +74,13 @@ SELECT
     u.telegram_id,
     u.username,
     u.first_name,
-    ROUND(u.total_usage_seconds / 60.0, 1) AS total_minutes,
+    ROUND(SUM(us.voice_duration_seconds) / 60.0, 1) AS total_minutes,
     COUNT(us.id) AS transcription_count,
-    u.is_unlimited,
     u.created_at
 FROM users u
 LEFT JOIN usage us ON us.user_id = u.id
 GROUP BY u.id
-ORDER BY u.total_usage_seconds DESC
+ORDER BY total_minutes DESC
 LIMIT 20;
 
 -- Новые пользователи за последние 7 дней
