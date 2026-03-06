@@ -18,4 +18,6 @@
 
 | [~] | billing-ux-polish_20260305 | Billing UX Polish — Unified Screens, Descriptions & Bot Menu | 2026-03-05 | 2026-03-05 |
 
+| [~] | db-optimization_20260306 | Database Schema Optimization & Price Versioning | 2026-03-06 | 2026-03-06 |
+
 <!-- Tracks registered by /conductor:new-track -->

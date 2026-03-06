@@ -5,7 +5,17 @@ Database models for Telegram Voice2Text Bot
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, Integer, Boolean, DateTime, Date, Float, ForeignKey
+from sqlalchemy import (
+    String,
+    Integer,
+    Boolean,
+    DateTime,
+    Date,
+    Float,
+    ForeignKey,
+    CheckConstraint,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from src.services.payments.base import (
@@ -434,11 +444,10 @@ class DailyUsage(Base):
     """Daily usage tracking per user."""
 
     __tablename__ = "daily_usage"
+    __table_args__ = (UniqueConstraint("user_id", "date", name="uq_daily_usage_user_date"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     date: Mapped[date] = mapped_column(Date, nullable=False)
     minutes_used: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     minutes_from_daily: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
@@ -466,6 +475,12 @@ class Purchase(Base):
     """Purchase history (packages and subscriptions)."""
 
     __tablename__ = "purchases"
+    __table_args__ = (
+        CheckConstraint(
+            "purchase_type IN ('package', 'subscription')",
+            name="ck_purchases_purchase_type",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(

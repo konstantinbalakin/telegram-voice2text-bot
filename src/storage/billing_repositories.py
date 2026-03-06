@@ -7,6 +7,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import select, and_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.services.payments.base import (
@@ -442,7 +443,11 @@ class DailyUsageRepository:
         self.session = session
 
     async def get_or_create(self, user_id: int, usage_date: date) -> tuple[DailyUsage, bool]:
-        """Get or create daily usage record. Returns (usage, created)."""
+        """Get or create daily usage record. Returns (usage, created).
+
+        Handles race condition: if concurrent INSERT causes IntegrityError
+        (UNIQUE constraint on user_id+date), retries with SELECT.
+        """
         result = await self.session.execute(
             select(DailyUsage).where(
                 and_(
@@ -455,17 +460,32 @@ class DailyUsageRepository:
         if existing:
             return existing, False
 
-        usage = DailyUsage(
-            user_id=user_id,
-            date=usage_date,
-            minutes_used=0.0,
-            minutes_from_daily=0.0,
-            minutes_from_bonus=0.0,
-            minutes_from_package=0.0,
-        )
-        self.session.add(usage)
-        await self.session.flush()
-        return usage, True
+        try:
+            usage = DailyUsage(
+                user_id=user_id,
+                date=usage_date,
+                minutes_used=0.0,
+                minutes_from_daily=0.0,
+                minutes_from_bonus=0.0,
+                minutes_from_package=0.0,
+            )
+            self.session.add(usage)
+            await self.session.flush()
+            return usage, True
+        except IntegrityError:
+            await self.session.rollback()
+            result = await self.session.execute(
+                select(DailyUsage).where(
+                    and_(
+                        DailyUsage.user_id == user_id,
+                        DailyUsage.date == usage_date,
+                    )
+                )
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                return existing, False
+            raise
 
     async def add_usage(
         self,
