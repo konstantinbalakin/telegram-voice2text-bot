@@ -35,12 +35,12 @@
 
 ### Tasks
 
-- [ ] Task 2.1: Добавить Index("ix_user_subscriptions_user_status_expires", "user_id", "status", "expires_at") в UserSubscription.__table_args__
-- [ ] Task 2.2: Добавить Index("ix_billing_conditions_key_user_valid", "key", "user_id", "valid_from") в BillingCondition.__table_args__
-- [ ] Task 2.3: Добавить Index("ix_purchases_user_type_item_status", "user_id", "purchase_type", "item_id", "status") в Purchase.__table_args__
-- [ ] Task 2.4: Добавить Index("ix_deduction_log_created", "created_at") в DeductionLog.__table_args__
-- [ ] Task 2.5: Удалить дублирующиеся одиночные индексы, покрытые новыми составными (daily_usage.user_id — покрыт UNIQUE)
-- [ ] Task 2.6: Создать Alembic-миграцию для Phase 2
+- [x] Task 2.1: Добавить Index("ix_user_subscriptions_user_status_expires", "user_id", "status", "expires_at") в UserSubscription.__table_args__
+- [x] Task 2.2: Добавить Index("ix_billing_conditions_key_user_valid", "key", "user_id", "valid_from") в BillingCondition.__table_args__
+- [x] Task 2.3: Добавить Index("ix_purchases_user_type_item_status", "user_id", "purchase_type", "item_id", "status") в Purchase.__table_args__
+- [x] Task 2.4: Добавить Index("ix_deduction_log_created", "created_at") в DeductionLog.__table_args__
+- [x] Task 2.5: Удалить дублирующиеся одиночные индексы, покрытые новыми составными (daily_usage.user_id — покрыт UNIQUE)
+- [x] Task 2.6: Создать Alembic-миграцию для Phase 2
 
 ### Verification
 

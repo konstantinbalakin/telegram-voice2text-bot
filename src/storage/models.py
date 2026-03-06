@@ -14,6 +14,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     CheckConstraint,
+    Index,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -269,13 +270,14 @@ class BillingCondition(Base):
     """General and individual billing conditions (key-value with optional user override)."""
 
     __tablename__ = "billing_conditions"
+    __table_args__ = (
+        Index("ix_billing_conditions_key_user_valid", "key", "user_id", "valid_from"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    key: Mapped[str] = mapped_column(String(100), nullable=False)
     value: Mapped[str] = mapped_column(String(500), nullable=False)
-    user_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=True, index=True
-    )
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     valid_from: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -344,11 +346,17 @@ class UserSubscription(Base):
     """Active user subscriptions."""
 
     __tablename__ = "user_subscriptions"
+    __table_args__ = (
+        Index(
+            "ix_user_subscriptions_user_status_expires",
+            "user_id",
+            "status",
+            "expires_at",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     tier_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("subscription_tiers.id"), nullable=False
     )
@@ -480,12 +488,17 @@ class Purchase(Base):
             "purchase_type IN ('package', 'subscription')",
             name="ck_purchases_purchase_type",
         ),
+        Index(
+            "ix_purchases_user_type_item_status",
+            "user_id",
+            "purchase_type",
+            "item_id",
+            "status",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     purchase_type: Mapped[str] = mapped_column(String(20), nullable=False)
     item_id: Mapped[int] = mapped_column(Integer, nullable=False)
     amount: Mapped[float] = mapped_column(Float, nullable=False)
@@ -510,6 +523,7 @@ class DeductionLog(Base):
     """Detailed log of minute deductions by source."""
 
     __tablename__ = "deduction_log"
+    __table_args__ = (Index("ix_deduction_log_created", "created_at"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(
