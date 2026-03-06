@@ -290,6 +290,9 @@ async def main() -> None:
                 application.application_data["payment_service"] = payment_service
 
             # Create payment callback handlers
+            assert payment_callback_handlers is not None
+            assert pre_checkout_handler is not None
+            assert success_payment_handler is not None
             payment_callbacks = payment_callback_handlers(payment_service=payment_service)
             pre_checkout = pre_checkout_handler(payment_service=payment_service)
             success_payment = success_payment_handler(payment_service=payment_service)

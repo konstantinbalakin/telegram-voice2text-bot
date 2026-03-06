@@ -3,6 +3,7 @@ Payment callback handlers for inline payment buttons.
 """
 
 import logging
+from typing import TYPE_CHECKING, Any, Callable
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
@@ -11,6 +12,12 @@ from src.services.payments.base import PaymentRequest, PaymentType, Subscription
 from src.storage.database import get_session
 from src.storage.billing_repositories import MinutePackageRepository, SubscriptionRepository
 from src.storage.repositories import UserRepository
+
+if TYPE_CHECKING:
+    from src.services.payments.payment_service import PaymentService
+
+# Handler type alias
+_Handler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Any]
 
 _PERIOD_LABELS = {
     SubscriptionPeriod.WEEK: "Неделя",
@@ -38,7 +45,7 @@ def _back_button(callback_data: str) -> InlineKeyboardMarkup:
 class PaymentCallbackHandlers:
     """Handlers for payment-related callback queries."""
 
-    def __init__(self, payment_service):
+    def __init__(self, payment_service: "PaymentService") -> None:
         self.payment_service = payment_service
 
     async def _get_db_user_id(self, telegram_user_id: int) -> int:
@@ -129,7 +136,7 @@ class PaymentCallbackHandlers:
                 return
 
             package_id = int(parts[1])
-            telegram_user_id = update.effective_user.id
+            telegram_user_id = update.effective_user.id  # type: ignore[union-attr]
             db_user_id = await self._get_db_user_id(telegram_user_id)
             _, price_stars = await self._get_package_price(package_id)
             pkg_name = await self._get_package_name(package_id)
@@ -153,7 +160,7 @@ class PaymentCallbackHandlers:
 
             back = _back_button("billing:packages")
             if result.success and result.payment_url:
-                await update.callback_query.message.reply_text(
+                await update.callback_query.message.reply_text(  # type: ignore[union-attr]
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
                 )
             else:
@@ -193,7 +200,7 @@ class PaymentCallbackHandlers:
 
             tier_id = int(parts[1])
             period = parts[2]
-            telegram_user_id = update.effective_user.id
+            telegram_user_id = update.effective_user.id  # type: ignore[union-attr]
             db_user_id = await self._get_db_user_id(telegram_user_id)
             _, price_stars = await self._get_subscription_price(tier_id, period)
             tier_name = await self._get_tier_name(tier_id)
@@ -218,7 +225,7 @@ class PaymentCallbackHandlers:
 
             back = _back_button("billing:subscriptions")
             if result.success and result.payment_url:
-                await update.callback_query.message.reply_text(
+                await update.callback_query.message.reply_text(  # type: ignore[union-attr]
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
                 )
             else:
@@ -259,7 +266,7 @@ class PaymentCallbackHandlers:
                 return
 
             package_id = int(parts[1])
-            telegram_user_id = update.effective_user.id
+            telegram_user_id = update.effective_user.id  # type: ignore[union-attr]
             db_user_id = await self._get_db_user_id(telegram_user_id)
             price_rub, _ = await self._get_package_price(package_id)
             amount_kopecks = int(price_rub * 100)
@@ -284,7 +291,7 @@ class PaymentCallbackHandlers:
 
             back = _back_button("billing:packages")
             if result.success and result.payment_url:
-                await update.callback_query.message.reply_text(
+                await update.callback_query.message.reply_text(  # type: ignore[union-attr]
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
                 )
             else:
@@ -324,7 +331,7 @@ class PaymentCallbackHandlers:
 
             tier_id = int(parts[1])
             period = parts[2]
-            telegram_user_id = update.effective_user.id
+            telegram_user_id = update.effective_user.id  # type: ignore[union-attr]
             db_user_id = await self._get_db_user_id(telegram_user_id)
             price_rub, _ = await self._get_subscription_price(tier_id, period)
             amount_kopecks = int(price_rub * 100)
@@ -350,7 +357,7 @@ class PaymentCallbackHandlers:
 
             back = _back_button("billing:subscriptions")
             if result.success and result.payment_url:
-                await update.callback_query.message.reply_text(
+                await update.callback_query.message.reply_text(  # type: ignore[union-attr]
                     f"Для оплаты нажмите на ссылку ниже:\n{result.payment_url}"
                 )
             else:
@@ -372,7 +379,7 @@ class PaymentCallbackHandlers:
             )
 
 
-def pre_checkout_query_handler(payment_service):
+def pre_checkout_query_handler(payment_service: "PaymentService") -> _Handler:
     """Create a PreCheckoutQuery handler for Telegram Stars payments.
 
     Always approves pre-checkout queries for Telegram Stars.
@@ -387,7 +394,7 @@ def pre_checkout_query_handler(payment_service):
     return handler
 
 
-def successful_payment_handler(payment_service):
+def successful_payment_handler(payment_service: "PaymentService") -> _Handler:
     """Create a handler for successful Telegram payments (Stars and YooKassa).
 
     Parses payload and calls PaymentService.handle_successful_payment().
