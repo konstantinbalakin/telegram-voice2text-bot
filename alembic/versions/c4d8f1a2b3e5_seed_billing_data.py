@@ -37,14 +37,6 @@ def upgrade() -> None:
             "VALUES ('welcome_bonus_minutes', '60', NULL, :now, :now)"
         ).bindparams(now=now)
     )
-    # welcome_bonus_days NULL = no expiry (perpetual bonus)
-    op.execute(
-        sa.text(
-            "INSERT OR IGNORE INTO billing_conditions (key, value, user_id, valid_from, created_at) "
-            "VALUES ('welcome_bonus_days', NULL, NULL, :now, :now)"
-        ).bindparams(now=now)
-    )
-
     # Subscription tier: Pro
     op.execute(
         sa.text(
@@ -129,7 +121,7 @@ def downgrade() -> None:
     op.execute(
         sa.text(
             "DELETE FROM billing_conditions WHERE key IN "
-            "('daily_free_minutes', 'welcome_bonus_minutes', 'welcome_bonus_days') "
+            "('daily_free_minutes', 'welcome_bonus_minutes') "
             "AND user_id IS NULL"
         )
     )
