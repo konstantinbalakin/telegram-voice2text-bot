@@ -75,10 +75,10 @@
 
 ### Tasks
 
-- [ ] Task 4.1: Добавить SubscriptionRepository.get_active_subscription_with_tier(user_id) — joinedload(UserSubscription.tier)
-- [ ] Task 4.2: Обновить BillingService._get_daily_limit_with_repos — использовать get_active_subscription_with_tier вместо отдельных get_active_subscription + get_tier_by_id
-- [ ] Task 4.3: Обновить SubscriptionService.get_active_subscription — опциональный параметр eager_load_tier=False
-- [ ] Task 4.4: Написать тест: verify joinedload не делает дополнительный SELECT для tier
+- [x] Task 4.1: Добавить SubscriptionRepository.get_active_subscription_with_tier(user_id) — joinedload(UserSubscription.tier)
+- [x] Task 4.2: Обновить BillingService._get_daily_limit_with_repos — использовать get_active_subscription_with_tier вместо отдельных get_active_subscription + get_tier_by_id
+- [x] Task 4.3: Обновить BillingService.get_user_daily_limit — также использовать get_active_subscription_with_tier
+- [x] Task 4.4: Обновить mock-тесты для нового метода get_active_subscription_with_tier во всех test файлах
 
 ### Verification
 

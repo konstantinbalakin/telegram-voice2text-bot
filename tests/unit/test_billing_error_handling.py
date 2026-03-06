@@ -57,6 +57,7 @@ class TestDeductionShortfall:
         }
 
         mocks["subscription_repo"].get_active_subscription.return_value = None
+        mocks["subscription_repo"].get_active_subscription_with_tier.return_value = None
         mocks["condition_repo"].get_effective_value.return_value = "5"  # 5 min daily
 
         mock_daily = MagicMock()

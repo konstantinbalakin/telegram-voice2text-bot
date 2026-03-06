@@ -105,6 +105,7 @@ class BillingService:
         """Get user's daily limit in minutes.
 
         Subscription replaces (not sums with) the free daily limit.
+        Uses joinedload to avoid N+1 query on tier.
         """
         async with self._repos() as (
             condition_repo,
@@ -113,12 +114,9 @@ class BillingService:
             _daily_usage_repo,
             _deduction_log_repo,
         ):
-            # Check active subscription first
-            active_sub = await subscription_repo.get_active_subscription(user_id=user_id)
-            if active_sub:
-                tier = await subscription_repo.get_tier_by_id(active_sub.tier_id)
-                if tier:
-                    return tier.daily_limit_minutes
+            active_sub = await subscription_repo.get_active_subscription_with_tier(user_id=user_id)
+            if active_sub and active_sub.tier:
+                return active_sub.tier.daily_limit_minutes
 
             # Fall back to billing condition
             value = await condition_repo.get_effective_value(
@@ -412,12 +410,13 @@ class BillingService:
         condition_repo: BillingConditionRepository,
         subscription_repo: SubscriptionRepository,
     ) -> float:
-        """Internal helper: get daily limit using provided repos."""
-        active_sub = await subscription_repo.get_active_subscription(user_id=user_id)
-        if active_sub:
-            tier = await subscription_repo.get_tier_by_id(active_sub.tier_id)
-            if tier:
-                return tier.daily_limit_minutes
+        """Internal helper: get daily limit using provided repos.
+
+        Uses get_active_subscription_with_tier to avoid N+1 query.
+        """
+        active_sub = await subscription_repo.get_active_subscription_with_tier(user_id=user_id)
+        if active_sub and active_sub.tier:
+            return active_sub.tier.daily_limit_minutes
 
         value = await condition_repo.get_effective_value(key="daily_free_minutes", user_id=user_id)
         if value is not None:

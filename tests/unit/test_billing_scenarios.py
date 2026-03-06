@@ -25,6 +25,7 @@ class TestE2ETranscriptionBillingCycle:
 
         subscription_repo = AsyncMock()
         subscription_repo.get_active_subscription = AsyncMock(return_value=None)
+        subscription_repo.get_active_subscription_with_tier = AsyncMock(return_value=None)
 
         balance_repo = AsyncMock()
         balance_repo.get_total_minutes = AsyncMock(return_value=0.0)
@@ -82,6 +83,7 @@ class TestE2ETranscriptionBillingCycle:
 
         subscription_repo = AsyncMock()
         subscription_repo.get_active_subscription = AsyncMock(return_value=None)
+        subscription_repo.get_active_subscription_with_tier = AsyncMock(return_value=None)
 
         balance_repo = AsyncMock()
         balance_repo.get_total_minutes = AsyncMock(return_value=0.0)

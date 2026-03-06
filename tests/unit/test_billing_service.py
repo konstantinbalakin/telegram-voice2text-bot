@@ -20,11 +20,9 @@ async def test_get_daily_limit_from_subscription():
 
     # User has a Pro subscription with 30 min/day
     mock_sub = MagicMock()
-    mock_sub.tier_id = 1
-    mock_tier = MagicMock()
-    mock_tier.daily_limit_minutes = 30.0
-    mocks["subscription_repo"].get_active_subscription.return_value = mock_sub
-    mocks["subscription_repo"].get_tier_by_id.return_value = mock_tier
+    mock_sub.tier = MagicMock()
+    mock_sub.tier.daily_limit_minutes = 30.0
+    mocks["subscription_repo"].get_active_subscription_with_tier.return_value = mock_sub
 
     limit = await service.get_user_daily_limit(user_id=1)
     assert limit == 30.0

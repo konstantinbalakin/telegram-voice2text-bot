@@ -9,6 +9,7 @@ from typing import Optional
 from sqlalchemy import select, and_, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
 from src.services.payments.base import (
     PurchaseStatus,
@@ -250,6 +251,26 @@ class SubscriptionRepository:
         now = datetime.now(timezone.utc)
         result = await self.session.execute(
             select(UserSubscription).where(
+                and_(
+                    UserSubscription.user_id == user_id,
+                    UserSubscription.status == SubscriptionStatus.ACTIVE,
+                    UserSubscription.expires_at > now,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_active_subscription_with_tier(self, user_id: int) -> Optional[UserSubscription]:
+        """Get active subscription with tier eagerly loaded (avoids N+1).
+
+        Returns subscription with tier already populated, so accessing
+        subscription.tier does not trigger an additional SELECT.
+        """
+        now = datetime.now(timezone.utc)
+        result = await self.session.execute(
+            select(UserSubscription)
+            .options(joinedload(UserSubscription.tier))
+            .where(
                 and_(
                     UserSubscription.user_id == user_id,
                     UserSubscription.status == SubscriptionStatus.ACTIVE,

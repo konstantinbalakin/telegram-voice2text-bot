@@ -94,6 +94,10 @@ def make_billing_service(
         "deduction_log_repo": AsyncMock(),
     }
 
+    # Default: no active subscription (tests override when needed)
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["subscription_repo"].get_active_subscription_with_tier.return_value = None
+
     service = BillingService(
         condition_repo=mocks["condition_repo"],
         subscription_repo=mocks["subscription_repo"],
