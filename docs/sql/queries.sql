@@ -296,7 +296,7 @@ LIMIT 30;
 -- БИЛЛИНГ: ПОДПИСКИ
 -- ==========================================================================
 
--- Тарифы с ценами (каталог)
+-- Тарифы с актуальными ценами (каталог, с учётом версионирования)
 SELECT
     st.name AS tier,
     st.daily_limit_minutes AS daily_limit_min,
@@ -305,10 +305,17 @@ SELECT
     sp.amount_rub AS rub,
     sp.amount_stars AS stars,
     sp.description AS price_desc,
-    sp.is_active
+    sp.is_active,
+    sp.valid_from,
+    sp.valid_to,
+    sp.user_id AS individual_for_user
 FROM subscription_tiers st
 JOIN subscription_prices sp ON sp.tier_id = st.id
 WHERE st.is_active = 1
+  AND sp.is_active = 1
+  AND sp.valid_from <= datetime('now')
+  AND (sp.valid_to IS NULL OR sp.valid_to > datetime('now'))
+  AND sp.user_id IS NULL
 ORDER BY st.display_order, sp.period;
 
 -- Активные подписки пользователей
@@ -333,19 +340,60 @@ JOIN subscription_tiers st ON st.id = us2.tier_id
 ORDER BY us2.created_at DESC;
 
 
+-- Персональные цены подписок (индивидуальные для пользователей)
+SELECT
+    u.telegram_id,
+    u.username,
+    st.name AS tier,
+    sp.period,
+    sp.amount_rub AS rub,
+    sp.amount_stars AS stars,
+    sp.valid_from,
+    sp.valid_to
+FROM subscription_prices sp
+JOIN subscription_tiers st ON st.id = sp.tier_id
+JOIN users u ON u.id = sp.user_id
+WHERE sp.user_id IS NOT NULL
+  AND sp.is_active = 1
+ORDER BY u.telegram_id, st.display_order;
+
+-- Персональные пакеты минут (индивидуальные для пользователей)
+SELECT
+    u.telegram_id,
+    u.username,
+    mp.name,
+    mp.minutes,
+    mp.price_rub AS rub,
+    mp.price_stars AS stars,
+    mp.valid_from,
+    mp.valid_to
+FROM minute_packages mp
+JOIN users u ON u.id = mp.user_id
+WHERE mp.user_id IS NOT NULL
+  AND mp.is_active = 1
+ORDER BY u.telegram_id, mp.display_order;
+
+
 -- ==========================================================================
 -- БИЛЛИНГ: ПАКЕТЫ МИНУТ
 -- ==========================================================================
 
--- Каталог пакетов
+-- Каталог пакетов (актуальные глобальные)
 SELECT
     mp.name,
     mp.minutes,
     mp.price_rub AS rub,
     mp.price_stars AS stars,
     mp.description,
-    mp.is_active
+    mp.is_active,
+    mp.valid_from,
+    mp.valid_to,
+    mp.user_id AS individual_for_user
 FROM minute_packages mp
+WHERE mp.is_active = 1
+  AND mp.valid_from <= datetime('now')
+  AND (mp.valid_to IS NULL OR mp.valid_to > datetime('now'))
+  AND mp.user_id IS NULL
 ORDER BY mp.display_order;
 
 -- Балансы минут пользователей

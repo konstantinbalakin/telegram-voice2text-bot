@@ -91,9 +91,9 @@
 
 ### Tasks
 
-- [ ] Task 5.1: Обновить docs/sql/queries.sql — отразить новые поля (valid_from/valid_to/user_id) в subscription_prices и minute_packages, новые индексы
-- [ ] Task 5.2: Обновить docs/research/analytics/generate_excel_report.py — учесть изменения в схеме
-- [ ] Task 5.3: Проверить что все существующие SQL-запросы в queries.sql корректны для новой схемы
+- [x] Task 5.1: Обновить docs/sql/queries.sql — отразить новые поля (valid_from/valid_to/user_id) в subscription_prices и minute_packages, новые индексы
+- [x] Task 5.2: Обновить docs/research/analytics/generate_excel_report.py — учесть изменения в схеме
+- [x] Task 5.3: Проверить что все существующие SQL-запросы в queries.sql корректны для новой схемы
 
 ### Verification
 
