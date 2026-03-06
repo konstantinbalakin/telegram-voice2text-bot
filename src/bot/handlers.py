@@ -425,7 +425,8 @@ class BotHandlers:
         # 4. CHECK QUOTA (skip for document — duration unknown until ffprobe)
         if media_info.duration_seconds is not None:
             # 4a. Billing system check — fail-open: billing errors don't block transcription
-            if self.billing_service and settings.billing_enabled:
+            # Skip check in billing test mode (no limits enforced)
+            if self.billing_service and settings.billing_enabled and not settings.billing_test_mode:
                 try:
                     async with get_session() as session:
                         user_repo = UserRepository(session)

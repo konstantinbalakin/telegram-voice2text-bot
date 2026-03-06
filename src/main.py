@@ -346,11 +346,17 @@ async def main() -> None:
 
     # Register handlers
     if billing_commands and settings.billing_enabled:
-        # Use billing-enhanced /start and /help
-        application.add_handler(
-            CommandHandler("start", billing_commands.start_command_with_billing)
-        )
-        application.add_handler(CommandHandler("help", billing_commands.help_command_with_billing))
+        # Use billing-enhanced /start and /help (unless test mode — old greeting)
+        if settings.billing_test_mode:
+            application.add_handler(CommandHandler("start", bot_handlers.start_command))
+            application.add_handler(CommandHandler("help", bot_handlers.help_command))
+        else:
+            application.add_handler(
+                CommandHandler("start", billing_commands.start_command_with_billing)
+            )
+            application.add_handler(
+                CommandHandler("help", billing_commands.help_command_with_billing)
+            )
         application.add_handler(CommandHandler("balance", billing_commands.balance_command))
         application.add_handler(CommandHandler("buy", billing_commands.buy_command))
 

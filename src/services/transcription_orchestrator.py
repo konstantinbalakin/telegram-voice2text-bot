@@ -778,7 +778,13 @@ class TranscriptionOrchestrator:
             # Billing: deduct minutes after successful transcription
             # Uses db_user_id (internal DB ID), not user_id (Telegram ID)
             # Wrapped in try-except: billing errors must not break the pipeline
-            if self.billing_service and settings.billing_enabled and request.db_user_id:
+            # Skip deduction in billing test mode
+            if (
+                self.billing_service
+                and settings.billing_enabled
+                and not settings.billing_test_mode
+                and request.db_user_id
+            ):
                 try:
                     duration_minutes = request.duration_seconds / 60.0
                     await self.billing_service.deduct_minutes(
