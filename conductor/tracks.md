@@ -12,11 +12,11 @@
 
 | [x] | billing-review-fixes_20260302 | Billing System PR Review Fixes | 2026-03-02 | 2026-03-02 |
 
-| [~] | billing-ux-fixes_20260302 | Billing UX Fixes | 2026-03-02 | 2026-03-02 |
+| [x] | billing-ux-fixes_20260302 | Billing UX Fixes | 2026-03-02 | 2026-03-02 |
 
 | [x] | yookassa-native_20260303 | YooKassa Native Telegram Payments Integration | 2026-03-03 | 2026-03-04 |
 
-| [~] | billing-ux-polish_20260305 | Billing UX Polish — Unified Screens, Descriptions & Bot Menu | 2026-03-05 | 2026-03-05 |
+| [x] | billing-ux-polish_20260305 | Billing UX Polish — Unified Screens, Descriptions & Bot Menu | 2026-03-05 | 2026-03-06 |
 
 | [x] | db-optimization_20260306 | Database Schema Optimization & Price Versioning | 2026-03-06 | 2026-03-06 |
 
