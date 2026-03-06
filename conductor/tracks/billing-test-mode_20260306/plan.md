@@ -3,7 +3,7 @@
 **Track ID:** billing-test-mode_20260306
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-06
-**Status:** [ ] Not Started
+**Status:** [x] Complete
 
 ## Overview
 
@@ -15,14 +15,14 @@
 
 ### Tasks
 
-- [ ] Task 1.1: Добавить `billing_test_mode: bool = False` в `src/config.py`
-- [ ] Task 1.2: Добавить `BILLING_TEST_MODE` в `.env.example` с комментарием
-- [ ] Task 1.3: Добавить `BILLING_TEST_MODE` в `.env.example.short`
-- [ ] Task 1.4: Добавить `BILLING_TEST_MODE` в `.github/workflows/deploy.yml`
+- [x] Task 1.1: Добавить `billing_test_mode: bool = False` в `src/config.py`
+- [x] Task 1.2: Добавить `BILLING_TEST_MODE` в `.env.example` с комментарием
+- [x] Task 1.3: Добавить `BILLING_TEST_MODE` в `.env.example.short`
+- [x] Task 1.4: Добавить `BILLING_TEST_MODE` в `.github/workflows/deploy.yml`
 
 ### Verification
 
-- [ ] Приложение запускается без ошибок с новым флагом
+- [x] Приложение запускается без ошибок с новым флагом
 
 ## Phase 2: Логика хендлеров
 
@@ -30,35 +30,35 @@
 
 ### Tasks
 
-- [ ] Task 2.1: В `src/main.py` — при `billing_test_mode=true` регистрировать все биллинг-команды, НО для /start использовать `bot_handlers.start_command` (старое приветствие)
-- [ ] Task 2.2: В `src/bot/handlers.py` — пропускать проверку `check_can_transcribe` когда `billing_test_mode=true`
-- [ ] Task 2.3: В `src/services/transcription_orchestrator.py` — пропускать `deduct_minutes` когда `billing_test_mode=true`
+- [x] Task 2.1: В `src/main.py` — при `billing_test_mode=true` регистрировать все биллинг-команды, НО для /start использовать `bot_handlers.start_command` (старое приветствие)
+- [x] Task 2.2: В `src/bot/handlers.py` — пропускать проверку `check_can_transcribe` когда `billing_test_mode=true`
+- [x] Task 2.3: В `src/services/transcription_orchestrator.py` — пропускать `deduct_minutes` когда `billing_test_mode=true`
 
 ### Verification
 
-- [ ] При `billing_test_mode=true`: /start показывает старое приветствие
-- [ ] При `billing_test_mode=true`: транскрипция не проверяет и не списывает минуты
-- [ ] Команды /buy, /balance работают
+- [x] При `billing_test_mode=true`: /start показывает старое приветствие
+- [x] При `billing_test_mode=true`: транскрипция не проверяет и не списывает минуты
+- [x] Команды /buy, /balance работают
 
 ## Phase 3: Тесты
 
 ### Tasks
 
-- [ ] Task 3.1: Тест на регистрацию хендлеров при `billing_test_mode=true` — проверить что /start использует старый хендлер
-- [ ] Task 3.2: Тест на пропуск проверки лимита в `handlers.py` при test mode
-- [ ] Task 3.3: Тест на пропуск списания минут в `transcription_orchestrator.py` при test mode
+- [x] Task 3.1: Тест на регистрацию хендлеров при `billing_test_mode=true` — проверить что /start использует старый хендлер
+- [x] Task 3.2: Тест на пропуск проверки лимита в `handlers.py` при test mode
+- [x] Task 3.3: Тест на пропуск списания минут в `transcription_orchestrator.py` при test mode
 
 ### Verification
 
-- [ ] Все тесты проходят: `uv run pytest tests/unit/ -v`
-- [ ] Линтеры проходят: `uv run ruff check src/` + `uv run black --check src/ tests/` + `uv run mypy src/`
+- [x] Все тесты проходят: `uv run pytest tests/unit/ -v`
+- [x] Линтеры проходят: `uv run ruff check src/` + `uv run black --check src/ tests/` + `uv run mypy src/`
 
 ## Final Verification
 
-- [ ] Все acceptance criteria выполнены
-- [ ] Тесты проходят
-- [ ] Линтеры без ошибок
-- [ ] Готов к review
+- [x] Все acceptance criteria выполнены
+- [x] Тесты проходят (995 passed)
+- [x] Линтеры без ошибок
+- [x] Готов к review
 
 ---
 
