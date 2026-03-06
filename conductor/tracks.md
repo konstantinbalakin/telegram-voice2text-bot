@@ -20,4 +20,6 @@
 
 | [x] | db-optimization_20260306 | Database Schema Optimization & Price Versioning | 2026-03-06 | 2026-03-06 |
 
+| [ ] | billing-test-mode_20260306 | Billing Test Mode | 2026-03-06 | 2026-03-06 |
+
 <!-- Tracks registered by /conductor:new-track -->

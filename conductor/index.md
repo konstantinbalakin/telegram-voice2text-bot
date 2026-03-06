@@ -27,6 +27,8 @@ Navigation hub for project context.
 
 - [ ] [billing-ux-polish_20260305](./tracks/billing-ux-polish_20260305/index.md) — Billing UX Polish — Unified Screens, Descriptions & Bot Menu
 
+- [ ] [billing-test-mode_20260306](./tracks/billing-test-mode_20260306/index.md) — Billing Test Mode
+
 <!-- Auto-populated by /conductor:new-track -->
 
 ## Getting Started
