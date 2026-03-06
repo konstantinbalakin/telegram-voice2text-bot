@@ -83,6 +83,58 @@ GROUP BY u.id
 ORDER BY total_minutes DESC
 LIMIT 20;
 
+-- Статистика по пользователям и LTV (активность, retention)
+SELECT
+    u.telegram_id,
+    u.first_name,
+    u.last_name,
+    u.username,
+    SUM(CASE WHEN us.user_id IS NOT NULL THEN 1 ELSE 0 END) AS msg_count,
+    MIN(us.voice_duration_seconds) AS min_dur_sec,
+    MAX(us.voice_duration_seconds) AS max_dur_sec,
+    -- Время с последнего сообщения
+    CASE
+        WHEN MAX(us.created_at) IS NOT NULL THEN
+            CAST((julianday('now') - julianday(MAX(us.created_at))) AS INTEGER) || 'd ' ||
+            CAST(((julianday('now') - julianday(MAX(us.created_at))) * 24 -
+                  CAST((julianday('now') - julianday(MAX(us.created_at))) AS INTEGER) * 24) AS INTEGER) || 'h ' ||
+            CAST((((julianday('now') - julianday(MAX(us.created_at))) * 24 * 60) -
+                  CAST((julianday('now') - julianday(MAX(us.created_at))) * 24 AS INTEGER) * 60) AS INTEGER) || 'm'
+        ELSE NULL
+    END AS time_since_last_msg,
+    -- Дата последнего сообщения (MSK)
+    CASE
+        WHEN MAX(us.created_at) IS NOT NULL
+        THEN strftime('%Y-%m-%d %H:%M:%S', MAX(us.created_at), '+3 hours')
+        ELSE NULL
+    END AS last_msg_msk,
+    -- Дата первого сообщения (MSK)
+    CASE
+        WHEN MIN(us.created_at) IS NOT NULL
+        THEN strftime('%Y-%m-%d %H:%M:%S', MIN(us.created_at), '+3 hours')
+        ELSE NULL
+    END AS first_msg_msk,
+    -- Время с первого сообщения
+    CASE
+        WHEN MIN(us.created_at) IS NOT NULL THEN
+            CAST((julianday('now') - julianday(MIN(us.created_at))) AS INTEGER) || 'd ' ||
+            CAST(((julianday('now') - julianday(MIN(us.created_at))) * 24 -
+                  CAST((julianday('now') - julianday(MIN(us.created_at))) AS INTEGER) * 24) AS INTEGER) || 'h ' ||
+            CAST((((julianday('now') - julianday(MIN(us.created_at))) * 24 * 60) -
+                  CAST((julianday('now') - julianday(MIN(us.created_at))) * 24 AS INTEGER) * 60) AS INTEGER) || 'm'
+        ELSE NULL
+    END AS time_since_first_msg,
+    -- Время с момента регистрации
+    CAST((julianday('now') - julianday(u.created_at)) AS INTEGER) || 'd ' ||
+    CAST(((julianday('now') - julianday(u.created_at)) * 24 -
+          CAST((julianday('now') - julianday(u.created_at)) AS INTEGER) * 24) AS INTEGER) || 'h ' ||
+    CAST((((julianday('now') - julianday(u.created_at)) * 24 * 60) -
+          CAST((julianday('now') - julianday(u.created_at)) * 24 AS INTEGER) * 60) AS INTEGER) || 'm' AS time_since_registration
+FROM users u
+LEFT JOIN usage us ON u.id = us.user_id
+GROUP BY u.id
+ORDER BY last_msg_msk DESC;
+
 -- Новые пользователи за последние 7 дней
 SELECT
     u.telegram_id,
@@ -117,6 +169,57 @@ FROM usage us
 JOIN users u ON u.id = us.user_id
 ORDER BY us.created_at DESC
 LIMIT 50;
+
+-- Детальный лог транскрипций с RTF-метриками (Real-Time Factor)
+SELECT
+    u.telegram_id,
+    u.first_name,
+    u.last_name,
+    u.username,
+    -- Длительность аудио (человекочитаемый формат)
+    CASE
+        WHEN us.voice_duration_seconds >= 3600 THEN
+            CAST(us.voice_duration_seconds / 3600 AS INTEGER) || 'h ' ||
+            printf('%02d', (us.voice_duration_seconds % 3600) / 60) || 'm ' ||
+            printf('%02d', us.voice_duration_seconds % 60) || 's'
+        WHEN us.voice_duration_seconds >= 60 THEN
+            CAST(us.voice_duration_seconds / 60 AS INTEGER) || 'm ' ||
+            printf('%02d', us.voice_duration_seconds % 60) || 's'
+        ELSE us.voice_duration_seconds || 's'
+    END AS voice_duration,
+    -- Время Whisper (1-й этап)
+    CASE
+        WHEN us.processing_time_seconds >= 3600 THEN
+            CAST(us.processing_time_seconds / 3600 AS INTEGER) || 'h ' ||
+            printf('%02d', (us.processing_time_seconds % 3600) / 60) || 'm ' ||
+            printf('%02d', CAST(us.processing_time_seconds % 60 AS INTEGER)) || 's'
+        WHEN us.processing_time_seconds >= 60 THEN
+            CAST(us.processing_time_seconds / 60 AS INTEGER) || 'm ' ||
+            printf('%02d', CAST(us.processing_time_seconds % 60 AS INTEGER)) || 's'
+        ELSE CAST(us.processing_time_seconds AS INTEGER) || 's'
+    END AS whisper_time,
+    us.model_size,
+    -- Время LLM (2-й этап)
+    CASE
+        WHEN us.llm_processing_time_seconds >= 3600 THEN
+            CAST(us.llm_processing_time_seconds / 3600 AS INTEGER) || 'h ' ||
+            printf('%02d', (us.llm_processing_time_seconds % 3600) / 60) || 'm ' ||
+            printf('%02d', CAST(us.llm_processing_time_seconds % 60 AS INTEGER)) || 's'
+        WHEN us.llm_processing_time_seconds >= 60 THEN
+            CAST(us.llm_processing_time_seconds / 60 AS INTEGER) || 'm ' ||
+            printf('%02d', CAST(us.llm_processing_time_seconds % 60 AS INTEGER)) || 's'
+        ELSE CAST(us.llm_processing_time_seconds AS INTEGER) || 's'
+    END AS llm_time,
+    us.llm_model,
+    -- RTF: отношение времени обработки к длительности аудио (меньше = быстрее)
+    ROUND(us.processing_time_seconds / us.voice_duration_seconds, 2) AS rtf_whisper,
+    ROUND(us.llm_processing_time_seconds / us.voice_duration_seconds, 2) AS rtf_llm,
+    ROUND((us.processing_time_seconds + us.llm_processing_time_seconds) / us.voice_duration_seconds, 2) AS rtf_total,
+    datetime(us.created_at, '+3 hours') AS created_at_msk
+FROM users u
+LEFT JOIN usage us ON u.id = us.user_id
+WHERE us.voice_duration_seconds > 0
+ORDER BY us.created_at DESC;
 
 -- Статистика по дням (количество транскрипций и суммарная длительность)
 SELECT
