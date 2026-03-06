@@ -175,13 +175,43 @@ class SubscriptionRepository:
         return price
 
     async def get_tier_prices(self, tier_id: int) -> list[SubscriptionPrice]:
-        """Get active prices for a tier."""
+        """Get active effective prices for a tier (delegates to get_effective_prices)."""
+        return await self.get_effective_prices(tier_id=tier_id)
+
+    async def get_effective_prices(
+        self,
+        tier_id: int,
+        user_id: Optional[int] = None,
+    ) -> list[SubscriptionPrice]:
+        """Get effective prices for a tier, respecting validity dates and user overrides.
+
+        Priority: individual (user_id match) > global (user_id IS NULL).
+        Only returns prices where valid_from <= now and (valid_to IS NULL or valid_to > now).
+        """
+        now = datetime.now(timezone.utc)
+
+        validity_filter = and_(
+            SubscriptionPrice.tier_id == tier_id,
+            SubscriptionPrice.is_active.is_(True),
+            SubscriptionPrice.valid_from <= now,
+            (SubscriptionPrice.valid_to.is_(None)) | (SubscriptionPrice.valid_to > now),
+        )
+
+        # Try individual prices first
+        if user_id is not None:
+            result = await self.session.execute(
+                select(SubscriptionPrice).where(
+                    and_(validity_filter, SubscriptionPrice.user_id == user_id)
+                )
+            )
+            individual_prices = list(result.scalars().all())
+            if individual_prices:
+                return individual_prices
+
+        # Fall back to global prices
         result = await self.session.execute(
             select(SubscriptionPrice).where(
-                and_(
-                    SubscriptionPrice.tier_id == tier_id,
-                    SubscriptionPrice.is_active.is_(True),
-                )
+                and_(validity_filter, SubscriptionPrice.user_id.is_(None))
             )
         )
         return list(result.scalars().all())
@@ -328,10 +358,41 @@ class MinutePackageRepository:
         return package
 
     async def get_active_packages(self) -> list[MinutePackage]:
-        """Get all active packages sorted by display_order."""
+        """Get all active effective packages (delegates to get_effective_packages)."""
+        return await self.get_effective_packages()
+
+    async def get_effective_packages(
+        self,
+        user_id: Optional[int] = None,
+    ) -> list[MinutePackage]:
+        """Get effective packages, respecting validity dates and user overrides.
+
+        Priority: individual (user_id match) > global (user_id IS NULL).
+        Only returns packages where valid_from <= now and (valid_to IS NULL or valid_to > now).
+        """
+        now = datetime.now(timezone.utc)
+
+        validity_filter = and_(
+            MinutePackage.is_active.is_(True),
+            MinutePackage.valid_from <= now,
+            (MinutePackage.valid_to.is_(None)) | (MinutePackage.valid_to > now),
+        )
+
+        # Try individual packages first
+        if user_id is not None:
+            result = await self.session.execute(
+                select(MinutePackage)
+                .where(and_(validity_filter, MinutePackage.user_id == user_id))
+                .order_by(MinutePackage.display_order)
+            )
+            individual_packages = list(result.scalars().all())
+            if individual_packages:
+                return individual_packages
+
+        # Fall back to global packages
         result = await self.session.execute(
             select(MinutePackage)
-            .where(MinutePackage.is_active.is_(True))
+            .where(and_(validity_filter, MinutePackage.user_id.is_(None)))
             .order_by(MinutePackage.display_order)
         )
         return list(result.scalars().all())

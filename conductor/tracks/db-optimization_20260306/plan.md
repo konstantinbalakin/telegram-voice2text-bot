@@ -54,14 +54,14 @@
 
 ### Tasks
 
-- [ ] Task 3.1: Добавить поля в модель SubscriptionPrice: valid_from (DateTime, NOT NULL, default=now), valid_to (DateTime, nullable), user_id (Integer, FK users, nullable, indexed)
-- [ ] Task 3.2: Добавить поля в модель MinutePackage: valid_from (DateTime, NOT NULL, default=now), valid_to (DateTime, nullable), user_id (Integer, FK users, nullable, indexed)
-- [ ] Task 3.3: Создать Alembic-миграцию: добавить колонки, заполнить valid_from из created_at для существующих записей, user_id=NULL
-- [ ] Task 3.4: Добавить SubscriptionRepository.get_effective_prices(tier_id, user_id=None) — получение актуальных цен с учётом valid_from/valid_to и приоритетом user_id > global
-- [ ] Task 3.5: Добавить MinutePackageRepository.get_effective_packages(user_id=None) — аналогичная логика для пакетов
-- [ ] Task 3.6: Обновить SubscriptionRepository.get_tier_prices — использовать get_effective_prices
-- [ ] Task 3.7: Обновить MinutePackageRepository.get_active_packages — использовать get_effective_packages
-- [ ] Task 3.8: Написать тесты: версионирование цен (текущая/будущая/истекшая цена), персональная цена для user_id, приоритет individual > global
+- [x] Task 3.1: Добавить поля в модель SubscriptionPrice: valid_from (DateTime, NOT NULL, default=now), valid_to (DateTime, nullable), user_id (Integer, FK users, nullable, indexed)
+- [x] Task 3.2: Добавить поля в модель MinutePackage: valid_from (DateTime, NOT NULL, default=now), valid_to (DateTime, nullable), user_id (Integer, FK users, nullable, indexed)
+- [x] Task 3.3: Создать Alembic-миграцию: добавить колонки, заполнить valid_from из created_at для существующих записей, user_id=NULL
+- [x] Task 3.4: Добавить SubscriptionRepository.get_effective_prices(tier_id, user_id=None) — получение актуальных цен с учётом valid_from/valid_to и приоритетом user_id > global
+- [x] Task 3.5: Добавить MinutePackageRepository.get_effective_packages(user_id=None) — аналогичная логика для пакетов
+- [x] Task 3.6: Обновить SubscriptionRepository.get_tier_prices — использовать get_effective_prices
+- [x] Task 3.7: Обновить MinutePackageRepository.get_active_packages — использовать get_effective_packages
+- [x] Task 3.8: Написать тесты: версионирование цен (текущая/будущая/истекшая цена), персональная цена для user_id, приоритет individual > global
 
 ### Verification
 
