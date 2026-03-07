@@ -809,21 +809,30 @@ class TranscriptionOrchestrator:
                             message = (
                                 f"⛔ Дневной лимит исчерпан!\n\n"
                                 f"Использовано: {display_used:.1f} из "
-                                f"{balance.daily_limit:.1f} мин\n"
-                                f"Бонусные минуты: {balance.bonus_minutes:.1f}\n"
-                                f"Пакетные минуты: {balance.package_minutes:.1f}\n\n"
-                                f"Используйте /buy или /subscribe для пополнения."
+                                f"{balance.daily_limit:.1f} мин"
                             )
                         else:  # status == "warning"
                             message = (
                                 f"⚠️ Дневной лимит почти исчерпан!\n\n"
                                 f"Использовано: {display_used:.1f} из "
-                                f"{balance.daily_limit:.1f} мин\n"
-                                f"Бонусные минуты: {balance.bonus_minutes:.1f}\n"
-                                f"Пакетные минуты: {balance.package_minutes:.1f}\n\n"
-                                f"Используйте /buy или /subscribe для пополнения."
+                                f"{balance.daily_limit:.1f} мин"
                             )
                         await request.user_message.reply_text(message)
+
+                        # Send balance screen with purchase buttons
+                        if self.billing_commands:
+                            try:
+                                text, markup = (
+                                    await self.billing_commands._build_balance_text_and_markup(
+                                        request.user_id
+                                    )
+                                )
+                                await request.user_message.reply_text(text, reply_markup=markup)
+                            except Exception as balance_err:
+                                logger.error(
+                                    f"Failed to send balance screen: {balance_err}",
+                                    exc_info=True,
+                                )
                 except Exception as billing_err:
                     logger.error(
                         f"Billing error for request {request.id}: {billing_err}",

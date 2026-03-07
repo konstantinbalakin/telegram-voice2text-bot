@@ -443,11 +443,21 @@ class BotHandlers:
                             )
                         )
                         if not can_transcribe:
-                            await update.message.reply_text(
-                                f"⚠️ {billing_msg}\n\n"
-                                "Используйте /buy для покупки пакета минут\n"
-                                "или /subscribe для подписки."
-                            )
+                            await update.message.reply_text(f"⚠️ {billing_msg}")
+                            # Send balance screen with purchase buttons
+                            if self.billing_commands:
+                                try:
+                                    text, markup = (
+                                        await self.billing_commands._build_balance_text_and_markup(
+                                            user.id
+                                        )
+                                    )
+                                    await update.message.reply_text(text, reply_markup=markup)
+                                except Exception as balance_err:
+                                    logger.error(
+                                        f"Failed to send balance screen: {balance_err}",
+                                        exc_info=True,
+                                    )
                             logger.warning(f"User {user.id} rejected: billing limit exceeded")
                             return
                 except Exception as e:
