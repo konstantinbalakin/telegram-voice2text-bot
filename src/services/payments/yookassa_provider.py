@@ -32,12 +32,42 @@ class YooKassaProvider:
     def provider_name(self) -> str:
         return "yookassa"
 
+    # Минимальная сумма для RUB в Telegram Payments API (в копейках)
+    # https://core.telegram.org/bots/payments/currencies.json → RUB.min_amount
+    MIN_RUB_AMOUNT = 8773
+
     async def create_payment(self, request: PaymentRequest) -> PaymentResult:
         """Create a YooKassa invoice via Telegram Payments API."""
         try:
+            amount = int(request.amount)
+
+            if amount < self.MIN_RUB_AMOUNT:
+                min_rub = self.MIN_RUB_AMOUNT / 100
+                actual_rub = amount / 100
+                logger.error(
+                    "Amount %d (%s RUB) is below Telegram minimum %d (%s RUB) for currency RUB",
+                    amount,
+                    actual_rub,
+                    self.MIN_RUB_AMOUNT,
+                    min_rub,
+                )
+                return PaymentResult(
+                    success=False,
+                    error_message=(
+                        f"Сумма {actual_rub} ₽ ниже минимальной для Telegram Payments ({min_rub} ₽)"
+                    ),
+                )
+
             title = request.title or request.description
             label = request.price_label or request.description
-            prices = [LabeledPrice(label=label, amount=int(request.amount))]
+            prices = [LabeledPrice(label=label, amount=amount)]
+
+            logger.info(
+                "Creating YooKassa invoice: amount=%d currency=RUB user_id=%s item_id=%s",
+                amount,
+                request.user_id,
+                request.item_id,
+            )
 
             invoice_link = await self.bot.create_invoice_link(
                 title=title,

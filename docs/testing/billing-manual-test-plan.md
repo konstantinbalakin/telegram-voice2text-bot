@@ -37,18 +37,19 @@
 
 **Подготовка**:
 ```sql
--- Меняем цены: неделя 49₽, месяц 199₽, год 1490₽
-UPDATE subscription_prices SET amount_rub = 49.0, amount_stars = 25 WHERE id = 1;
-UPDATE subscription_prices SET amount_rub = 199.0, amount_stars = 100 WHERE id = 2;
-UPDATE subscription_prices SET amount_rub = 1490.0, amount_stars = 750 WHERE id = 3;
+-- Меняем цены: неделя 149₽, месяц 399₽, год 1990₽
+-- Важно: минимальная сумма для RUB в Telegram Payments — 87.73₽ (min_amount=8773)
+UPDATE subscription_prices SET amount_rub = 149.0, amount_stars = 75 WHERE id = 1;
+UPDATE subscription_prices SET amount_rub = 399.0, amount_stars = 200 WHERE id = 2;
+UPDATE subscription_prices SET amount_rub = 1990.0, amount_stars = 1000 WHERE id = 3;
 ```
 
 **Проверка**: `/buy` → "Купить подписку"
 
 **Ожидаемый результат**:
-- Кнопка: `Pro (неделя) — 49 ₽`
-- Кнопка: `Pro (месяц) — 199 ₽`
-- Кнопка: `Pro (год) — 1490 ₽`
+- Кнопка: `Pro (неделя) — 149 ₽`
+- Кнопка: `Pro (месяц) — 399 ₽`
+- Кнопка: `Pro (год) — 1990 ₽`
 
 **Откат**:
 ```sql

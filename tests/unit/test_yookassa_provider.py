@@ -93,6 +93,29 @@ async def test_create_payment_subscription():
 
 
 @pytest.mark.asyncio
+async def test_create_payment_below_minimum_amount():
+    """Test create_payment rejects amount below Telegram minimum for RUB."""
+    bot = MagicMock(spec=Bot)
+    bot.create_invoice_link = AsyncMock()
+    provider = YooKassaProvider(bot=bot, provider_token="tok_test")
+
+    request = PaymentRequest(
+        user_id=1,
+        payment_type=PaymentType.PACKAGE,
+        item_id=1,
+        amount=4900,  # 49 RUB — ниже минимума 87.73 RUB (8773 копеек)
+        currency="RUB",
+        description="Test below minimum",
+    )
+
+    result = await provider.create_payment(request)
+
+    assert result.success is False
+    assert "ниже минимальной" in result.error_message
+    bot.create_invoice_link.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_create_payment_failure():
     """Test create_payment handles errors gracefully."""
     bot = MagicMock(spec=Bot)
