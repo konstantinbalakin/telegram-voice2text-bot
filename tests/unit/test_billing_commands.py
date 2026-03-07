@@ -3,9 +3,11 @@ Tests for BillingCommands - catalog and balance display logic
 """
 
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.bot.billing_commands import BillingCommands
+from src.services.payments.base import UserBalance
 
 
 # === Helpers ===
@@ -177,3 +179,110 @@ async def test_build_packages_catalog_without_user_id() -> None:
     mocks["payment_service"].get_active_packages.assert_called_once_with(user_id=None)
     assert "50 минут" in text
     assert "149" in text
+
+
+# =============================================================================
+# _build_balance_text_and_markup — expires_at display Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+@patch("src.bot.billing_commands.get_session")
+async def test_balance_shows_bonus_expires_at(mock_get_session: MagicMock) -> None:
+    """Test that balance text shows expires_at for bonus minutes."""
+    commands, mocks = _make_billing_commands()
+
+    mock_session = AsyncMock()
+    mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    db_user = _mock_db_user(user_id=42)
+
+    with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
+        mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
+
+        balance = UserBalance(
+            daily_limit=10.0,
+            daily_used=0.0,
+            daily_remaining=10.0,
+            bonus_minutes=45.0,
+            package_minutes=0.0,
+            total_available=55.0,
+            bonus_expires_at=datetime(2026, 4, 15, tzinfo=timezone.utc),
+            package_expires_at=None,
+        )
+        mocks["billing_service"].get_user_balance.return_value = balance
+        mocks["subscription_service"].get_active_subscription.return_value = None
+
+        text, markup = await commands._build_balance_text_and_markup(telegram_user_id=100500)
+
+    assert "45.0 мин" in text
+    assert "(до 15.04.2026)" in text
+
+
+@pytest.mark.asyncio
+@patch("src.bot.billing_commands.get_session")
+async def test_balance_shows_package_expires_at(mock_get_session: MagicMock) -> None:
+    """Test that balance text shows expires_at for package minutes."""
+    commands, mocks = _make_billing_commands()
+
+    mock_session = AsyncMock()
+    mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    db_user = _mock_db_user(user_id=42)
+
+    with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
+        mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
+
+        balance = UserBalance(
+            daily_limit=10.0,
+            daily_used=0.0,
+            daily_remaining=10.0,
+            bonus_minutes=0.0,
+            package_minutes=100.0,
+            total_available=110.0,
+            bonus_expires_at=None,
+            package_expires_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        )
+        mocks["billing_service"].get_user_balance.return_value = balance
+        mocks["subscription_service"].get_active_subscription.return_value = None
+
+        text, markup = await commands._build_balance_text_and_markup(telegram_user_id=100500)
+
+    assert "100.0 мин" in text
+    assert "(до 01.05.2026)" in text
+
+
+@pytest.mark.asyncio
+@patch("src.bot.billing_commands.get_session")
+async def test_balance_no_expires_when_none(mock_get_session: MagicMock) -> None:
+    """Test that balance text omits date when expires_at is None."""
+    commands, mocks = _make_billing_commands()
+
+    mock_session = AsyncMock()
+    mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    db_user = _mock_db_user(user_id=42)
+
+    with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
+        mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
+
+        balance = UserBalance(
+            daily_limit=10.0,
+            daily_used=0.0,
+            daily_remaining=10.0,
+            bonus_minutes=45.0,
+            package_minutes=0.0,
+            total_available=55.0,
+            bonus_expires_at=None,
+            package_expires_at=None,
+        )
+        mocks["billing_service"].get_user_balance.return_value = balance
+        mocks["subscription_service"].get_active_subscription.return_value = None
+
+        text, markup = await commands._build_balance_text_and_markup(telegram_user_id=100500)
+
+    assert "45.0 мин" in text
+    assert "(до" not in text

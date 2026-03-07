@@ -76,9 +76,15 @@ class BillingCommands:
         ]
 
         if balance.bonus_minutes > 0:
-            lines.append(f"🎁 Бонусные минуты: {balance.bonus_minutes:.1f} мин")
+            bonus_line = f"🎁 Бонусные минуты: {balance.bonus_minutes:.1f} мин"
+            if balance.bonus_expires_at:
+                bonus_line += f" (до {balance.bonus_expires_at.strftime('%d.%m.%Y')})"
+            lines.append(bonus_line)
         if balance.package_minutes > 0:
-            lines.append(f"📦 Пакетные минуты: {balance.package_minutes:.1f} мин")
+            package_line = f"📦 Пакетные минуты: {balance.package_minutes:.1f} мин"
+            if balance.package_expires_at:
+                package_line += f" (до {balance.package_expires_at.strftime('%d.%m.%Y')})"
+            lines.append(package_line)
 
         lines.append(f"\n✅ Всего доступно: {balance.total_available:.1f} мин")
 

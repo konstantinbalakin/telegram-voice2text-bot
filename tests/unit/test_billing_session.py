@@ -90,6 +90,7 @@ class TestBillingServicePerRequestSession:
         mock_cond_cls.return_value.get_effective_value = AsyncMock(return_value="10")
         mock_daily_cls.return_value.get_by_user_and_date = AsyncMock(return_value=None)
         mock_bal_cls.return_value.get_total_minutes = AsyncMock(return_value=0.0)
+        mock_bal_cls.return_value.get_nearest_expires_at = AsyncMock(return_value=None)
 
         service = BillingService(session_factory=factory, billing_enabled=True)
         balance = await service.get_user_balance(user_id=1)
