@@ -24,4 +24,6 @@
 
 | [x] | personal-prices-fix_20260307 | Проброс user_id для персональных цен и отображение expires_at в балансе | 2026-03-07 | 2026-03-07 |
 
+| [ ] | balance-after-limit_20260307 | Экран баланса при нехватке минут | 2026-03-07 | 2026-03-07 |
+
 <!-- Tracks registered by /conductor:new-track -->
