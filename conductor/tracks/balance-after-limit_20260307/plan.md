@@ -3,7 +3,7 @@
 **Track ID:** balance-after-limit_20260307
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-07
-**Status:** [~] In Progress
+**Status:** [x] Complete
 
 ## Overview
 
@@ -20,8 +20,8 @@
 
 ### Verification
 
-- [ ] Бот запускается без ошибок
-- [ ] Существующие тесты проходят
+- [x] Бот запускается без ошибок
+- [x] Существующие тесты проходят
 
 ## Phase 2: Обновление сообщений
 
@@ -33,7 +33,7 @@
 
 ### Verification
 
-- [ ] Все 3 сценария показывают короткое предупреждение + экран баланса с кнопками
+- [x] Все 3 сценария показывают короткое предупреждение + экран баланса с кнопками
 
 ## Phase 3: Обновление тестов
 
@@ -45,14 +45,14 @@
 
 ### Verification
 
-- [ ] Все тесты проходят
-- [ ] ruff, black, mypy — без ошибок
+- [x] Все тесты проходят
+- [x] ruff, black, mypy — без ошибок
 
 ## Final Verification
 
-- [ ] All acceptance criteria met
-- [ ] Tests passing
-- [ ] Ready for review
+- [x] All acceptance criteria met
+- [x] Tests passing
+- [x] Ready for review
 
 ---
 

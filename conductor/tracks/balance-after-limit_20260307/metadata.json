@@ -2,15 +2,20 @@
   "id": "balance-after-limit_20260307",
   "title": "Экран баланса при нехватке минут",
   "type": "feature",
-  "status": "in_progress",
+  "status": "complete",
   "created": "2026-03-07T00:00:00Z",
   "updated": "2026-03-07T00:00:00Z",
   "phases": {
     "total": 3,
-    "completed": 0
+    "completed": 3
   },
   "tasks": {
     "total": 8,
-    "completed": 0
-  }
+    "completed": 8
+  },
+  "commits": [
+    "719fb5f: refactor(billing): пробросить billing_commands в orchestrator и handlers",
+    "9d282ea: feat(billing): заменить текстовые инструкции на экран баланса с кнопками покупки",
+    "25fe2a0: test(billing): добавить тесты отправки экрана баланса при нехватке минут"
+  ]
 }
