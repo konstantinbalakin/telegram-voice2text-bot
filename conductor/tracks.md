@@ -22,4 +22,6 @@
 
 | [x] | billing-test-mode_20260306 | Billing Test Mode | 2026-03-06 | 2026-03-06 |
 
+| [x] | personal-prices-fix_20260307 | Проброс user_id для персональных цен и отображение expires_at в балансе | 2026-03-07 | 2026-03-07 |
+
 <!-- Tracks registered by /conductor:new-track -->
