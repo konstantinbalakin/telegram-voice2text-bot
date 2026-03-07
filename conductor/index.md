@@ -29,6 +29,8 @@ Navigation hub for project context.
 
 - [ ] [billing-test-mode_20260306](./tracks/billing-test-mode_20260306/index.md) — Billing Test Mode
 
+- [ ] [personal-prices-fix_20260307](./tracks/personal-prices-fix_20260307/index.md) — Проброс user_id для персональных цен и отображение expires_at в балансе
+
 <!-- Auto-populated by /conductor:new-track -->
 
 ## Getting Started
