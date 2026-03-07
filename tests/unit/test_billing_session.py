@@ -205,7 +205,7 @@ class TestPaymentServicePerRequestSession:
     ) -> None:
         """get_active_packages creates a fresh session."""
         factory = _counting_session_factory()
-        mock_pkg_cls.return_value.get_active_packages = AsyncMock(return_value=[])
+        mock_pkg_cls.return_value.get_effective_packages = AsyncMock(return_value=[])
 
         service = PaymentService(session_factory=factory)
         packages = await service.get_active_packages()

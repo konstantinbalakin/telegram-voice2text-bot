@@ -139,8 +139,19 @@ class BillingCommands:
     # Subscription catalog
     # =========================================================================
 
-    async def _build_subscriptions_catalog(self) -> tuple[str, InlineKeyboardMarkup | None]:
+    async def _build_subscriptions_catalog(
+        self, telegram_user_id: int | None = None
+    ) -> tuple[str, InlineKeyboardMarkup | None]:
         """Build subscription catalog — single column with RUB prices and discounts."""
+        # Resolve DB user_id for personal pricing
+        db_user_id: int | None = None
+        if telegram_user_id is not None:
+            async with get_session() as session:
+                user_repo = UserRepository(session)
+                db_user = await user_repo.get_by_telegram_id(telegram_user_id)
+                if db_user:
+                    db_user_id = db_user.id
+
         tiers = await self.subscription_service.get_available_tiers()
 
         if not tiers:
@@ -155,7 +166,7 @@ class BillingCommands:
             if tier.description:
                 lines.append(f"   {tier.description}")
 
-            prices = await self.subscription_service.get_tier_prices(tier.id)
+            prices = await self.subscription_service.get_tier_prices(tier.id, user_id=db_user_id)
             if prices:
                 for price in prices:
                     period_label = _period_label(price.period)
@@ -182,7 +193,9 @@ class BillingCommands:
 
         try:
             await update.callback_query.answer()
-            text, markup = await self._build_subscriptions_catalog()
+            text, markup = await self._build_subscriptions_catalog(
+                telegram_user_id=update.effective_user.id if update.effective_user else None
+            )
             await update.callback_query.edit_message_text(text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error in subscriptions_catalog_callback: {e}", exc_info=True)
@@ -191,9 +204,20 @@ class BillingCommands:
     # Package catalog
     # =========================================================================
 
-    async def _build_packages_catalog(self) -> tuple[str, InlineKeyboardMarkup | None]:
+    async def _build_packages_catalog(
+        self, telegram_user_id: int | None = None
+    ) -> tuple[str, InlineKeyboardMarkup | None]:
         """Build packages catalog — single column with RUB prices."""
-        packages = await self.payment_service.get_active_packages()
+        # Resolve DB user_id for personal pricing
+        db_user_id: int | None = None
+        if telegram_user_id is not None:
+            async with get_session() as session:
+                user_repo = UserRepository(session)
+                db_user = await user_repo.get_by_telegram_id(telegram_user_id)
+                if db_user:
+                    db_user_id = db_user.id
+
+        packages = await self.payment_service.get_active_packages(user_id=db_user_id)
 
         if not packages:
             no_buttons = [[InlineKeyboardButton("« Назад", callback_data="billing:back_main")]]
@@ -227,7 +251,9 @@ class BillingCommands:
 
         try:
             await update.callback_query.answer()
-            text, markup = await self._build_packages_catalog()
+            text, markup = await self._build_packages_catalog(
+                telegram_user_id=update.effective_user.id if update.effective_user else None
+            )
             await update.callback_query.edit_message_text(text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error in packages_catalog_callback: {e}", exc_info=True)
@@ -255,7 +281,16 @@ class BillingCommands:
                 await update.callback_query.edit_message_text("Тариф не найден.")
                 return
 
-            prices = await self.subscription_service.get_tier_prices(tier_id)
+            # Resolve DB user_id for personal pricing
+            db_user_id: int | None = None
+            if update.effective_user:
+                async with get_session() as session:
+                    user_repo = UserRepository(session)
+                    db_user = await user_repo.get_by_telegram_id(update.effective_user.id)
+                    if db_user:
+                        db_user_id = db_user.id
+
+            prices = await self.subscription_service.get_tier_prices(tier_id, user_id=db_user_id)
             price = next((p for p in prices if p.period == period), None)
             if not price:
                 await update.callback_query.edit_message_text("Цена не найдена.")
