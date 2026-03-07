@@ -34,6 +34,7 @@ from src.bot.keyboards import create_transcription_keyboard
 from src.utils.markdown_utils import sanitize_markdown, escape_markdownv2
 
 if TYPE_CHECKING:
+    from src.bot.billing_commands import BillingCommands
     from src.services.billing_service import BillingService
 
 logger = logging.getLogger(__name__)
@@ -89,12 +90,14 @@ class TranscriptionOrchestrator:
         llm_service: Optional[LLMService] = None,
         text_processor: Optional[TextProcessor] = None,
         billing_service: Optional["BillingService"] = None,
+        billing_commands: Optional["BillingCommands"] = None,
     ):
         self.transcription_router = transcription_router
         self.audio_handler = audio_handler
         self.llm_service = llm_service
         self.text_processor = text_processor
         self.billing_service = billing_service
+        self.billing_commands = billing_commands
 
     async def _create_interactive_state_and_keyboard(
         self,

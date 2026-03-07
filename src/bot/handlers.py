@@ -24,6 +24,7 @@ from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.telegram_client import TelegramClientService
 
 if TYPE_CHECKING:
+    from src.bot.billing_commands import BillingCommands
     from src.services.billing_service import BillingService
     from src.services.transcription_orchestrator import TranscriptionOrchestrator
 
@@ -129,6 +130,7 @@ class BotHandlers:
         orchestrator: "TranscriptionOrchestrator",
         telegram_client: Optional[TelegramClientService] = None,
         billing_service: Optional["BillingService"] = None,
+        billing_commands: Optional["BillingCommands"] = None,
     ):
         """Initialize bot handlers.
 
@@ -139,6 +141,7 @@ class BotHandlers:
             orchestrator: Transcription orchestrator for processing pipeline
             telegram_client: Optional Telegram Client API service for large files
             billing_service: Optional billing service for limit checks
+            billing_commands: Optional billing commands for balance screen
         """
         self.transcription_router = transcription_router
         self.audio_handler = audio_handler
@@ -146,6 +149,7 @@ class BotHandlers:
         self.orchestrator = orchestrator
         self.telegram_client = telegram_client
         self.billing_service = billing_service
+        self.billing_commands = billing_commands
 
         # Register callback for queue updates
         self.queue_manager.set_on_queue_changed(self._update_queue_messages)

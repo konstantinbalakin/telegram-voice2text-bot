@@ -3,7 +3,7 @@
 **Track ID:** balance-after-limit_20260307
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-07
-**Status:** [ ] Not Started
+**Status:** [~] In Progress
 
 ## Overview
 
@@ -15,8 +15,8 @@
 
 ### Tasks
 
-- [ ] Task 1.1: Передать billing_commands в TranscriptionOrchestrator через конструктор (или вынести _build_balance_text_and_markup в BillingService)
-- [ ] Task 1.2: Обновить main.py — пробросить зависимость
+- [x] Task 1.1: Передать billing_commands в TranscriptionOrchestrator через конструктор (или вынести _build_balance_text_and_markup в BillingService)
+- [x] Task 1.2: Обновить main.py — пробросить зависимость
 
 ### Verification
 

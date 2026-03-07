@@ -240,6 +240,7 @@ async def main() -> None:
 
             # Inject billing service into orchestrator (created before billing init)
             orchestrator.billing_service = billing_service
+            orchestrator.billing_commands = billing_commands
 
             logger.info("Billing services initialized")
         except Exception as e:
@@ -256,6 +257,7 @@ async def main() -> None:
         orchestrator=orchestrator,
         telegram_client=telegram_client,
         billing_service=billing_service,
+        billing_commands=billing_commands,
     )
 
     # Build telegram bot application
