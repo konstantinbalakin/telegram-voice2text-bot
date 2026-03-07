@@ -153,6 +153,13 @@ class BillingService:
                 user_id=user_id, balance_type=BalanceType.PACKAGE
             )
 
+            bonus_expires_at = await balance_repo.get_nearest_expires_at(
+                user_id=user_id, balance_type=BalanceType.BONUS
+            )
+            package_expires_at = await balance_repo.get_nearest_expires_at(
+                user_id=user_id, balance_type=BalanceType.PACKAGE
+            )
+
             total_available = daily_remaining + bonus_minutes + package_minutes
 
             return UserBalance(
@@ -162,6 +169,8 @@ class BillingService:
                 bonus_minutes=bonus_minutes,
                 package_minutes=package_minutes,
                 total_available=total_available,
+                bonus_expires_at=bonus_expires_at,
+                package_expires_at=package_expires_at,
             )
 
     async def check_can_transcribe(

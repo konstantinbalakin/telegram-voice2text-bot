@@ -497,6 +497,25 @@ class UserMinuteBalanceRepository:
         result = await self.session.execute(query)
         return float(result.scalar_one())
 
+    async def get_nearest_expires_at(self, user_id: int, balance_type: str) -> Optional[datetime]:
+        """Get the nearest expires_at for active balances of given type.
+
+        Returns None if no balances with expires_at exist for this type.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        result = await self.session.execute(
+            select(func.min(UserMinuteBalance.expires_at)).where(
+                and_(
+                    UserMinuteBalance.user_id == user_id,
+                    UserMinuteBalance.balance_type == balance_type,
+                    UserMinuteBalance.minutes_remaining > 0,
+                    UserMinuteBalance.expires_at.isnot(None),
+                    func.datetime(UserMinuteBalance.expires_at) > func.datetime(now),
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def deduct_minutes(self, balance_id: int, minutes: float) -> UserMinuteBalance:
         """Deduct minutes from a specific balance."""
         result = await self.session.execute(

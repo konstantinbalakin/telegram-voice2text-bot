@@ -4,7 +4,8 @@ Payment provider protocol and data models.
 Billing enums are centralised here to avoid circular imports.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from typing import Optional, Protocol
 
@@ -84,6 +85,8 @@ class UserBalance:
     bonus_minutes: float
     package_minutes: float
     total_available: float
+    bonus_expires_at: Optional[datetime] = field(default=None)
+    package_expires_at: Optional[datetime] = field(default=None)
 
 
 @dataclass

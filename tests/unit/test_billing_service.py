@@ -3,6 +3,7 @@ Tests for BillingService - core billing logic
 """
 
 import pytest
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from tests.conftest import make_billing_service
@@ -96,6 +97,61 @@ async def test_get_user_balance_no_usage_today():
     assert balance.daily_used == 0.0
     assert balance.daily_remaining == 10.0
     assert balance.total_available == 10.0
+
+
+@pytest.mark.asyncio
+async def test_get_user_balance_with_bonus_expires_at():
+    """Test that get_user_balance returns nearest bonus expires_at."""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = None
+    mocks["balance_repo"].get_total_minutes.side_effect = [30.0, 0.0]
+
+    bonus_expiry = datetime(2026, 4, 15, tzinfo=timezone.utc)
+    mocks["balance_repo"].get_nearest_expires_at.side_effect = [bonus_expiry, None]
+
+    balance = await service.get_user_balance(user_id=1)
+
+    assert balance.bonus_expires_at == bonus_expiry
+    assert balance.package_expires_at is None
+
+
+@pytest.mark.asyncio
+async def test_get_user_balance_with_package_expires_at():
+    """Test that get_user_balance returns nearest package expires_at."""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = None
+    mocks["balance_repo"].get_total_minutes.side_effect = [0.0, 100.0]
+
+    package_expiry = datetime(2026, 5, 1, tzinfo=timezone.utc)
+    mocks["balance_repo"].get_nearest_expires_at.side_effect = [None, package_expiry]
+
+    balance = await service.get_user_balance(user_id=1)
+
+    assert balance.bonus_expires_at is None
+    assert balance.package_expires_at == package_expiry
+
+
+@pytest.mark.asyncio
+async def test_get_user_balance_no_expires():
+    """Test that get_user_balance returns None expires when no expiring balances."""
+    service, mocks = make_billing_service()
+
+    mocks["subscription_repo"].get_active_subscription.return_value = None
+    mocks["condition_repo"].get_effective_value.return_value = "10"
+    mocks["daily_usage_repo"].get_by_user_and_date.return_value = None
+    mocks["balance_repo"].get_total_minutes.side_effect = [10.0, 20.0]
+    mocks["balance_repo"].get_nearest_expires_at.side_effect = [None, None]
+
+    balance = await service.get_user_balance(user_id=1)
+
+    assert balance.bonus_expires_at is None
+    assert balance.package_expires_at is None
 
 
 # =============================================================================
