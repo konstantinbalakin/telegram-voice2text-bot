@@ -1,0 +1,16 @@
+{
+  "id": "billing-security-fixes_20260307",
+  "title": "Исправление критических проблем безопасности и надёжности биллинга",
+  "type": "fix",
+  "status": "pending",
+  "created": "2026-03-07T23:00:00Z",
+  "updated": "2026-03-07T23:00:00Z",
+  "phases": {
+    "total": 7,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 43,
+    "completed": 0
+  }
+}
