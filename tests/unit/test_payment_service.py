@@ -285,3 +285,42 @@ async def test_create_payment_provider_exception_marks_purchase_failed():
         await service.create_payment("telegram_stars", request)
 
     mocks["purchase_repo"].create.assert_called_once()
+
+
+# =============================================================================
+# get_active_packages with user_id Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_get_active_packages_passes_user_id():
+    """Test that get_active_packages passes user_id to get_effective_packages."""
+    service, mocks = _make_payment_service()
+
+    personal_pkg = MagicMock()
+    personal_pkg.id = 10
+    personal_pkg.name = "VIP пакет"
+    personal_pkg.minutes = 100.0
+    personal_pkg.price_rub = 99.0
+    mocks["package_repo"].get_effective_packages.return_value = [personal_pkg]
+
+    packages = await service.get_active_packages(user_id=42)
+    assert len(packages) == 1
+    assert packages[0].name == "VIP пакет"
+    mocks["package_repo"].get_effective_packages.assert_called_once_with(user_id=42)
+
+
+@pytest.mark.asyncio
+async def test_get_active_packages_without_user_id():
+    """Test that get_active_packages works without user_id (backward compat)."""
+    service, mocks = _make_payment_service()
+
+    global_pkg = MagicMock()
+    global_pkg.id = 1
+    global_pkg.name = "50 минут"
+    global_pkg.minutes = 50.0
+    mocks["package_repo"].get_effective_packages.return_value = [global_pkg]
+
+    packages = await service.get_active_packages()
+    assert len(packages) == 1
+    mocks["package_repo"].get_effective_packages.assert_called_once_with(user_id=None)

@@ -84,10 +84,10 @@ class PaymentService:
                 self._package_repo,
             )
 
-    async def get_active_packages(self) -> list:
-        """Get all active minute packages."""
+    async def get_active_packages(self, user_id: Optional[int] = None) -> list:
+        """Get active minute packages, with optional personal pricing."""
         async with self._repos() as (_, __, ___, package_repo):
-            return await package_repo.get_active_packages()
+            return await package_repo.get_effective_packages(user_id=user_id)
 
     def register_provider(self, provider: PaymentProvider) -> None:
         """Register a payment provider."""

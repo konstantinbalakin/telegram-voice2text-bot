@@ -74,10 +74,12 @@ class SubscriptionService:
         async with self._repos() as (subscription_repo, _, __):
             return await subscription_repo.get_active_tiers()
 
-    async def get_tier_prices(self, tier_id: int) -> list[SubscriptionPrice]:
-        """Get prices for a specific tier."""
+    async def get_tier_prices(
+        self, tier_id: int, user_id: Optional[int] = None
+    ) -> list[SubscriptionPrice]:
+        """Get prices for a specific tier, with optional personal pricing."""
         async with self._repos() as (subscription_repo, _, __):
-            return await subscription_repo.get_tier_prices(tier_id=tier_id)
+            return await subscription_repo.get_effective_prices(tier_id=tier_id, user_id=user_id)
 
     async def get_active_subscription(self, user_id: int) -> Optional[UserSubscription]:
         """Get user's active subscription."""
