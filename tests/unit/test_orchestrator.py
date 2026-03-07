@@ -84,6 +84,7 @@ def _make_orchestrator(
     llm_service: MagicMock | None = None,
     text_processor: MagicMock | None = None,
     billing_service: MagicMock | None = None,
+    billing_commands: MagicMock | None = None,
 ) -> TranscriptionOrchestrator:
     """Create an orchestrator with mocked dependencies."""
     if router is None:
@@ -102,6 +103,7 @@ def _make_orchestrator(
         llm_service=llm_service,
         text_processor=text_processor,
         billing_service=billing_service,
+        billing_commands=billing_commands,
     )
 
 
@@ -1721,8 +1723,6 @@ async def test_notification_shows_exhausted_message():
     mock_state_repo.create = AsyncMock(return_value=MagicMock(id=1, message_id=999))
     mock_state_repo.update = AsyncMock()
 
-    mock_segment_repo = AsyncMock()
-
     mock_variant_repo = AsyncMock()
     mock_variant_repo.get_variant = AsyncMock(return_value=None)
     mock_variant_repo.create = AsyncMock()
@@ -1926,3 +1926,78 @@ async def test_notification_uses_min_of_daily_used_and_limit():
                         # Check that message shows 10.0 (limit) not 20.9 (daily_used)
                         assert "10.0 из 10.0 мин" in exhausted_msg
                         assert "20.9" not in exhausted_msg
+
+
+@pytest.mark.asyncio
+async def test_notification_sends_balance_screen_after_warning():
+    """Test: after exhausted/warning message, balance screen with buttons is sent."""
+    from src.services.payments.base import UserBalance
+
+    billing_service = AsyncMock()
+    billing_service.deduct_minutes = AsyncMock(return_value={"from_daily": 10.0})
+    billing_service.get_limit_status = AsyncMock(return_value="exhausted")
+    billing_service.get_user_balance = AsyncMock(
+        return_value=UserBalance(
+            daily_limit=10.0,
+            daily_used=10.0,
+            daily_remaining=0.0,
+            bonus_minutes=0.0,
+            package_minutes=0.0,
+            total_available=0.0,
+        )
+    )
+
+    billing_commands = AsyncMock()
+    billing_commands._build_balance_text_and_markup = AsyncMock(
+        return_value=("💰 Баланс", MagicMock())
+    )
+
+    router = MagicMock()
+    router.transcribe = AsyncMock(return_value=_make_result())
+    router.get_active_provider_name = MagicMock(return_value="openai")
+    router.get_active_provider_model = MagicMock(return_value="whisper-1")
+    router.strategy = MagicMock(spec=[])
+
+    audio_handler = MagicMock()
+    audio_handler.preprocess_audio = AsyncMock(return_value=Path("/tmp/test_audio.ogg"))
+    audio_handler.cleanup_file = MagicMock()
+
+    mock_usage_repo = AsyncMock()
+    mock_usage_repo.get_by_id = AsyncMock(return_value=None)
+    mock_usage_repo.count_by_user_id = AsyncMock(return_value=1)
+
+    mock_state_repo = AsyncMock()
+    mock_state_repo.get_by_usage_id = AsyncMock(return_value=None)
+    mock_state_repo.create = AsyncMock(return_value=MagicMock(id=1, message_id=999))
+    mock_state_repo.update = AsyncMock()
+
+    mock_variant_repo = AsyncMock()
+    mock_variant_repo.get_variant = AsyncMock(return_value=None)
+    mock_variant_repo.create = AsyncMock()
+
+    with patch("src.config.settings.billing_enabled", True):
+        with patch("src.config.settings.interactive_mode_enabled", False):
+            with patch(
+                "src.services.transcription_orchestrator.UsageRepository",
+                return_value=mock_usage_repo,
+            ):
+                with patch(
+                    "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                    return_value=mock_state_repo,
+                ):
+                    with patch(
+                        "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                        return_value=mock_variant_repo,
+                    ):
+                        orch = _make_orchestrator(
+                            router=router,
+                            audio_handler=audio_handler,
+                            billing_service=billing_service,
+                            billing_commands=billing_commands,
+                        )
+                        request = _make_request(db_user_id=1)
+
+                        await orch.process_transcription(request)
+
+                        # Verify balance screen was sent
+                        billing_commands._build_balance_text_and_markup.assert_awaited_once()

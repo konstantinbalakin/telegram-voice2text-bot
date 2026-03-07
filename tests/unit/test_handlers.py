@@ -852,6 +852,48 @@ class TestHandleMediaMessage:
 
         update.message.reply_text.assert_not_awaited()
 
+    @pytest.mark.asyncio
+    async def test_billing_blocked_sends_balance_screen(self) -> None:
+        """When billing blocks transcription, send warning + balance screen."""
+        h = self._setup_handler()
+        h.billing_service = MagicMock()
+        h.billing_service.check_can_transcribe = AsyncMock(
+            return_value=(False, "Недостаточно минут")
+        )
+        mock_billing_commands = MagicMock()
+        mock_billing_commands._build_balance_text_and_markup = AsyncMock(
+            return_value=("💰 Баланс", MagicMock())
+        )
+        h.billing_commands = mock_billing_commands
+
+        update = _make_update()
+        ctx = _make_context()
+        media_info = MediaInfo("f1", 100, 30, "voice")
+
+        db_user = _make_db_user()
+        mock_session = MagicMock()
+        mock_user_repo = MagicMock()
+        mock_user_repo.get_by_telegram_id = AsyncMock(return_value=db_user)
+
+        with (
+            patch("src.bot.handlers.settings") as ms,
+            patch("src.bot.handlers.get_session", return_value=_async_ctx_manager(mock_session)),
+            patch("src.bot.handlers.UserRepository", return_value=mock_user_repo),
+        ):
+            ms.max_voice_duration_seconds = 300
+            ms.max_queue_size = 50
+            ms.max_file_size_bytes = 20 * 1024 * 1024
+            ms.telethon_enabled = False
+            ms.billing_enabled = True
+            ms.billing_test_mode = False
+            await h._handle_media_message(update, ctx, media_info)
+
+        # Two calls: warning message + balance screen
+        assert update.message.reply_text.await_count == 2
+        first_call_text = update.message.reply_text.call_args_list[0][0][0]
+        assert "Недостаточно минут" in first_call_text
+        mock_billing_commands._build_balance_text_and_markup.assert_awaited_once()
+
 
 # ---------------------------------------------------------------------------
 # error_handler

@@ -39,9 +39,9 @@
 
 ### Tasks
 
-- [ ] Task 3.1: Обновить тесты в test_billing_integration.py
-- [ ] Task 3.2: Обновить тесты в test_handlers.py (если затронуты)
-- [ ] Task 3.3: Проверить линтеры и типизацию
+- [x] Task 3.1: Обновить тесты в test_billing_integration.py
+- [x] Task 3.2: Обновить тесты в test_handlers.py (если затронуты)
+- [x] Task 3.3: Проверить линтеры и типизацию
 
 ### Verification
 
