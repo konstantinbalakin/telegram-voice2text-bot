@@ -82,7 +82,7 @@ class YooKassaProvider:
                 payment_url=invoice_link,
             )
         except Exception as e:
-            logger.error("Failed to create YooKassa invoice: %s", e)
+            logger.error("Failed to create YooKassa invoice: %s", e, exc_info=True)
             return PaymentResult(
                 success=False,
                 error_message="Ошибка создания платежа. Попробуйте позже.",

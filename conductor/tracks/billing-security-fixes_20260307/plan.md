@@ -98,20 +98,20 @@
 
 ### Tasks
 
-- [ ] Task 5.1: Тесты — error messages пользователю не содержат внутренних деталей
-- [ ] Task 5.2: Заменить `str(e)` на generic сообщения в `yookassa_provider.py` и `telegram_stars.py`
-- [ ] Task 5.3: Добавить `await query.edit_message_text(ERROR_MSG)` в 5 callback except-блоков `billing_commands.py`
-- [ ] Task 5.4: Заменить `assert` на `if ... is None: raise RuntimeError(...)` в `payment_service.py` и `billing_service.py`
-- [ ] Task 5.5: Вынести `_period_label` в `src/services/payments/base.py`, удалить дубликаты
-- [ ] Task 5.6: Переименовать `_build_balance_text_and_markup` → `build_balance_text_and_markup` (убрать `_`)
-- [ ] Task 5.7: Удалить мёртвый код: `_get_user_db_id` (module-level), `PaymentStatus` enum (если не используется)
-- [ ] Task 5.8: Добавить `exc_info=True` во все `logger.error` в платёжных провайдерах
+- [x] Task 5.1: Тесты — error messages пользователю не содержат внутренних деталей
+- [x] Task 5.2: Заменить `str(e)` на generic сообщения в `yookassa_provider.py` и `telegram_stars.py`
+- [x] Task 5.3: Добавить `await query.edit_message_text(ERROR_MSG)` в 5 callback except-блоков `billing_commands.py`
+- [x] Task 5.4: Заменить `assert` на `if ... is None: raise RuntimeError(...)` в `payment_service.py` и `billing_service.py`
+- [x] Task 5.5: Вынести `_period_label` в `src/services/payments/base.py`, удалить дубликаты
+- [x] Task 5.6: Переименовать `_build_balance_text_and_markup` → `build_balance_text_and_markup` (убрать `_`)
+- [x] Task 5.7: Удалить мёртвый код: `_get_user_db_id` (module-level), `PaymentStatus` enum (если не используется)
+- [x] Task 5.8: Добавить `exc_info=True` во все `logger.error` в платёжных провайдерах
 
 ### Verification
 
-- [ ] Тесты Phase 5 проходят
-- [ ] ruff, black, mypy чистые
-- [ ] Нет `assert` в src/services/payments/ и src/services/billing_service.py
+- [x] Тесты Phase 5 проходят
+- [x] ruff, black, mypy чистые
+- [x] Нет `assert` в src/services/payments/ и src/services/billing_service.py
 
 ---
 

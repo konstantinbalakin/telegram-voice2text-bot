@@ -73,10 +73,22 @@ class PaymentService:
                     MinutePackageRepository(session),
                 )
         else:
-            assert self._purchase_repo is not None
-            assert self._subscription_repo is not None
-            assert self._balance_repo is not None
-            assert self._package_repo is not None
+            if self._purchase_repo is None:
+                raise RuntimeError(
+                    "PaymentService: purchase_repo is required when no session_factory"
+                )
+            if self._subscription_repo is None:
+                raise RuntimeError(
+                    "PaymentService: subscription_repo is required when no session_factory"
+                )
+            if self._balance_repo is None:
+                raise RuntimeError(
+                    "PaymentService: balance_repo is required when no session_factory"
+                )
+            if self._package_repo is None:
+                raise RuntimeError(
+                    "PaymentService: package_repo is required when no session_factory"
+                )
             yield (
                 self._purchase_repo,
                 self._subscription_repo,
@@ -244,7 +256,8 @@ class PaymentService:
         self, user_id: int, tier_id: int, payment_provider: str, period: str = "month"
     ) -> bool:
         """Activate subscription for user."""
-        assert self.subscription_service is not None
+        if self.subscription_service is None:
+            raise RuntimeError("PaymentService: subscription_service is required for subscriptions")
         await self.subscription_service.create_subscription(
             user_id=user_id,
             tier_id=tier_id,

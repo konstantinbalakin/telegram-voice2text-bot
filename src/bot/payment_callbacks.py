@@ -11,8 +11,8 @@ from telegram.ext import ContextTypes
 from src.services.payments.base import (
     PaymentRequest,
     PaymentType,
-    SubscriptionPeriod,
     parse_payment_payload,
+    period_label,
 )
 from src.storage.database import get_session
 from src.storage.billing_repositories import MinutePackageRepository, SubscriptionRepository
@@ -23,20 +23,6 @@ if TYPE_CHECKING:
 
 # Handler type alias
 _Handler = Callable[[Update, ContextTypes.DEFAULT_TYPE], Any]
-
-_PERIOD_LABELS = {
-    SubscriptionPeriod.WEEK: "Неделя",
-    SubscriptionPeriod.MONTH: "Месяц",
-    SubscriptionPeriod.YEAR: "Год",
-}
-
-
-def _period_label(period: str) -> str:
-    """Convert period code to human-readable Russian label."""
-    try:
-        return _PERIOD_LABELS[SubscriptionPeriod(period)]
-    except (ValueError, KeyError):
-        return period
 
 
 logger = logging.getLogger(__name__)
@@ -209,7 +195,7 @@ class PaymentCallbackHandlers:
             db_user_id = await self._get_db_user_id(telegram_user_id)
             _, price_stars = await self._get_subscription_price(tier_id, period)
             tier_name = await self._get_tier_name(tier_id)
-            period_ru = _period_label(period)
+            period_ru = period_label(period)
             sub_desc = await self._get_subscription_description(tier_id, period)
 
             request = PaymentRequest(
@@ -342,7 +328,7 @@ class PaymentCallbackHandlers:
             price_rub, _ = await self._get_subscription_price(tier_id, period)
             amount_kopecks = int(price_rub * 100)
             tier_name = await self._get_tier_name(tier_id)
-            period_ru = _period_label(period)
+            period_ru = period_label(period)
             sub_desc = await self._get_subscription_description(tier_id, period)
 
             request = PaymentRequest(

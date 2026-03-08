@@ -831,7 +831,7 @@ class TranscriptionOrchestrator:
                         if self.billing_commands:
                             try:
                                 text, markup = (
-                                    await self.billing_commands._build_balance_text_and_markup(
+                                    await self.billing_commands.build_balance_text_and_markup(
                                         request.user_id
                                     )
                                 )

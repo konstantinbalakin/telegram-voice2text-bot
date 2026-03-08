@@ -85,11 +85,26 @@ class BillingService:
                     DeductionLogRepository(session),
                 )
         else:
-            assert self._condition_repo is not None
-            assert self._subscription_repo is not None
-            assert self._balance_repo is not None
-            assert self._daily_usage_repo is not None
-            assert self._deduction_log_repo is not None
+            if self._condition_repo is None:
+                raise RuntimeError(
+                    "BillingService: condition_repo is required when no session_factory"
+                )
+            if self._subscription_repo is None:
+                raise RuntimeError(
+                    "BillingService: subscription_repo is required when no session_factory"
+                )
+            if self._balance_repo is None:
+                raise RuntimeError(
+                    "BillingService: balance_repo is required when no session_factory"
+                )
+            if self._daily_usage_repo is None:
+                raise RuntimeError(
+                    "BillingService: daily_usage_repo is required when no session_factory"
+                )
+            if self._deduction_log_repo is None:
+                raise RuntimeError(
+                    "BillingService: deduction_log_repo is required when no session_factory"
+                )
             yield (
                 self._condition_repo,
                 self._subscription_repo,

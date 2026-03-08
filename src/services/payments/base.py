@@ -18,13 +18,6 @@ class PaymentType(str, Enum):
     SUBSCRIPTION = "subscription"
 
 
-class PaymentStatus(str, Enum):
-    PENDING = "pending"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
 class SubscriptionStatus(str, Enum):
     ACTIVE = "active"
     EXPIRED = "expired"
@@ -46,6 +39,20 @@ _PERIOD_DAYS = {
     SubscriptionPeriod.MONTH: 30,
     SubscriptionPeriod.YEAR: 365,
 }
+
+_PERIOD_LABELS = {
+    SubscriptionPeriod.WEEK: "Неделя",
+    SubscriptionPeriod.MONTH: "Месяц",
+    SubscriptionPeriod.YEAR: "Год",
+}
+
+
+def period_label(period: str) -> str:
+    """Convert period code to human-readable Russian label."""
+    try:
+        return _PERIOD_LABELS[SubscriptionPeriod(period)]
+    except (ValueError, KeyError):
+        return period
 
 
 class BalanceType(str, Enum):

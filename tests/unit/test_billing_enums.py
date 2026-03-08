@@ -6,7 +6,6 @@ from src.services.payments.base import (
     BalanceType,
     Currency,
     DeductionSource,
-    PaymentStatus,
     PaymentType,
     PurchaseStatus,
     SubscriptionPeriod,
@@ -63,11 +62,11 @@ class TestExistingEnumsUnchanged:
         assert PaymentType.PACKAGE == "package"
         assert PaymentType.SUBSCRIPTION == "subscription"
 
-    def test_payment_status(self) -> None:
-        assert PaymentStatus.PENDING == "pending"
-        assert PaymentStatus.COMPLETED == "completed"
-        assert PaymentStatus.FAILED == "failed"
-        assert PaymentStatus.CANCELLED == "cancelled"
+    def test_purchase_status(self) -> None:
+        assert PurchaseStatus.PENDING == "pending"
+        assert PurchaseStatus.COMPLETED == "completed"
+        assert PurchaseStatus.FAILED == "failed"
+        assert PurchaseStatus.REFUNDED == "refunded"
 
     def test_subscription_status(self) -> None:
         assert SubscriptionStatus.ACTIVE == "active"

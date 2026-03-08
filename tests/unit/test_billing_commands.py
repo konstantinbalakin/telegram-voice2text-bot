@@ -182,7 +182,7 @@ async def test_build_packages_catalog_without_user_id() -> None:
 
 
 # =============================================================================
-# _build_balance_text_and_markup — expires_at display Tests
+# build_balance_text_and_markup — expires_at display Tests
 # =============================================================================
 
 
@@ -214,7 +214,7 @@ async def test_balance_shows_bonus_expires_at(mock_get_session: MagicMock) -> No
         mocks["billing_service"].get_user_balance.return_value = balance
         mocks["subscription_service"].get_active_subscription.return_value = None
 
-        text, markup = await commands._build_balance_text_and_markup(telegram_user_id=100500)
+        text, markup = await commands.build_balance_text_and_markup(telegram_user_id=100500)
 
     assert "45.0 мин" in text
     assert "(до 15.04.2026)" in text
@@ -248,7 +248,7 @@ async def test_balance_shows_package_expires_at(mock_get_session: MagicMock) -> 
         mocks["billing_service"].get_user_balance.return_value = balance
         mocks["subscription_service"].get_active_subscription.return_value = None
 
-        text, markup = await commands._build_balance_text_and_markup(telegram_user_id=100500)
+        text, markup = await commands.build_balance_text_and_markup(telegram_user_id=100500)
 
     assert "100.0 мин" in text
     assert "(до 01.05.2026)" in text
@@ -282,7 +282,7 @@ async def test_balance_no_expires_when_none(mock_get_session: MagicMock) -> None
         mocks["billing_service"].get_user_balance.return_value = balance
         mocks["subscription_service"].get_active_subscription.return_value = None
 
-        text, markup = await commands._build_balance_text_and_markup(telegram_user_id=100500)
+        text, markup = await commands.build_balance_text_and_markup(telegram_user_id=100500)
 
     assert "45.0 мин" in text
     assert "(до" not in text

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from src.services.payments.base import SubscriptionPeriod
+from src.services.payments.base import period_label
 from src.storage.database import get_session
 from src.storage.repositories import UserRepository
 from src.storage.billing_repositories import MinutePackageRepository
@@ -22,20 +22,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 BILLING_ERROR_MSG = "Произошла ошибка. Попробуйте позже."
-
-_PERIOD_LABELS = {
-    SubscriptionPeriod.WEEK: "Неделя",
-    SubscriptionPeriod.MONTH: "Месяц",
-    SubscriptionPeriod.YEAR: "Год",
-}
-
-
-def _period_label(period: str) -> str:
-    """Convert period code to human-readable label."""
-    try:
-        return _PERIOD_LABELS[SubscriptionPeriod(period)]
-    except (ValueError, KeyError):
-        return period
 
 
 class BillingCommands:
@@ -55,7 +41,7 @@ class BillingCommands:
     # Unified balance screen (/balance and /buy)
     # =========================================================================
 
-    async def _build_balance_text_and_markup(
+    async def build_balance_text_and_markup(
         self, telegram_user_id: int
     ) -> tuple[str, InlineKeyboardMarkup | None]:
         """Build unified balance screen text and navigation buttons."""
@@ -113,7 +99,7 @@ class BillingCommands:
             return
 
         try:
-            text, markup = await self._build_balance_text_and_markup(user.id)
+            text, markup = await self.build_balance_text_and_markup(user.id)
             await update.message.reply_text(text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error in /balance command: {e}", exc_info=True)
@@ -136,10 +122,11 @@ class BillingCommands:
 
         try:
             await update.callback_query.answer()
-            text, markup = await self._build_balance_text_and_markup(update.effective_user.id)
+            text, markup = await self.build_balance_text_and_markup(update.effective_user.id)
             await update.callback_query.edit_message_text(text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error in back_to_main_callback: {e}", exc_info=True)
+            await update.callback_query.edit_message_text(BILLING_ERROR_MSG)
 
     # =========================================================================
     # Subscription catalog
@@ -175,8 +162,8 @@ class BillingCommands:
             prices = await self.subscription_service.get_tier_prices(tier.id, user_id=db_user_id)
             if prices:
                 for price in prices:
-                    period_label = _period_label(price.period)
-                    btn_text = f"{tier.name} ({period_label}) — {price.amount_rub:.0f} ₽"
+                    period_text = period_label(price.period)
+                    btn_text = f"{tier.name} ({period_text}) — {price.amount_rub:.0f} ₽"
                     buttons.append(
                         [
                             InlineKeyboardButton(
@@ -205,6 +192,7 @@ class BillingCommands:
             await update.callback_query.edit_message_text(text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error in subscriptions_catalog_callback: {e}", exc_info=True)
+            await update.callback_query.edit_message_text(BILLING_ERROR_MSG)
 
     # =========================================================================
     # Package catalog
@@ -263,6 +251,7 @@ class BillingCommands:
             await update.callback_query.edit_message_text(text, reply_markup=markup)
         except Exception as e:
             logger.error(f"Error in packages_catalog_callback: {e}", exc_info=True)
+            await update.callback_query.edit_message_text(BILLING_ERROR_MSG)
 
     # =========================================================================
     # Detail screens
@@ -302,10 +291,10 @@ class BillingCommands:
                 await update.callback_query.edit_message_text("Цена не найдена.")
                 return
 
-            period_label = _period_label(period)
+            period_text = period_label(period)
 
             lines = [
-                f"⭐ Подписка {tier.name} — {period_label}\n",
+                f"⭐ Подписка {tier.name} — {period_text}\n",
                 f"📊 Дневной лимит: {tier.daily_limit_minutes:.0f} мин/день",
             ]
             if price.description:
@@ -336,6 +325,7 @@ class BillingCommands:
             )
         except Exception as e:
             logger.error(f"Error in subscription_detail_callback: {e}", exc_info=True)
+            await update.callback_query.edit_message_text(BILLING_ERROR_MSG)
 
     async def package_detail_callback(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -388,6 +378,7 @@ class BillingCommands:
             )
         except Exception as e:
             logger.error(f"Error in package_detail_callback: {e}", exc_info=True)
+            await update.callback_query.edit_message_text(BILLING_ERROR_MSG)
 
     # =========================================================================
     # Enhanced /start and /help

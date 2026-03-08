@@ -1948,7 +1948,7 @@ async def test_notification_sends_balance_screen_after_warning():
     )
 
     billing_commands = AsyncMock()
-    billing_commands._build_balance_text_and_markup = AsyncMock(
+    billing_commands.build_balance_text_and_markup = AsyncMock(
         return_value=("💰 Баланс", MagicMock())
     )
 
@@ -2000,4 +2000,4 @@ async def test_notification_sends_balance_screen_after_warning():
                         await orch.process_transcription(request)
 
                         # Verify balance screen was sent
-                        billing_commands._build_balance_text_and_markup.assert_awaited_once()
+                        billing_commands.build_balance_text_and_markup.assert_awaited_once()

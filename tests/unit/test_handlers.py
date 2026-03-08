@@ -861,7 +861,7 @@ class TestHandleMediaMessage:
             return_value=(False, "Недостаточно минут")
         )
         mock_billing_commands = MagicMock()
-        mock_billing_commands._build_balance_text_and_markup = AsyncMock(
+        mock_billing_commands.build_balance_text_and_markup = AsyncMock(
             return_value=("💰 Баланс", MagicMock())
         )
         h.billing_commands = mock_billing_commands
@@ -892,7 +892,7 @@ class TestHandleMediaMessage:
         assert update.message.reply_text.await_count == 2
         first_call_text = update.message.reply_text.call_args_list[0][0][0]
         assert "Недостаточно минут" in first_call_text
-        mock_billing_commands._build_balance_text_and_markup.assert_awaited_once()
+        mock_billing_commands.build_balance_text_and_markup.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
