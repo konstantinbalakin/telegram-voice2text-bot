@@ -244,8 +244,8 @@ async def main() -> None:
 
             logger.info("Billing services initialized")
         except Exception as e:
-            logger.error(f"Failed to initialize billing system: {e}", exc_info=True)
-            logger.warning("Continuing without billing system")
+            logger.critical(f"Failed to initialize billing system: {e}", exc_info=True)
+            raise RuntimeError(f"Billing init failed (billing_enabled=True): {e}") from e
     else:
         logger.info("Billing system disabled")
 

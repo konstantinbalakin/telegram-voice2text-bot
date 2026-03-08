@@ -1,7 +1,7 @@
 """
-Tests for billing error handling and resilience (Phase 2).
+Tests for billing error handling and resilience.
 
-Verifies fail-open behavior: billing errors must not break transcription.
+Verifies fail-closed behavior: billing errors MUST block transcription.
 """
 
 import pytest
@@ -16,8 +16,8 @@ from src.services.payments.payment_service import PaymentService
 # =============================================================================
 
 
-class TestBillingFailOpen:
-    """Billing service errors should be non-fatal for the transcription pipeline."""
+class TestBillingFailClosed:
+    """Billing service errors should block transcription (fail-closed)."""
 
     @pytest.mark.asyncio
     async def test_check_can_transcribe_billing_disabled_always_allows(self) -> None:

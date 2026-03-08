@@ -698,6 +698,27 @@ class TranscriptionOrchestrator:
 
             final_text = result.text
 
+            # Billing: deduct minutes BEFORE sending result to prevent free transcription on crash
+            # Skip deduction in billing test mode
+            if (
+                self.billing_service
+                and settings.billing_enabled
+                and not settings.billing_test_mode
+                and request.db_user_id
+            ):
+                try:
+                    duration_minutes = request.duration_seconds / 60.0
+                    await self.billing_service.deduct_minutes(
+                        user_id=request.db_user_id,
+                        usage_id=request.usage_id,
+                        duration_minutes=duration_minutes,
+                    )
+                except Exception as billing_err:
+                    logger.error(
+                        f"Billing deduction error for request {request.id}: {billing_err}",
+                        exc_info=True,
+                    )
+
             needs_structuring = False
             show_draft = False
             emoji_level = 0
@@ -778,10 +799,7 @@ class TranscriptionOrchestrator:
                 final_text = result.text
                 await self._send_result_and_update_state(request, result.text, result)
 
-            # Billing: deduct minutes after successful transcription
-            # Uses db_user_id (internal DB ID), not user_id (Telegram ID)
-            # Wrapped in try-except: billing errors must not break the pipeline
-            # Skip deduction in billing test mode
+            # Billing: check limit status and warn user (deduction already done above)
             if (
                 self.billing_service
                 and settings.billing_enabled
@@ -789,20 +807,11 @@ class TranscriptionOrchestrator:
                 and request.db_user_id
             ):
                 try:
-                    duration_minutes = request.duration_seconds / 60.0
-                    await self.billing_service.deduct_minutes(
-                        user_id=request.db_user_id,
-                        usage_id=request.usage_id,
-                        duration_minutes=duration_minutes,
-                    )
-
-                    # Check limit status and send appropriate warning
                     status = await self.billing_service.get_limit_status(user_id=request.db_user_id)
                     if status in ("warning", "exhausted"):
                         balance = await self.billing_service.get_user_balance(
                             user_id=request.db_user_id
                         )
-                        # Display used minutes limited to daily_limit
                         display_used = min(balance.daily_used, balance.daily_limit)
 
                         if status == "exhausted":
@@ -811,7 +820,7 @@ class TranscriptionOrchestrator:
                                 f"Использовано: {display_used:.1f} из "
                                 f"{balance.daily_limit:.1f} мин"
                             )
-                        else:  # status == "warning"
+                        else:
                             message = (
                                 f"⚠️ Дневной лимит почти исчерпан!\n\n"
                                 f"Использовано: {display_used:.1f} из "
@@ -819,7 +828,6 @@ class TranscriptionOrchestrator:
                             )
                         await request.user_message.reply_text(message)
 
-                        # Send balance screen with purchase buttons
                         if self.billing_commands:
                             try:
                                 text, markup = (
@@ -835,7 +843,7 @@ class TranscriptionOrchestrator:
                                 )
                 except Exception as billing_err:
                     logger.error(
-                        f"Billing error for request {request.id}: {billing_err}",
+                        f"Billing status check error for request {request.id}: {billing_err}",
                         exc_info=True,
                     )
 

@@ -428,7 +428,7 @@ class BotHandlers:
 
         # 4. CHECK QUOTA (skip for document — duration unknown until ffprobe)
         if media_info.duration_seconds is not None:
-            # 4a. Billing system check — fail-open: billing errors don't block transcription
+            # 4a. Billing system check — fail-closed: billing errors block transcription
             # Skip check in billing test mode (no limits enforced)
             if self.billing_service and settings.billing_enabled and not settings.billing_test_mode:
                 try:
@@ -461,8 +461,13 @@ class BotHandlers:
                             logger.warning(f"User {user.id} rejected: billing limit exceeded")
                             return
                 except Exception as e:
-                    logger.error(f"Billing check failed, allowing transcription: {e}")
-                    # Fail-open: billing errors should not block transcription
+                    logger.error(
+                        f"Billing check failed, blocking transcription: {e}", exc_info=True
+                    )
+                    await update.message.reply_text(
+                        "⚠️ Сервис временно недоступен. Попробуйте позже."
+                    )
+                    return
 
         # Send initial status
         status_msg = await update.message.reply_text("📥 Загружаю файл...")

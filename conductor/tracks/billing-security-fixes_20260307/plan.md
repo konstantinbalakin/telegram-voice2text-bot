@@ -59,17 +59,17 @@
 
 ### Tasks
 
-- [ ] Task 3.1: Тесты — ошибка биллинга блокирует транскрипцию (а не пропускает)
-- [ ] Task 3.2: Тесты — списание минут происходит ДО отправки результата
-- [ ] Task 3.3: `handlers.py` — убрать try/except fail-open, пробрасывать ошибку биллинга → отправка "Сервис временно недоступен"
-- [ ] Task 3.4: `transcription_orchestrator.py` — переместить `deduct_minutes` ДО `_send_result_and_update_state`
-- [ ] Task 3.5: `main.py` — сделать ошибку инициализации биллинга фатальной (если `billing_enabled=True`)
-- [ ] Task 3.6: Обновить fail-open тест в `test_billing_error_handling.py` → fail-closed поведение
+- [x] Task 3.1: Тесты — ошибка биллинга блокирует транскрипцию (а не пропускает)
+- [x] Task 3.2: Тесты — списание минут происходит ДО отправки результата
+- [x] Task 3.3: `handlers.py` — убрать try/except fail-open, пробрасывать ошибку биллинга → отправка "Сервис временно недоступен"
+- [x] Task 3.4: `transcription_orchestrator.py` — переместить `deduct_minutes` ДО `_send_result_and_update_state`
+- [x] Task 3.5: `main.py` — сделать ошибку инициализации биллинга фатальной (если `billing_enabled=True`)
+- [x] Task 3.6: Обновить fail-open тест в `test_billing_error_handling.py` → fail-closed поведение
 
 ### Verification
 
-- [ ] Тесты Phase 3 проходят
-- [ ] При ошибке БД транскрипция не выполняется
+- [x] Тесты Phase 3 проходят
+- [x] При ошибке БД транскрипция не выполняется
 
 ---
 
