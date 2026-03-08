@@ -3,7 +3,7 @@
 **Track ID:** billing-security-fixes_20260307
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-07
-**Status:** [~] In Progress
+**Status:** [x] Complete
 
 ## Overview
 
@@ -161,11 +161,11 @@
 
 ## Final Verification
 
-- [ ] Все acceptance criteria met
-- [ ] `uv run pytest tests/unit/ -v` — зелёный
-- [ ] `uv run ruff check src/` — чистый
-- [ ] `uv run black --check src/ tests/` — чистый
-- [ ] `uv run mypy src/` — чистый
+- [x] Все acceptance criteria met
+- [x] `uv run pytest tests/unit/ -v` — зелёный (1052 теста)
+- [x] `uv run ruff check src/` — чистый
+- [x] `uv run black --check src/ tests/` — чистый
+- [x] `uv run mypy src/` — чистый
 - [ ] Ручное тестирование: платёж через Stars, проверка баланса, отклонение при нехватке минут
 - [ ] PR готов к мерджу
 

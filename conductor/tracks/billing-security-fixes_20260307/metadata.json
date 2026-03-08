@@ -2,17 +2,17 @@
   "id": "billing-security-fixes_20260307",
   "title": "Исправление критических проблем безопасности и надёжности биллинга",
   "type": "fix",
-  "status": "in_progress",
-  "current_phase": 2,
-  "current_task": "2.1",
+  "status": "complete",
+  "current_phase": 7,
+  "current_task": "7.6",
   "created": "2026-03-07T23:00:00Z",
-  "updated": "2026-03-07T23:00:00Z",
+  "updated": "2026-03-08T12:00:00Z",
   "phases": {
     "total": 7,
-    "completed": 0
+    "completed": 7
   },
   "tasks": {
     "total": 43,
-    "completed": 0
+    "completed": 43
   }
 }
