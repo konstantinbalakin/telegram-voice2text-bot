@@ -191,6 +191,8 @@ async def test_handle_successful_package_payment():
     """Test crediting package after successful payment."""
     service, mocks = _make_payment_service()
 
+    mocks["purchase_repo"].find_by_transaction_id = AsyncMock(return_value=None)
+
     mock_package = MagicMock()
     mock_package.id = 1
     mock_package.name = "50 минут"
@@ -219,6 +221,8 @@ async def test_handle_successful_subscription_payment():
     """Test activating subscription after successful payment."""
     service, mocks = _make_payment_service()
 
+    mocks["purchase_repo"].find_by_transaction_id = AsyncMock(return_value=None)
+
     mock_sub = MagicMock()
     mocks["subscription_service"].create_subscription.return_value = mock_sub
 
@@ -235,17 +239,20 @@ async def test_handle_successful_subscription_payment():
 
 @pytest.mark.asyncio
 async def test_handle_successful_payment_package_not_found():
-    """Test handling when package not found raises ValueError."""
+    """Test handling when package not found → returns False (error handled internally)."""
     service, mocks = _make_payment_service()
     mocks["package_repo"].get_by_id.return_value = None
+    mocks["purchase_repo"].find_by_transaction_id = AsyncMock(return_value=None)
+    mocks["purchase_repo"].find_pending_purchase = AsyncMock(return_value=None)
 
-    with pytest.raises(ValueError, match="Package 999 not found"):
-        await service.handle_successful_payment(
-            provider_name="telegram_stars",
-            user_id=1,
-            payment_type=PaymentType.PACKAGE,
-            item_id=999,
-        )
+    result = await service.handle_successful_payment(
+        provider_name="telegram_stars",
+        user_id=1,
+        payment_type=PaymentType.PACKAGE,
+        item_id=999,
+    )
+
+    assert result is False
 
 
 def test_available_providers():
@@ -324,3 +331,88 @@ async def test_get_active_packages_without_user_id():
     packages = await service.get_active_packages()
     assert len(packages) == 1
     mocks["package_repo"].get_effective_packages.assert_called_once_with(user_id=None)
+
+
+# =============================================================================
+# Phase 2: Idempotency, error handling, purchase FAILED
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_handle_successful_payment_idempotent_by_transaction_id():
+    """Task 2.1: duplicate transaction_id → no-op, returns True."""
+    service, mocks = _make_payment_service()
+
+    # Simulate already-completed purchase with this transaction_id
+    existing_purchase = MagicMock()
+    existing_purchase.id = 42
+    existing_purchase.status = "completed"
+    mocks["purchase_repo"].find_by_transaction_id = AsyncMock(return_value=existing_purchase)
+
+    result = await service.handle_successful_payment(
+        provider_name="telegram_stars",
+        user_id=1,
+        payment_type=PaymentType.PACKAGE,
+        item_id=1,
+        provider_transaction_id="tx_duplicate_123",
+    )
+
+    assert result is True
+    # Should NOT credit package again
+    mocks["balance_repo"].create.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_successful_payment_credit_error_marks_failed():
+    """Task 2.2: _credit_package raises → Purchase marked FAILED."""
+    service, mocks = _make_payment_service()
+
+    # No duplicate
+    mocks["purchase_repo"].find_by_transaction_id = AsyncMock(return_value=None)
+    # Package not found → ValueError
+    mocks["package_repo"].get_by_id.return_value = None
+
+    # find_pending_purchase returns a purchase to mark
+    mock_purchase = MagicMock()
+    mock_purchase.id = 1
+    mocks["purchase_repo"].find_pending_purchase = AsyncMock(return_value=mock_purchase)
+
+    result = await service.handle_successful_payment(
+        provider_name="telegram_stars",
+        user_id=1,
+        payment_type=PaymentType.PACKAGE,
+        item_id=999,
+        provider_transaction_id="tx_error_456",
+    )
+
+    assert result is False
+    mocks["purchase_repo"].mark_failed.assert_called_once_with(mock_purchase)
+
+
+@pytest.mark.asyncio
+async def test_handle_successful_payment_purchase_not_found():
+    """Task 2.3: handle_successful_payment when purchase not found still credits."""
+    service, mocks = _make_payment_service()
+
+    mocks["purchase_repo"].find_by_transaction_id = AsyncMock(return_value=None)
+
+    mock_package = MagicMock()
+    mock_package.id = 1
+    mock_package.name = "50 минут"
+    mock_package.minutes = 50.0
+    mocks["package_repo"].get_by_id.return_value = mock_package
+
+    # No pending purchase found
+    mocks["purchase_repo"].find_pending_purchase = AsyncMock(return_value=None)
+
+    result = await service.handle_successful_payment(
+        provider_name="telegram_stars",
+        user_id=1,
+        payment_type=PaymentType.PACKAGE,
+        item_id=1,
+        provider_transaction_id="tx_orphan_789",
+    )
+
+    # Should still credit the package (payment went through)
+    assert result is True
+    mocks["balance_repo"].create.assert_called_once()

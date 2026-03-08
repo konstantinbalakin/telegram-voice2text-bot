@@ -742,3 +742,10 @@ class PurchaseRepository:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    async def find_by_transaction_id(self, provider_transaction_id: str) -> Optional[Purchase]:
+        """Find purchase by provider transaction ID (for idempotency)."""
+        result = await self.session.execute(
+            select(Purchase).where(Purchase.provider_transaction_id == provider_transaction_id)
+        )
+        return result.scalar_one_or_none()

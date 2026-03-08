@@ -125,6 +125,8 @@ class TestE2EPurchaseCycle:
         purchase_repo = AsyncMock()
         purchase_repo.create = AsyncMock(return_value=MagicMock(id=1))
         purchase_repo.update_status = AsyncMock()
+        purchase_repo.find_by_transaction_id = AsyncMock(return_value=None)
+        purchase_repo.find_pending_purchase = AsyncMock(return_value=None)
 
         subscription_repo = AsyncMock()
         balance_repo = AsyncMock()
@@ -170,6 +172,8 @@ class TestE2EPurchaseCycle:
         purchase_repo = AsyncMock()
         purchase_repo.create = AsyncMock(return_value=MagicMock(id=1))
         purchase_repo.update_status = AsyncMock()
+        purchase_repo.find_by_transaction_id = AsyncMock(return_value=None)
+        purchase_repo.find_pending_purchase = AsyncMock(return_value=None)
 
         subscription_repo = AsyncMock()
         balance_repo = AsyncMock()

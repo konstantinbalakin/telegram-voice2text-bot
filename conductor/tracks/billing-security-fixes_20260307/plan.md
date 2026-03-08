@@ -39,17 +39,17 @@
 
 ### Tasks
 
-- [ ] Task 2.1: Тесты — повторный successful_payment с тем же transaction_id не создаёт дубликат
-- [ ] Task 2.2: Тесты — ошибка в `_credit_package`/`_activate_subscription` → Purchase маркируется FAILED
-- [ ] Task 2.3: Тесты — `handle_successful_payment` когда purchase не найден (test gap #20)
-- [ ] Task 2.4: Добавить проверку `provider_transaction_id` в `handle_successful_payment` перед начислением
-- [ ] Task 2.5: Обернуть `_credit_package`/`_activate_subscription` в try/except → маркировать Purchase как FAILED при ошибке
-- [ ] Task 2.6: Логировать на уровне CRITICAL при ошибке зачисления после оплаты с transaction_id
+- [x] Task 2.1: Тесты — повторный successful_payment с тем же transaction_id не создаёт дубликат
+- [x] Task 2.2: Тесты — ошибка в `_credit_package`/`_activate_subscription` → Purchase маркируется FAILED
+- [x] Task 2.3: Тесты — `handle_successful_payment` когда purchase не найден (test gap #20)
+- [x] Task 2.4: Добавить проверку `provider_transaction_id` в `handle_successful_payment` перед начислением
+- [x] Task 2.5: Обернуть `_credit_package`/`_activate_subscription` в try/except → маркировать Purchase как FAILED при ошибке
+- [x] Task 2.6: Логировать на уровне CRITICAL при ошибке зачисления после оплаты с transaction_id
 
 ### Verification
 
-- [ ] Тесты Phase 2 проходят
-- [ ] Идемпотентность: повторный вызов с тем же transaction_id → no-op
+- [x] Тесты Phase 2 проходят
+- [x] Идемпотентность: повторный вызов с тем же transaction_id → no-op
 
 ---
 

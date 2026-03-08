@@ -152,44 +152,70 @@ class PaymentService:
     ) -> bool:
         """Handle a successful payment: credit minutes or activate subscription.
 
-        Finds the pending Purchase record by user_id + type + item_id and marks it completed.
-
-        Args:
-            provider_name: Payment provider identifier
-            user_id: Internal DB user ID
-            payment_type: PACKAGE or SUBSCRIPTION
-            item_id: Package or tier ID
-            provider_transaction_id: Provider-specific transaction ID
-            period: Subscription period (week/month/year), only for SUBSCRIPTION
+        Idempotent: if provider_transaction_id already processed, returns True (no-op).
+        On credit/activation error: marks Purchase as FAILED, logs CRITICAL.
         """
-        success = False
-        if payment_type == PaymentType.PACKAGE:
-            success = await self._credit_package(user_id=user_id, package_id=item_id)
-        elif payment_type == PaymentType.SUBSCRIPTION:
-            success = await self._activate_subscription(
+        # Idempotency check
+        if provider_transaction_id:
+            async with self._repos() as (purchase_repo, _, __, ___):
+                existing = await purchase_repo.find_by_transaction_id(provider_transaction_id)
+                if existing:
+                    logger.info(
+                        "Idempotent skip: transaction %s already processed (purchase %s)",
+                        provider_transaction_id,
+                        existing.id,
+                    )
+                    return True
+
+        # Find pending purchase for error marking
+        pending_purchase = None
+        async with self._repos() as (purchase_repo, _, __, ___):
+            pending_purchase = await purchase_repo.find_pending_purchase(
                 user_id=user_id,
-                tier_id=item_id,
-                payment_provider=provider_name,
-                period=period,
+                purchase_type=payment_type.value,
+                item_id=item_id,
             )
 
-        # Find and mark pending purchase as completed
-        if success:
-            async with self._repos() as (purchase_repo, _, __, ___):
-                purchase = await purchase_repo.find_pending_purchase(
+        # Credit or activate
+        try:
+            success = False
+            if payment_type == PaymentType.PACKAGE:
+                success = await self._credit_package(user_id=user_id, package_id=item_id)
+            elif payment_type == PaymentType.SUBSCRIPTION:
+                success = await self._activate_subscription(
                     user_id=user_id,
-                    purchase_type=payment_type.value,
-                    item_id=item_id,
+                    tier_id=item_id,
+                    payment_provider=provider_name,
+                    period=period,
                 )
-                if purchase:
-                    purchase.provider_transaction_id = provider_transaction_id
-                    await purchase_repo.mark_completed(purchase)
-                    logger.info(f"Marked purchase {purchase.id} as completed")
-                else:
-                    logger.warning(
-                        f"No pending purchase found for user {user_id}, "
-                        f"type={payment_type.value}, item={item_id}"
-                    )
+        except Exception as e:
+            logger.critical(
+                "Payment credited but fulfillment FAILED: transaction=%s user=%s type=%s item=%s error=%s",
+                provider_transaction_id,
+                user_id,
+                payment_type.value,
+                item_id,
+                e,
+                exc_info=True,
+            )
+            if pending_purchase:
+                async with self._repos() as (purchase_repo, _, __, ___):
+                    await purchase_repo.mark_failed(pending_purchase)
+            return False
+
+        # Mark purchase completed
+        if success and pending_purchase:
+            async with self._repos() as (purchase_repo, _, __, ___):
+                pending_purchase.provider_transaction_id = provider_transaction_id
+                await purchase_repo.mark_completed(pending_purchase)
+                logger.info("Marked purchase %s as completed", pending_purchase.id)
+        elif success and not pending_purchase:
+            logger.warning(
+                "No pending purchase found for user %s, type=%s, item=%s",
+                user_id,
+                payment_type.value,
+                item_id,
+            )
 
         return success
 
