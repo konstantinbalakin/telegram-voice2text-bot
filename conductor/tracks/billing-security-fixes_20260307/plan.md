@@ -79,16 +79,16 @@
 
 ### Tasks
 
-- [ ] Task 4.1: Тесты — параллельные запросы одного пользователя не приводят к overspend
-- [ ] Task 4.2: Добавить `asyncio.Lock` по user_id в `BillingService.deduct_minutes` для сериализации списаний
-- [ ] Task 4.3: Заменить `rollback()` на `begin_nested()` (savepoint) в `DailyUsageRepository.get_or_create`
-- [ ] Task 4.4: `deduct_minutes` — возвращать shortfall как часть результата (вместо тихого warning)
-- [ ] Task 4.5: Переместить `deduct_minutes` в orchestrator ДО отправки результата (если не сделано в Phase 3)
+- [x] Task 4.1: Тесты — параллельные запросы одного пользователя не приводят к overspend
+- [x] Task 4.2: Добавить `asyncio.Lock` по user_id в `BillingService.deduct_minutes` для сериализации списаний
+- [x] Task 4.3: Заменить `rollback()` на `begin_nested()` (savepoint) в `DailyUsageRepository.get_or_create`
+- [x] Task 4.4: `deduct_minutes` — возвращать shortfall как часть результата (вместо тихого warning)
+- [x] Task 4.5: Переместить `deduct_minutes` в orchestrator ДО отправки результата (если не сделано в Phase 3)
 
 ### Verification
 
-- [ ] Тесты Phase 4 проходят
-- [ ] Stress-тест: 2 параллельных вызова → корректный баланс
+- [x] Тесты Phase 4 проходят
+- [x] Stress-тест: 2 параллельных вызова → корректный баланс
 
 ---
 

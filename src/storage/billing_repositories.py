@@ -575,11 +575,10 @@ class DailyUsageRepository:
                 minutes_from_bonus=0.0,
                 minutes_from_package=0.0,
             )
-            self.session.add(usage)
-            await self.session.flush()
+            async with self.session.begin_nested():
+                self.session.add(usage)
             return usage, True
         except IntegrityError:
-            await self.session.rollback()
             result = await self.session.execute(
                 select(DailyUsage).where(
                     and_(

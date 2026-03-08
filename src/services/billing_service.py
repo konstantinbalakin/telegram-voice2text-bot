@@ -2,6 +2,7 @@
 Billing Service - core billing logic: limits, deductions, balances.
 """
 
+import asyncio
 import logging
 import math
 from contextlib import asynccontextmanager
@@ -58,6 +59,7 @@ class BillingService:
         self._deduction_log_repo = deduction_log_repo
         self.billing_enabled = billing_enabled
         self.warning_threshold = warning_threshold
+        self._user_locks: dict[int, asyncio.Lock] = {}
 
     @asynccontextmanager
     async def _repos(
@@ -194,18 +196,32 @@ class BillingService:
             f"доступно: {balance.total_available:.1f} мин."
         )
 
+    def _get_user_lock(self, user_id: int) -> asyncio.Lock:
+        """Get or create per-user asyncio.Lock for serializing deductions."""
+        if user_id not in self._user_locks:
+            self._user_locks[user_id] = asyncio.Lock()
+        return self._user_locks[user_id]
+
     async def deduct_minutes(self, user_id: int, usage_id: int, duration_minutes: float) -> dict:
         """Deduct minutes from user's sources in priority order: daily -> bonus -> package.
 
         Duration is rounded up to tenths of a minute (e.g. 1.03 -> 1.1).
         Deduction order within bonus/package: oldest first (FIFO).
-        Logs a warning if the full amount cannot be covered.
+        Uses per-user asyncio.Lock to prevent race conditions.
 
-        Returns dict with keys: from_daily, from_bonus, from_package.
+        Returns dict with keys: from_daily, from_bonus, from_package, shortfall.
         """
         if not self.billing_enabled:
-            return {"from_daily": 0.0, "from_bonus": 0.0, "from_package": 0.0}
+            return {"from_daily": 0.0, "from_bonus": 0.0, "from_package": 0.0, "shortfall": 0.0}
 
+        lock = self._get_user_lock(user_id)
+        async with lock:
+            return await self._deduct_minutes_locked(user_id, usage_id, duration_minutes)
+
+    async def _deduct_minutes_locked(
+        self, user_id: int, usage_id: int, duration_minutes: float
+    ) -> dict:
+        """Internal deduction logic, called under per-user lock."""
         duration = self.round_minutes(duration_minutes)
         remaining = duration
 
@@ -291,6 +307,7 @@ class BillingService:
             "from_daily": from_daily,
             "from_bonus": from_bonus,
             "from_package": from_package,
+            "shortfall": remaining,
         }
 
     async def should_warn_limit(self, user_id: int) -> bool:
