@@ -121,21 +121,21 @@
 
 ### Tasks
 
-- [ ] Task 6.1: Тесты — денежные поля хранят Integer (копейки), minutes как Float с round
-- [ ] Task 6.2: Тесты — CHECK constraints отклоняют отрицательные значения
-- [ ] Task 6.3: Тесты — UserBalance.daily_remaining и total_available = computed properties
-- [ ] Task 6.4: Alembic миграция: `amount_rub`, `price_rub`, `Purchase.amount` → Integer (копейки)
-- [ ] Task 6.5: Обновить все сервисы для работы с копейками вместо рублей
-- [ ] Task 6.6: Alembic миграция: добавить CHECK constraints (`minutes_remaining >= 0`, `amount >= 0`, `daily_limit_minutes > 0`)
-- [ ] Task 6.7: Рефакторинг UserBalance — `daily_remaining` и `total_available` как `@property`, `frozen=True`, `__post_init__` валидация
-- [ ] Task 6.8: Alembic миграция: partial unique index на `UserSubscription(user_id)` WHERE `status = 'active'`
-- [ ] Task 6.9: Удалить/использовать `Currency` enum в `PaymentRequest.currency` и `Purchase.currency`
+- [x] Task 6.1: Тесты — денежные поля хранят Integer (копейки), minutes как Float с round
+- [x] Task 6.2: Тесты — CHECK constraints отклоняют отрицательные значения
+- [x] Task 6.3: Тесты — UserBalance.daily_remaining и total_available = computed properties
+- [x] Task 6.4: Alembic миграция: `amount_rub`, `price_rub`, `Purchase.amount` → Integer (копейки)
+- [x] Task 6.5: Обновить все сервисы для работы с копейками вместо рублей
+- [x] Task 6.6: Alembic миграция: добавить CHECK constraints (`minutes_remaining >= 0`, `amount >= 0`, `daily_limit_minutes > 0`)
+- [x] Task 6.7: Рефакторинг UserBalance — `daily_remaining` и `total_available` как `@property`, `frozen=True`, `__post_init__` валидация
+- [x] Task 6.8: Alembic миграция: partial unique index на `UserSubscription(user_id)` WHERE `status = 'active'`
+- [x] Task 6.9: Удалить/использовать `Currency` enum в `PaymentRequest.currency` и `Purchase.currency`
 
 ### Verification
 
-- [ ] Тесты Phase 6 проходят
-- [ ] Миграции обратимы (`upgrade` + `downgrade`)
-- [ ] Все суммы в БД хранятся как Integer
+- [x] Тесты Phase 6 проходят
+- [x] Миграции обратимы (`upgrade` + `downgrade`)
+- [x] Все суммы в БД хранятся как Integer
 
 ---
 

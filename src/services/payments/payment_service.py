@@ -129,15 +129,12 @@ class PaymentService:
             )
 
         async with self._repos() as (purchase_repo, _, __, ___):
-            # Store amount in rubles (Telegram sends RUB in kopecks)
-            store_amount = request.amount / 100 if request.currency == "RUB" else request.amount
-
-            # Create purchase record
+            # Create purchase record (amount is in kopecks for RUB, raw for Stars)
             purchase = await purchase_repo.create(
                 user_id=request.user_id,
                 purchase_type=request.payment_type.value,
                 item_id=request.item_id,
-                amount=store_amount,
+                amount=int(request.amount),
                 currency=request.currency,
                 payment_provider=provider_name,
             )

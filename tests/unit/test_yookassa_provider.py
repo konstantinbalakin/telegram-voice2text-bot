@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from telegram import Bot
 
-from src.services.payments.base import PaymentRequest, PaymentType
+from src.services.payments.base import Currency, PaymentRequest, PaymentType
 from src.services.payments.yookassa_provider import YooKassaProvider
 
 
@@ -50,7 +50,7 @@ async def test_create_payment_creates_invoice_link():
         payment_type=PaymentType.PACKAGE,
         item_id=42,
         amount=14900,  # Amount in kopecks (149.00 RUB)
-        currency="RUB",
+        currency=Currency.RUB,
         description="50 минут транскрипции",
     )
 
@@ -79,7 +79,7 @@ async def test_create_payment_subscription():
         payment_type=PaymentType.SUBSCRIPTION,
         item_id=2,
         amount=29900,
-        currency="RUB",
+        currency=Currency.RUB,
         description="Подписка на месяц",
     )
 
@@ -104,7 +104,7 @@ async def test_create_payment_below_minimum_amount():
         payment_type=PaymentType.PACKAGE,
         item_id=1,
         amount=4900,  # 49 RUB — ниже минимума 87.73 RUB (8773 копеек)
-        currency="RUB",
+        currency=Currency.RUB,
         description="Test below minimum",
     )
 
@@ -127,7 +127,7 @@ async def test_create_payment_failure():
         payment_type=PaymentType.PACKAGE,
         item_id=1,
         amount=14900,
-        currency="RUB",
+        currency=Currency.RUB,
         description="Test",
     )
 

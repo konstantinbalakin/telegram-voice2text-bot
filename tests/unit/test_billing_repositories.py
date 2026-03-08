@@ -192,7 +192,7 @@ async def test_subscription_create_price(async_session):
     repo = SubscriptionRepository(async_session)
 
     price = await repo.create_price(
-        tier_id=tier.id, period="month", amount_rub=299.0, amount_stars=150
+        tier_id=tier.id, period="month", amount_rub=29900, amount_stars=150
     )
 
     assert price.id is not None
@@ -205,8 +205,8 @@ async def test_subscription_get_tier_prices(async_session):
     """Test getting prices for a tier."""
     tier = await _create_tier(async_session)
     repo = SubscriptionRepository(async_session)
-    await repo.create_price(tier_id=tier.id, period="week", amount_rub=99.0, amount_stars=50)
-    await repo.create_price(tier_id=tier.id, period="month", amount_rub=299.0, amount_stars=150)
+    await repo.create_price(tier_id=tier.id, period="week", amount_rub=9900, amount_stars=50)
+    await repo.create_price(tier_id=tier.id, period="month", amount_rub=29900, amount_stars=150)
 
     prices = await repo.get_tier_prices(tier_id=tier.id)
     assert len(prices) == 2
@@ -292,7 +292,7 @@ async def test_subscription_cancel(async_session):
 async def test_minute_package_create(async_session):
     """Test creating a minute package."""
     repo = MinutePackageRepository(async_session)
-    package = await repo.create(name="50 минут", minutes=50.0, price_rub=149.0, price_stars=75)
+    package = await repo.create(name="50 минут", minutes=50.0, price_rub=14900, price_stars=75)
 
     assert package.id is not None
     assert package.name == "50 минут"
@@ -303,12 +303,12 @@ async def test_minute_package_create(async_session):
 async def test_minute_package_get_active(async_session):
     """Test getting active packages sorted by display_order."""
     repo = MinutePackageRepository(async_session)
-    await repo.create(name="50 мин", minutes=50.0, price_rub=149.0, price_stars=75, display_order=1)
+    await repo.create(name="50 мин", minutes=50.0, price_rub=14900, price_stars=75, display_order=1)
     await repo.create(
-        name="100 мин", minutes=100.0, price_rub=249.0, price_stars=125, display_order=2
+        name="100 мин", minutes=100.0, price_rub=24900, price_stars=125, display_order=2
     )
     await repo.create(
-        name="Archived", minutes=10.0, price_rub=49.0, price_stars=25, is_active=False
+        name="Archived", minutes=10.0, price_rub=4900, price_stars=25, is_active=False
     )
 
     packages = await repo.get_active_packages()
@@ -320,7 +320,7 @@ async def test_minute_package_get_active(async_session):
 async def test_minute_package_get_by_id(async_session):
     """Test getting a package by ID."""
     repo = MinutePackageRepository(async_session)
-    package = await repo.create(name="50 мин", minutes=50.0, price_rub=149.0, price_stars=75)
+    package = await repo.create(name="50 мин", minutes=50.0, price_rub=14900, price_stars=75)
 
     found = await repo.get_by_id(package.id)
     assert found is not None
@@ -505,7 +505,7 @@ async def test_purchase_create(async_session):
         user_id=user.id,
         purchase_type="package",
         item_id=1,
-        amount=149.0,
+        amount=14900,
         currency="RUB",
         payment_provider="telegram_stars",
     )
@@ -524,7 +524,7 @@ async def test_purchase_mark_completed(async_session):
         user_id=user.id,
         purchase_type="package",
         item_id=1,
-        amount=149.0,
+        amount=14900,
         currency="RUB",
         payment_provider="telegram_stars",
     )
@@ -544,7 +544,7 @@ async def test_purchase_get_by_user(async_session):
         user_id=user.id,
         purchase_type="package",
         item_id=1,
-        amount=149.0,
+        amount=14900,
         currency="RUB",
         payment_provider="telegram_stars",
     )
@@ -552,7 +552,7 @@ async def test_purchase_get_by_user(async_session):
         user_id=user.id,
         purchase_type="subscription",
         item_id=2,
-        amount=299.0,
+        amount=29900,
         currency="RUB",
         payment_provider="yookassa",
     )

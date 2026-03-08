@@ -163,7 +163,7 @@ class BillingCommands:
             if prices:
                 for price in prices:
                     period_text = period_label(price.period)
-                    btn_text = f"{tier.name} ({period_text}) — {price.amount_rub:.0f} ₽"
+                    btn_text = f"{tier.name} ({period_text}) — {price.amount_rub / 100:.0f} ₽"
                     buttons.append(
                         [
                             InlineKeyboardButton(
@@ -221,8 +221,8 @@ class BillingCommands:
         buttons: list[list[InlineKeyboardButton]] = []
 
         for pkg in packages:
-            lines.append(f"• {pkg.name} ({pkg.minutes:.0f} мин) — {pkg.price_rub:.0f} ₽")
-            btn_text = f"{pkg.name} — {pkg.price_rub:.0f} ₽"
+            lines.append(f"• {pkg.name} ({pkg.minutes:.0f} мин) — {pkg.price_rub / 100:.0f} ₽")
+            btn_text = f"{pkg.name} — {pkg.price_rub / 100:.0f} ₽"
             buttons.append(
                 [
                     InlineKeyboardButton(
@@ -302,12 +302,14 @@ class BillingCommands:
             elif tier.description:
                 lines.append(f"\n📝 {tier.description}")
 
-            lines.append(f"\n💰 Стоимость: {price.amount_rub:.0f} ₽ / {price.amount_stars} ⭐")
+            lines.append(
+                f"\n💰 Стоимость: {price.amount_rub / 100:.0f} ₽ / {price.amount_stars} ⭐"
+            )
 
             buttons = [
                 [
                     InlineKeyboardButton(
-                        f"🇷🇺 💳 Карта РФ — {price.amount_rub:.0f} ₽",
+                        f"🇷🇺 💳 Карта РФ — {price.amount_rub / 100:.0f} ₽",
                         callback_data=f"sub_card:{tier_id}:{period}",
                     )
                 ],
@@ -355,12 +357,12 @@ class BillingCommands:
             if pkg.description:
                 lines.append(f"\n📝 {pkg.description}")
 
-            lines.append(f"\n💰 Стоимость: {pkg.price_rub:.0f} ₽ / {pkg.price_stars} ⭐")
+            lines.append(f"\n💰 Стоимость: {pkg.price_rub / 100:.0f} ₽ / {pkg.price_stars} ⭐")
 
             buttons = [
                 [
                     InlineKeyboardButton(
-                        f"🇷🇺 💳 Карта РФ — {pkg.price_rub:.0f} ₽",
+                        f"🇷🇺 💳 Карта РФ — {pkg.price_rub / 100:.0f} ₽",
                         callback_data=f"pkg_card:{pkg.id}",
                     )
                 ],

@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.services.payments.telegram_stars import TelegramStarsProvider
 from src.services.payments.yookassa_provider import YooKassaProvider
-from src.services.payments.base import PaymentRequest, PaymentType
+from src.services.payments.base import Currency, PaymentRequest, PaymentType
 
 
 # =============================================================================
@@ -31,7 +31,7 @@ async def test_telegram_stars_error_no_internal_details():
         item_id=1,
         user_id=123,
         amount=100,
-        currency="XTR",
+        currency=Currency.XTR,
         description="Test",
     )
 
@@ -56,7 +56,7 @@ async def test_yookassa_error_no_internal_details():
         item_id=1,
         user_id=123,
         amount=10000,
-        currency="RUB",
+        currency=Currency.RUB,
         description="Test",
     )
 

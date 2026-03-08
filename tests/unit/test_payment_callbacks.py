@@ -81,7 +81,7 @@ async def test_buy_package_stars_callback_creates_payment():
     with (
         patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
         patch.object(
-            handlers, "_get_package_price", new_callable=AsyncMock, return_value=(149.0, 25)
+            handlers, "_get_package_price", new_callable=AsyncMock, return_value=(14900, 25)
         ),
         patch.object(
             handlers, "_get_package_name", new_callable=AsyncMock, return_value="30 минут"
@@ -117,7 +117,7 @@ async def test_buy_subscription_stars_callback_creates_payment():
     with (
         patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
         patch.object(
-            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(299.0, 50)
+            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(29900, 50)
         ),
         patch.object(handlers, "_get_tier_name", new_callable=AsyncMock, return_value="Pro"),
         patch.object(
@@ -154,7 +154,7 @@ async def test_buy_package_card_callback_creates_payment():
     with (
         patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
         patch.object(
-            handlers, "_get_package_price", new_callable=AsyncMock, return_value=(149.0, 25)
+            handlers, "_get_package_price", new_callable=AsyncMock, return_value=(14900, 25)
         ),
         patch.object(
             handlers, "_get_package_name", new_callable=AsyncMock, return_value="30 минут"
@@ -188,7 +188,7 @@ async def test_buy_package_card_callback_error_has_back_button():
     with (
         patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
         patch.object(
-            handlers, "_get_package_price", new_callable=AsyncMock, return_value=(149.0, 25)
+            handlers, "_get_package_price", new_callable=AsyncMock, return_value=(14900, 25)
         ),
         patch.object(
             handlers, "_get_package_name", new_callable=AsyncMock, return_value="30 минут"
@@ -227,7 +227,7 @@ async def test_buy_subscription_card_callback_creates_payment():
     with (
         patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
         patch.object(
-            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(299.0, 50)
+            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(29900, 50)
         ),
         patch.object(handlers, "_get_tier_name", new_callable=AsyncMock, return_value="Pro"),
         patch.object(
@@ -262,7 +262,7 @@ async def test_buy_subscription_card_callback_error_has_back_button():
     with (
         patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
         patch.object(
-            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(299.0, 50)
+            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(29900, 50)
         ),
         patch.object(handlers, "_get_tier_name", new_callable=AsyncMock, return_value="Pro"),
         patch.object(
@@ -299,7 +299,7 @@ async def test_buy_package_stars_error_has_back_button():
     with (
         patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
         patch.object(
-            handlers, "_get_package_price", new_callable=AsyncMock, return_value=(149.0, 25)
+            handlers, "_get_package_price", new_callable=AsyncMock, return_value=(14900, 25)
         ),
         patch.object(
             handlers, "_get_package_name", new_callable=AsyncMock, return_value="30 минут"
@@ -335,7 +335,7 @@ async def test_buy_subscription_stars_error_has_back_button():
     with (
         patch.object(handlers, "_get_db_user_id", new_callable=AsyncMock, return_value=999),
         patch.object(
-            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(299.0, 50)
+            handlers, "_get_subscription_price", new_callable=AsyncMock, return_value=(29900, 50)
         ),
         patch.object(handlers, "_get_tier_name", new_callable=AsyncMock, return_value="Pro"),
         patch.object(

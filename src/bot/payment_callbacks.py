@@ -9,6 +9,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from src.services.payments.base import (
+    Currency,
     PaymentRequest,
     PaymentType,
     parse_payment_payload,
@@ -52,8 +53,8 @@ class PaymentCallbackHandlers:
                 raise ValueError(f"User {telegram_user_id} not found in database")
             return db_user.id
 
-    async def _get_package_price(self, package_id: int) -> tuple[float, int]:
-        """Get package price (rub, stars). Raises ValueError if not found."""
+    async def _get_package_price(self, package_id: int) -> tuple[int, int]:
+        """Get package price (rub kopecks, stars). Raises ValueError if not found."""
         async with get_session() as session:
             repo = MinutePackageRepository(session)
             package = await repo.get_by_id(package_id)
@@ -68,8 +69,8 @@ class PaymentCallbackHandlers:
             package = await repo.get_by_id(package_id)
             return package.description if package else None
 
-    async def _get_subscription_price(self, tier_id: int, period: str) -> tuple[float, int]:
-        """Get subscription price (rub, stars) for tier+period. Raises ValueError if not found."""
+    async def _get_subscription_price(self, tier_id: int, period: str) -> tuple[int, int]:
+        """Get subscription price (rub kopecks, stars) for tier+period. Raises ValueError if not found."""
         async with get_session() as session:
             repo = SubscriptionRepository(session)
             prices = await repo.get_tier_prices(tier_id=tier_id)
@@ -138,7 +139,7 @@ class PaymentCallbackHandlers:
                 payment_type=PaymentType.PACKAGE,
                 item_id=package_id,
                 amount=price_stars,
-                currency="XTR",
+                currency=Currency.XTR,
                 title=f"Пакет «{pkg_name}»",
                 description=pkg_desc or f"Дополнительные {pkg_name} для транскрибации",
                 price_label=pkg_name,
@@ -203,7 +204,7 @@ class PaymentCallbackHandlers:
                 payment_type=PaymentType.SUBSCRIPTION,
                 item_id=tier_id,
                 amount=price_stars,
-                currency="XTR",
+                currency=Currency.XTR,
                 title=f"Подписка {tier_name}",
                 description=sub_desc or f"Тариф «{tier_name}» — {period_ru.lower()}",
                 price_label=f"{tier_name} ({period_ru})",
@@ -261,7 +262,6 @@ class PaymentCallbackHandlers:
             telegram_user_id = update.effective_user.id  # type: ignore[union-attr]
             db_user_id = await self._get_db_user_id(telegram_user_id)
             price_rub, _ = await self._get_package_price(package_id)
-            amount_kopecks = int(price_rub * 100)
             pkg_name = await self._get_package_name(package_id)
             pkg_desc = await self._get_package_description(package_id)
 
@@ -269,8 +269,8 @@ class PaymentCallbackHandlers:
                 user_id=db_user_id,
                 payment_type=PaymentType.PACKAGE,
                 item_id=package_id,
-                amount=amount_kopecks,
-                currency="RUB",
+                amount=price_rub,
+                currency=Currency.RUB,
                 title=f"Пакет «{pkg_name}»",
                 description=pkg_desc or f"Дополнительные {pkg_name} для транскрибации",
                 price_label=pkg_name,
@@ -326,7 +326,6 @@ class PaymentCallbackHandlers:
             telegram_user_id = update.effective_user.id  # type: ignore[union-attr]
             db_user_id = await self._get_db_user_id(telegram_user_id)
             price_rub, _ = await self._get_subscription_price(tier_id, period)
-            amount_kopecks = int(price_rub * 100)
             tier_name = await self._get_tier_name(tier_id)
             period_ru = period_label(period)
             sub_desc = await self._get_subscription_description(tier_id, period)
@@ -335,8 +334,8 @@ class PaymentCallbackHandlers:
                 user_id=db_user_id,
                 payment_type=PaymentType.SUBSCRIPTION,
                 item_id=tier_id,
-                amount=amount_kopecks,
-                currency="RUB",
+                amount=price_rub,
+                currency=Currency.RUB,
                 title=f"Подписка {tier_name}",
                 description=sub_desc or f"Тариф «{tier_name}» — {period_ru.lower()}",
                 price_label=f"{tier_name} ({period_ru})",
@@ -407,9 +406,7 @@ def pre_checkout_query_handler(payment_service: "PaymentService") -> _Handler:
                         logger.warning("Pre-checkout: package %d not found", item_id)
                         await query.answer(ok=False, error_message="Товар не найден")
                         return
-                    expected = (
-                        package.price_stars if currency == "XTR" else int(package.price_rub * 100)
-                    )
+                    expected = package.price_stars if currency == "XTR" else package.price_rub
                 elif payment_type == PaymentType.SUBSCRIPTION:
                     sub_repo = SubscriptionRepository(session)
                     period = payload_data.get("period", "month")
@@ -424,9 +421,7 @@ def pre_checkout_query_handler(payment_service: "PaymentService") -> _Handler:
                         await query.answer(ok=False, error_message="Товар не найден")
                         return
                     price = matching[0]
-                    expected = (
-                        price.amount_stars if currency == "XTR" else int(price.amount_rub * 100)
-                    )
+                    expected = price.amount_stars if currency == "XTR" else price.amount_rub
                 else:
                     await query.answer(ok=False, error_message="Неизвестный тип платежа")
                     return

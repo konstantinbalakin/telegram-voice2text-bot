@@ -76,10 +76,8 @@ class TestBalanceCommand:
             return_value=UserBalance(
                 daily_limit=10.0,
                 daily_used=3.5,
-                daily_remaining=6.5,
                 bonus_minutes=45.0,
                 package_minutes=100.0,
-                total_available=151.5,
             )
         )
 
@@ -123,10 +121,8 @@ class TestBalanceCommand:
             return_value=UserBalance(
                 daily_limit=10.0,
                 daily_used=0.0,
-                daily_remaining=10.0,
                 bonus_minutes=0.0,
                 package_minutes=0.0,
-                total_available=10.0,
             )
         )
 
@@ -200,10 +196,8 @@ class TestBalanceCommand:
             return_value=UserBalance(
                 daily_limit=30.0,
                 daily_used=5.0,
-                daily_remaining=25.0,
                 bonus_minutes=0.0,
                 package_minutes=0.0,
-                total_available=25.0,
             )
         )
 
@@ -260,10 +254,8 @@ class TestBuyCommand:
             return_value=UserBalance(
                 daily_limit=10.0,
                 daily_used=0.0,
-                daily_remaining=10.0,
                 bonus_minutes=0.0,
                 package_minutes=0.0,
-                total_available=10.0,
             )
         )
 
@@ -320,7 +312,7 @@ class TestSubscriptionsCatalog:
 
         price = MagicMock()
         price.period = "month"
-        price.amount_rub = 299.0
+        price.amount_rub = 29900
         price.amount_stars = 150
 
         subscription_service = AsyncMock()
@@ -385,7 +377,7 @@ class TestPackagesCatalog:
         pkg.id = 1
         pkg.name = "50 минут"
         pkg.minutes = 50
-        pkg.price_rub = 149.0
+        pkg.price_rub = 14900
         pkg.price_stars = 75
 
         payment_service = AsyncMock()
@@ -451,7 +443,7 @@ class TestSubscriptionDetail:
 
         mock_price = MagicMock()
         mock_price.period = "week"
-        mock_price.amount_rub = 99.0
+        mock_price.amount_rub = 9900
         mock_price.amount_stars = 50
         mock_price.description = "30 мин/день в течение недели"
 
@@ -497,7 +489,7 @@ class TestPackageDetail:
         mock_pkg.id = 1
         mock_pkg.name = "50 минут"
         mock_pkg.minutes = 50
-        mock_pkg.price_rub = 149.0
+        mock_pkg.price_rub = 14900
         mock_pkg.price_stars = 75
         mock_pkg.description = "50 дополнительных минут транскрибации"
 
@@ -622,10 +614,8 @@ class TestBackToMainCallback:
             return_value=UserBalance(
                 daily_limit=10.0,
                 daily_used=0.0,
-                daily_remaining=10.0,
                 bonus_minutes=0.0,
                 package_minutes=0.0,
-                total_available=10.0,
             )
         )
 

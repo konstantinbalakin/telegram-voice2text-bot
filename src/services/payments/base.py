@@ -82,18 +82,37 @@ class Currency(str, Enum):
 # ── Data classes ─────────────────────────────────────────────────────
 
 
-@dataclass
+@dataclass(frozen=True)
 class UserBalance:
-    """User's minute balance breakdown."""
+    """User's minute balance breakdown.
+
+    daily_remaining and total_available are computed properties.
+    """
 
     daily_limit: float
     daily_used: float
-    daily_remaining: float
     bonus_minutes: float
     package_minutes: float
-    total_available: float
     bonus_expires_at: Optional[datetime] = field(default=None)
     package_expires_at: Optional[datetime] = field(default=None)
+
+    def __post_init__(self) -> None:
+        if self.daily_limit < 0:
+            raise ValueError(f"daily_limit must be >= 0, got {self.daily_limit}")
+        if self.daily_used < 0:
+            raise ValueError(f"daily_used must be >= 0, got {self.daily_used}")
+        if self.bonus_minutes < 0:
+            raise ValueError(f"bonus_minutes must be >= 0, got {self.bonus_minutes}")
+        if self.package_minutes < 0:
+            raise ValueError(f"package_minutes must be >= 0, got {self.package_minutes}")
+
+    @property
+    def daily_remaining(self) -> float:
+        return max(0.0, self.daily_limit - self.daily_used)
+
+    @property
+    def total_available(self) -> float:
+        return self.daily_remaining + self.bonus_minutes + self.package_minutes
 
 
 @dataclass
@@ -103,8 +122,8 @@ class PaymentRequest:
     user_id: int
     payment_type: PaymentType
     item_id: int
-    amount: float
-    currency: str
+    amount: int
+    currency: Currency
     description: str
     title: Optional[str] = None
     price_label: Optional[str] = None

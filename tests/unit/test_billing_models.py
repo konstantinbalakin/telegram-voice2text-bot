@@ -133,7 +133,7 @@ async def test_subscription_price_creation(async_session):
     price = SubscriptionPrice(
         tier_id=tier.id,
         period="month",
-        amount_rub=299.0,
+        amount_rub=29900,
         amount_stars=150,
         is_active=True,
     )
@@ -143,7 +143,7 @@ async def test_subscription_price_creation(async_session):
     assert price.id is not None
     assert price.tier_id == tier.id
     assert price.period == "month"
-    assert price.amount_rub == 299.0
+    assert price.amount_rub == 29900
     assert price.amount_stars == 150
 
 
@@ -153,9 +153,9 @@ async def test_subscription_price_periods(async_session):
     tier = await _create_tier(async_session)
 
     periods = [
-        ("week", 99.0, 50),
-        ("month", 299.0, 150),
-        ("year", 2499.0, 1200),
+        ("week", 9900, 50),
+        ("month", 29900, 150),
+        ("year", 249900, 1200),
     ]
     for period, rub, stars in periods:
         price = SubscriptionPrice(
@@ -239,7 +239,7 @@ async def test_minute_package_creation(async_session):
     package = MinutePackage(
         name="50 минут",
         minutes=50.0,
-        price_rub=149.0,
+        price_rub=14900,
         price_stars=75,
         display_order=1,
         is_active=True,
@@ -250,7 +250,7 @@ async def test_minute_package_creation(async_session):
     assert package.id is not None
     assert package.name == "50 минут"
     assert package.minutes == 50.0
-    assert package.price_rub == 149.0
+    assert package.price_rub == 14900
 
 
 # === UserMinuteBalance Tests ===
@@ -352,7 +352,7 @@ async def test_purchase_package(async_session):
         user_id=user.id,
         purchase_type="package",
         item_id=1,
-        amount=149.0,
+        amount=14900,
         currency="RUB",
         payment_provider="telegram_stars",
         status="completed",
@@ -376,7 +376,7 @@ async def test_purchase_subscription(async_session):
         user_id=user.id,
         purchase_type="subscription",
         item_id=1,
-        amount=299.0,
+        amount=29900,
         currency="RUB",
         payment_provider="yookassa",
         provider_transaction_id="yoo_tx_123",
@@ -453,7 +453,7 @@ async def test_tier_prices_relationship(async_session):
     """Test relationship between SubscriptionTier and SubscriptionPrice."""
     tier = await _create_tier(async_session)
 
-    for period, rub, stars in [("week", 99.0, 50), ("month", 299.0, 150)]:
+    for period, rub, stars in [("week", 9900, 50), ("month", 29900, 150)]:
         price = SubscriptionPrice(
             tier_id=tier.id, period=period, amount_rub=rub, amount_stars=stars, is_active=True
         )

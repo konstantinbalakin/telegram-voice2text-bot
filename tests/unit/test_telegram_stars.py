@@ -5,7 +5,7 @@ Tests for TelegramStarsProvider (Phase 8)
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.services.payments.base import PaymentRequest, PaymentType
+from src.services.payments.base import Currency, PaymentRequest, PaymentType
 from src.services.payments.telegram_stars import TelegramStarsProvider
 
 
@@ -47,7 +47,7 @@ async def test_create_invoice_success():
         payment_type=PaymentType.PACKAGE,
         item_id=1,
         amount=75,  # Stars amount
-        currency="XTR",
+        currency=Currency.XTR,
         description="50 minutes package",
     )
 
@@ -68,7 +68,7 @@ async def test_create_invoice_failure():
         payment_type=PaymentType.PACKAGE,
         item_id=1,
         amount=75,
-        currency="XTR",
+        currency=Currency.XTR,
         description="50 minutes",
     )
 
@@ -88,7 +88,7 @@ async def test_create_subscription_invoice():
         payment_type=PaymentType.SUBSCRIPTION,
         item_id=1,
         amount=150,
-        currency="XTR",
+        currency=Currency.XTR,
         description="Pro subscription (month)",
     )
 

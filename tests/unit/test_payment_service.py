@@ -6,6 +6,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from src.services.payments.base import (
+    Currency,
     PaymentProvider,
     PaymentRequest,
     PaymentResult,
@@ -68,8 +69,8 @@ def test_payment_request_creation():
         user_id=1,
         payment_type=PaymentType.PACKAGE,
         item_id=1,
-        amount=149.0,
-        currency="RUB",
+        amount=14900,
+        currency=Currency.RUB,
         description="50 minutes package",
     )
     assert request.user_id == 1
@@ -129,8 +130,8 @@ async def test_create_payment_success():
         user_id=1,
         payment_type=PaymentType.PACKAGE,
         item_id=1,
-        amount=149.0,
-        currency="RUB",
+        amount=14900,
+        currency=Currency.RUB,
         description="50 minutes",
     )
 
@@ -149,8 +150,8 @@ async def test_create_payment_unknown_provider():
         user_id=1,
         payment_type=PaymentType.PACKAGE,
         item_id=1,
-        amount=149.0,
-        currency="RUB",
+        amount=14900,
+        currency=Currency.RUB,
         description="50 minutes",
     )
 
@@ -176,8 +177,8 @@ async def test_create_payment_provider_fails():
         user_id=1,
         payment_type=PaymentType.PACKAGE,
         item_id=1,
-        amount=149.0,
-        currency="RUB",
+        amount=14900,
+        currency=Currency.RUB,
         description="50 minutes",
     )
 
@@ -283,8 +284,8 @@ async def test_create_payment_provider_exception_marks_purchase_failed():
         user_id=1,
         payment_type=PaymentType.PACKAGE,
         item_id=1,
-        amount=149.0,
-        currency="RUB",
+        amount=14900,
+        currency=Currency.RUB,
         description="50 minutes",
     )
 
@@ -308,7 +309,7 @@ async def test_get_active_packages_passes_user_id():
     personal_pkg.id = 10
     personal_pkg.name = "VIP пакет"
     personal_pkg.minutes = 100.0
-    personal_pkg.price_rub = 99.0
+    personal_pkg.price_rub = 9900
     mocks["package_repo"].get_effective_packages.return_value = [personal_pkg]
 
     packages = await service.get_active_packages(user_id=42)

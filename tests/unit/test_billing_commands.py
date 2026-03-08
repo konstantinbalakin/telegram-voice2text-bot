@@ -43,7 +43,7 @@ def _mock_price(
     price_id: int = 1,
     tier_id: int = 1,
     period: str = "month",
-    amount_rub: float = 299.0,
+    amount_rub: int = 29900,
     amount_stars: int = 150,
     description: str | None = None,
 ) -> MagicMock:
@@ -61,7 +61,7 @@ def _mock_package(
     pkg_id: int = 1,
     name: str = "50 минут",
     minutes: float = 50.0,
-    price_rub: float = 149.0,
+    price_rub: int = 14900,
     price_stars: int = 75,
     description: str | None = None,
 ) -> MagicMock:
@@ -105,7 +105,7 @@ async def test_build_subscriptions_catalog_passes_user_id(mock_get_session: Magi
         tier = _mock_tier(tier_id=1, name="Pro")
         mocks["subscription_service"].get_available_tiers.return_value = [tier]
 
-        personal_price = _mock_price(price_id=10, amount_rub=199.0)
+        personal_price = _mock_price(price_id=10, amount_rub=19900)
         mocks["subscription_service"].get_tier_prices.return_value = [personal_price]
 
         text, markup = await commands._build_subscriptions_catalog(telegram_user_id=100500)
@@ -125,7 +125,7 @@ async def test_build_subscriptions_catalog_without_user_id() -> None:
     tier = _mock_tier(tier_id=1, name="Pro")
     mocks["subscription_service"].get_available_tiers.return_value = [tier]
 
-    global_price = _mock_price(price_id=1, amount_rub=299.0)
+    global_price = _mock_price(price_id=1, amount_rub=29900)
     mocks["subscription_service"].get_tier_prices.return_value = [global_price]
 
     text, markup = await commands._build_subscriptions_catalog()
@@ -156,7 +156,7 @@ async def test_build_packages_catalog_passes_user_id(mock_get_session: MagicMock
     with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
         mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
 
-        personal_pkg = _mock_package(pkg_id=10, name="VIP пакет", price_rub=99.0)
+        personal_pkg = _mock_package(pkg_id=10, name="VIP пакет", price_rub=9900)
         mocks["payment_service"].get_active_packages.return_value = [personal_pkg]
 
         text, markup = await commands._build_packages_catalog(telegram_user_id=100500)
@@ -171,7 +171,7 @@ async def test_build_packages_catalog_without_user_id() -> None:
     """Test that _build_packages_catalog works without telegram_user_id."""
     commands, mocks = _make_billing_commands()
 
-    global_pkg = _mock_package(pkg_id=1, name="50 минут", price_rub=149.0)
+    global_pkg = _mock_package(pkg_id=1, name="50 минут", price_rub=14900)
     mocks["payment_service"].get_active_packages.return_value = [global_pkg]
 
     text, markup = await commands._build_packages_catalog()
@@ -204,10 +204,8 @@ async def test_balance_shows_bonus_expires_at(mock_get_session: MagicMock) -> No
         balance = UserBalance(
             daily_limit=10.0,
             daily_used=0.0,
-            daily_remaining=10.0,
             bonus_minutes=45.0,
             package_minutes=0.0,
-            total_available=55.0,
             bonus_expires_at=datetime(2026, 4, 15, tzinfo=timezone.utc),
             package_expires_at=None,
         )
@@ -238,10 +236,8 @@ async def test_balance_shows_package_expires_at(mock_get_session: MagicMock) -> 
         balance = UserBalance(
             daily_limit=10.0,
             daily_used=0.0,
-            daily_remaining=10.0,
             bonus_minutes=0.0,
             package_minutes=100.0,
-            total_available=110.0,
             bonus_expires_at=None,
             package_expires_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
         )
@@ -272,10 +268,8 @@ async def test_balance_no_expires_when_none(mock_get_session: MagicMock) -> None
         balance = UserBalance(
             daily_limit=10.0,
             daily_used=0.0,
-            daily_remaining=10.0,
             bonus_minutes=45.0,
             package_minutes=0.0,
-            total_available=55.0,
             bonus_expires_at=None,
             package_expires_at=None,
         )

@@ -50,7 +50,7 @@ def _mock_price(
     price_id: int = 1,
     tier_id: int = 1,
     period: str = "month",
-    amount_rub: float = 299.0,
+    amount_rub: int = 29900,
     amount_stars: int = 150,
 ) -> MagicMock:
     price = MagicMock()
@@ -127,8 +127,8 @@ async def test_get_tier_prices():
     """Test getting prices for a tier."""
     service, mocks = _make_subscription_service()
 
-    price_week = _mock_price(price_id=1, period="week", amount_rub=99.0, amount_stars=50)
-    price_month = _mock_price(price_id=2, period="month", amount_rub=299.0, amount_stars=150)
+    price_week = _mock_price(price_id=1, period="week", amount_rub=9900, amount_stars=50)
+    price_month = _mock_price(price_id=2, period="month", amount_rub=29900, amount_stars=150)
     mocks["subscription_repo"].get_effective_prices.return_value = [price_week, price_month]
 
     prices = await service.get_tier_prices(tier_id=1)
@@ -140,12 +140,12 @@ async def test_get_tier_prices_passes_user_id():
     """Test that get_tier_prices passes user_id to get_effective_prices."""
     service, mocks = _make_subscription_service()
 
-    personal_price = _mock_price(price_id=10, period="month", amount_rub=199.0, amount_stars=100)
+    personal_price = _mock_price(price_id=10, period="month", amount_rub=19900, amount_stars=100)
     mocks["subscription_repo"].get_effective_prices.return_value = [personal_price]
 
     prices = await service.get_tier_prices(tier_id=1, user_id=42)
     assert len(prices) == 1
-    assert prices[0].amount_rub == 199.0
+    assert prices[0].amount_rub == 19900
     mocks["subscription_repo"].get_effective_prices.assert_called_once_with(tier_id=1, user_id=42)
 
 
@@ -154,7 +154,7 @@ async def test_get_tier_prices_without_user_id():
     """Test that get_tier_prices works without user_id (backward compat)."""
     service, mocks = _make_subscription_service()
 
-    global_price = _mock_price(price_id=1, period="month", amount_rub=299.0, amount_stars=150)
+    global_price = _mock_price(price_id=1, period="month", amount_rub=29900, amount_stars=150)
     mocks["subscription_repo"].get_effective_prices.return_value = [global_price]
 
     prices = await service.get_tier_prices(tier_id=1)

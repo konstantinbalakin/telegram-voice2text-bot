@@ -86,11 +86,11 @@ async def test_effective_prices_current_price(async_session: AsyncSession) -> No
     tier = await _create_tier(async_session)
     repo = SubscriptionRepository(async_session)
 
-    await repo.create_price(tier_id=tier.id, period="month", amount_rub=299.0, amount_stars=150)
+    await repo.create_price(tier_id=tier.id, period="month", amount_rub=29900, amount_stars=150)
 
     prices = await repo.get_effective_prices(tier_id=tier.id)
     assert len(prices) == 1
-    assert prices[0].amount_rub == 299.0
+    assert prices[0].amount_rub == 29900
 
 
 @pytest.mark.asyncio
@@ -104,7 +104,7 @@ async def test_effective_prices_expired_excluded(async_session: AsyncSession) ->
     expired_price = SubscriptionPrice(
         tier_id=tier.id,
         period="month",
-        amount_rub=199.0,
+        amount_rub=19900,
         amount_stars=100,
         is_active=True,
         valid_from=datetime(2025, 1, 1, tzinfo=timezone.utc),
@@ -128,7 +128,7 @@ async def test_effective_prices_future_excluded(async_session: AsyncSession) -> 
     future_price = SubscriptionPrice(
         tier_id=tier.id,
         period="month",
-        amount_rub=399.0,
+        amount_rub=39900,
         amount_stars=200,
         is_active=True,
         valid_from=datetime(2027, 1, 1, tzinfo=timezone.utc),
@@ -154,7 +154,7 @@ async def test_effective_prices_individual_overrides_global(async_session: Async
     global_price = SubscriptionPrice(
         tier_id=tier.id,
         period="month",
-        amount_rub=299.0,
+        amount_rub=29900,
         amount_stars=150,
         is_active=True,
         valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -164,7 +164,7 @@ async def test_effective_prices_individual_overrides_global(async_session: Async
     individual_price = SubscriptionPrice(
         tier_id=tier.id,
         period="month",
-        amount_rub=199.0,
+        amount_rub=19900,
         amount_stars=100,
         is_active=True,
         valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -176,12 +176,12 @@ async def test_effective_prices_individual_overrides_global(async_session: Async
     # With user_id → individual price
     prices = await repo.get_effective_prices(tier_id=tier.id, user_id=user.id)
     assert len(prices) == 1
-    assert prices[0].amount_rub == 199.0
+    assert prices[0].amount_rub == 19900
 
     # Without user_id → global price
     prices_global = await repo.get_effective_prices(tier_id=tier.id)
     assert len(prices_global) == 1
-    assert prices_global[0].amount_rub == 299.0
+    assert prices_global[0].amount_rub == 29900
 
 
 @pytest.mark.asyncio
@@ -191,11 +191,11 @@ async def test_effective_prices_fallback_to_global(async_session: AsyncSession) 
     tier = await _create_tier(async_session)
     repo = SubscriptionRepository(async_session)
 
-    await repo.create_price(tier_id=tier.id, period="month", amount_rub=299.0, amount_stars=150)
+    await repo.create_price(tier_id=tier.id, period="month", amount_rub=29900, amount_stars=150)
 
     prices = await repo.get_effective_prices(tier_id=tier.id, user_id=user.id)
     assert len(prices) == 1
-    assert prices[0].amount_rub == 299.0
+    assert prices[0].amount_rub == 29900
 
 
 # =============================================================================
@@ -207,7 +207,7 @@ async def test_effective_prices_fallback_to_global(async_session: AsyncSession) 
 async def test_effective_packages_current(async_session: AsyncSession) -> None:
     """Current valid packages are returned."""
     repo = MinutePackageRepository(async_session)
-    await repo.create(name="50 мин", minutes=50.0, price_rub=149.0, price_stars=75)
+    await repo.create(name="50 мин", minutes=50.0, price_rub=14900, price_stars=75)
 
     packages = await repo.get_effective_packages()
     assert len(packages) == 1
@@ -224,7 +224,7 @@ async def test_effective_packages_individual_overrides_global(async_session: Asy
     global_pkg = MinutePackage(
         name="50 мин",
         minutes=50.0,
-        price_rub=149.0,
+        price_rub=14900,
         price_stars=75,
         is_active=True,
         valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -233,7 +233,7 @@ async def test_effective_packages_individual_overrides_global(async_session: Asy
     individual_pkg = MinutePackage(
         name="50 мин VIP",
         minutes=50.0,
-        price_rub=99.0,
+        price_rub=9900,
         price_stars=50,
         is_active=True,
         valid_from=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -245,12 +245,12 @@ async def test_effective_packages_individual_overrides_global(async_session: Asy
     # With user_id → individual
     packages = await repo.get_effective_packages(user_id=user.id)
     assert len(packages) == 1
-    assert packages[0].price_rub == 99.0
+    assert packages[0].price_rub == 9900
 
     # Without user_id → global
     packages_global = await repo.get_effective_packages()
     assert len(packages_global) == 1
-    assert packages_global[0].price_rub == 149.0
+    assert packages_global[0].price_rub == 14900
 
 
 @pytest.mark.asyncio
@@ -301,7 +301,7 @@ async def test_purchase_check_constraint_valid_types(async_session: AsyncSession
             user_id=user.id,
             purchase_type=ptype,
             item_id=1,
-            amount=100.0,
+            amount=10000,
             currency="RUB",
             payment_provider="test",
             status="pending",
@@ -319,7 +319,7 @@ async def test_purchase_check_constraint_invalid_type(async_session: AsyncSessio
         user_id=user.id,
         purchase_type="invalid_type",
         item_id=1,
-        amount=100.0,
+        amount=10000,
         currency="RUB",
         payment_provider="test",
         status="pending",
