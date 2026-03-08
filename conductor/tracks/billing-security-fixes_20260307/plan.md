@@ -145,17 +145,17 @@
 
 ### Tasks
 
-- [ ] Task 7.1: Тест `successful_payment_handler` с невалидным payload → reply "Ошибка" (gap #18)
-- [ ] Task 7.2: Тест конвертации RUB amount в `create_payment` — проверка args в `purchase_repo.create` (gap #19)
-- [ ] Task 7.3: Тест невалидного callback_data формата `"pkg_stars:abc"` → ValueError handled (gap #21)
-- [ ] Task 7.4: Тест `/start` → `grant_welcome_bonus` вызывается; ошибка в bonus не ломает /start (gap #22)
-- [ ] Task 7.5: Тест `successful_payment_handler` с невалидным payment_type → ошибка
-- [ ] Task 7.6: Тест `PaymentResult.__post_init__` — success=True + error_message → ValueError
+- [x] Task 7.1: Тест `successful_payment_handler` с невалидным payload → reply "Ошибка" (gap #18)
+- [x] Task 7.2: Тест конвертации RUB amount в `create_payment` — проверка args в `purchase_repo.create` (gap #19)
+- [x] Task 7.3: Тест невалидного callback_data формата `"pkg_stars:abc"` → ValueError handled (gap #21)
+- [x] Task 7.4: Тест `/start` → `grant_welcome_bonus` вызывается; ошибка в bonus не ломает /start (gap #22)
+- [x] Task 7.5: Тест `successful_payment_handler` с невалидным payment_type → ошибка
+- [x] Task 7.6: Тест `PaymentResult.__post_init__` — success=True + error_message → ValueError
 
 ### Verification
 
-- [ ] Все тесты проходят
-- [ ] Нет пропущенных критических путей
+- [x] Все тесты проходят
+- [x] Нет пропущенных критических путей
 
 ---
 
