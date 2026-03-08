@@ -365,18 +365,30 @@ async def test_buy_subscription_stars_error_has_back_button():
 
 @pytest.mark.asyncio
 async def test_pre_checkout_query_handler_approves():
-    """Test: pre_checkout_query_handler always approves queries."""
+    """Test: pre_checkout_query_handler approves valid payload with correct amount."""
     payment_service = AsyncMock()
     handler = pre_checkout_query_handler(payment_service)
 
     pre_checkout_query = MagicMock()
+    pre_checkout_query.invoice_payload = "package:1:123"
+    pre_checkout_query.total_amount = 25
+    pre_checkout_query.currency = "XTR"
     pre_checkout_query.answer = AsyncMock()
 
     update = MagicMock()
     update.pre_checkout_query = pre_checkout_query
     context = MagicMock()
 
-    await handler(update, context)
+    mock_package = MagicMock()
+    mock_package.price_stars = 25
+
+    with patch("src.bot.payment_callbacks.get_session") as mock_get_session:
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("src.bot.payment_callbacks.MinutePackageRepository") as MockPkgRepo:
+            MockPkgRepo.return_value.get_by_id = AsyncMock(return_value=mock_package)
+            await handler(update, context)
 
     pre_checkout_query.answer.assert_awaited_once_with(ok=True)
 
@@ -400,10 +412,20 @@ async def test_successful_payment_handler_stars():
 
     update = MagicMock()
     update.message = message
-    update.effective_user = User(id=123, is_bot=False, first_name="Test")
+    update.effective_user = User(id=555, is_bot=False, first_name="Test")
     context = MagicMock()
 
-    await handler(update, context)
+    # Mock DB lookup: telegram_id=555 → db_user_id=123 (matches payload)
+    mock_db_user = MagicMock()
+    mock_db_user.id = 123
+
+    with patch("src.bot.payment_callbacks.get_session") as mock_get_session:
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("src.bot.payment_callbacks.UserRepository") as MockUserRepo:
+            MockUserRepo.return_value.get_by_telegram_id = AsyncMock(return_value=mock_db_user)
+            await handler(update, context)
 
     payment_service.handle_successful_payment.assert_awaited_once()
     call_args = payment_service.handle_successful_payment.await_args
@@ -433,10 +455,20 @@ async def test_successful_payment_handler_yookassa():
 
     update = MagicMock()
     update.message = message
-    update.effective_user = User(id=123, is_bot=False, first_name="Test")
+    update.effective_user = User(id=555, is_bot=False, first_name="Test")
     context = MagicMock()
 
-    await handler(update, context)
+    # Mock DB lookup: telegram_id=555 → db_user_id=999 (matches payload)
+    mock_db_user = MagicMock()
+    mock_db_user.id = 999
+
+    with patch("src.bot.payment_callbacks.get_session") as mock_get_session:
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("src.bot.payment_callbacks.UserRepository") as MockUserRepo:
+            MockUserRepo.return_value.get_by_telegram_id = AsyncMock(return_value=mock_db_user)
+            await handler(update, context)
 
     payment_service.handle_successful_payment.assert_awaited_once()
     call_args = payment_service.handle_successful_payment.await_args
@@ -445,3 +477,202 @@ async def test_successful_payment_handler_yookassa():
     assert call_args.kwargs["payment_type"] == PaymentType.SUBSCRIPTION
     assert call_args.kwargs["item_id"] == 2
     assert call_args.kwargs["provider_transaction_id"] == "charge_456"
+
+
+# =============================================================================
+# Phase 1: Security — Pre-checkout validation, user_id verification, period
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_pre_checkout_rejects_malformed_payload():
+    """Task 1.1: pre_checkout_query rejects malformed payload."""
+    payment_service = AsyncMock()
+    handler = pre_checkout_query_handler(payment_service)
+
+    pre_checkout_query = MagicMock()
+    pre_checkout_query.invoice_payload = "garbage"
+    pre_checkout_query.answer = AsyncMock()
+
+    update = MagicMock()
+    update.pre_checkout_query = pre_checkout_query
+    context = MagicMock()
+
+    await handler(update, context)
+
+    pre_checkout_query.answer.assert_awaited_once()
+    call_kwargs = pre_checkout_query.answer.await_args.kwargs
+    assert call_kwargs["ok"] is False
+    assert "error_message" in call_kwargs
+
+
+@pytest.mark.asyncio
+async def test_pre_checkout_rejects_nonexistent_package():
+    """Task 1.1: pre_checkout_query rejects payload referencing non-existent package."""
+    payment_service = AsyncMock()
+    handler = pre_checkout_query_handler(payment_service)
+
+    pre_checkout_query = MagicMock()
+    pre_checkout_query.invoice_payload = "package:9999:123"
+    pre_checkout_query.total_amount = 25
+    pre_checkout_query.currency = "XTR"
+    pre_checkout_query.answer = AsyncMock()
+
+    update = MagicMock()
+    update.pre_checkout_query = pre_checkout_query
+    context = MagicMock()
+
+    with patch("src.bot.payment_callbacks.get_session") as mock_get_session:
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("src.bot.payment_callbacks.MinutePackageRepository") as MockPkgRepo:
+            MockPkgRepo.return_value.get_by_id = AsyncMock(return_value=None)
+            await handler(update, context)
+
+    pre_checkout_query.answer.assert_awaited_once()
+    call_kwargs = pre_checkout_query.answer.await_args.kwargs
+    assert call_kwargs["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_pre_checkout_rejects_wrong_stars_amount():
+    """Task 1.1: pre_checkout_query rejects mismatched Stars amount."""
+    payment_service = AsyncMock()
+    handler = pre_checkout_query_handler(payment_service)
+
+    pre_checkout_query = MagicMock()
+    pre_checkout_query.invoice_payload = "package:1:123"
+    pre_checkout_query.total_amount = 999  # wrong amount
+    pre_checkout_query.currency = "XTR"
+    pre_checkout_query.answer = AsyncMock()
+
+    update = MagicMock()
+    update.pre_checkout_query = pre_checkout_query
+    context = MagicMock()
+
+    mock_package = MagicMock()
+    mock_package.price_stars = 25  # correct amount is 25, sent 999
+
+    with patch("src.bot.payment_callbacks.get_session") as mock_get_session:
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("src.bot.payment_callbacks.MinutePackageRepository") as MockPkgRepo:
+            MockPkgRepo.return_value.get_by_id = AsyncMock(return_value=mock_package)
+            await handler(update, context)
+
+    pre_checkout_query.answer.assert_awaited_once()
+    call_kwargs = pre_checkout_query.answer.await_args.kwargs
+    assert call_kwargs["ok"] is False
+
+
+@pytest.mark.asyncio
+async def test_pre_checkout_approves_valid_package():
+    """Task 1.1: pre_checkout_query approves valid payload with correct amount."""
+    payment_service = AsyncMock()
+    handler = pre_checkout_query_handler(payment_service)
+
+    pre_checkout_query = MagicMock()
+    pre_checkout_query.invoice_payload = "package:1:123"
+    pre_checkout_query.total_amount = 25
+    pre_checkout_query.currency = "XTR"
+    pre_checkout_query.answer = AsyncMock()
+
+    update = MagicMock()
+    update.pre_checkout_query = pre_checkout_query
+    context = MagicMock()
+
+    mock_package = MagicMock()
+    mock_package.price_stars = 25
+
+    with patch("src.bot.payment_callbacks.get_session") as mock_get_session:
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("src.bot.payment_callbacks.MinutePackageRepository") as MockPkgRepo:
+            MockPkgRepo.return_value.get_by_id = AsyncMock(return_value=mock_package)
+            await handler(update, context)
+
+    pre_checkout_query.answer.assert_awaited_once_with(ok=True)
+
+
+@pytest.mark.asyncio
+async def test_successful_payment_rejects_user_id_mismatch():
+    """Task 1.2: successful_payment_handler rejects when effective_user.id != payload user_id."""
+    payment_service = AsyncMock()
+    payment_service.handle_successful_payment = AsyncMock(return_value=True)
+
+    handler = successful_payment_handler(payment_service)
+
+    successful_payment = MagicMock()
+    successful_payment.invoice_payload = "package:1:999"  # user_id=999 in payload
+    successful_payment.telegram_payment_charge_id = "charge_123"
+    successful_payment.currency = "XTR"
+
+    message = MagicMock()
+    message.reply_text = AsyncMock()
+    message.successful_payment = successful_payment
+
+    update = MagicMock()
+    update.message = message
+    # effective_user has telegram_id=555, which maps to db_user_id=777 (not 999)
+    update.effective_user = User(id=555, is_bot=False, first_name="Attacker")
+    context = MagicMock()
+
+    mock_db_user = MagicMock()
+    mock_db_user.id = 777  # DB id differs from payload user_id=999
+
+    with patch("src.bot.payment_callbacks.get_session") as mock_get_session:
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("src.bot.payment_callbacks.UserRepository") as MockUserRepo:
+            MockUserRepo.return_value.get_by_telegram_id = AsyncMock(return_value=mock_db_user)
+            await handler(update, context)
+
+    # Should NOT call handle_successful_payment when user_id doesn't match
+    payment_service.handle_successful_payment.assert_not_awaited()
+    # Should reply with error
+    message.reply_text.assert_awaited_once()
+    reply_text = message.reply_text.await_args.args[0]
+    assert "ошибка" in reply_text.lower() or "Ошибка" in reply_text
+
+
+@pytest.mark.asyncio
+async def test_successful_payment_passes_period_for_subscription():
+    """Task 1.3: successful_payment_handler passes period from payload for subscriptions."""
+    payment_service = AsyncMock()
+    payment_service.handle_successful_payment = AsyncMock(return_value=True)
+
+    handler = successful_payment_handler(payment_service)
+
+    # New payload format with period: subscription:2:999:year
+    successful_payment = MagicMock()
+    successful_payment.invoice_payload = "subscription:2:999:year"
+    successful_payment.telegram_payment_charge_id = "charge_789"
+    successful_payment.currency = "XTR"
+
+    message = MagicMock()
+    message.reply_text = AsyncMock()
+    message.successful_payment = successful_payment
+
+    update = MagicMock()
+    update.message = message
+    update.effective_user = User(id=555, is_bot=False, first_name="Test")
+    context = MagicMock()
+
+    mock_db_user = MagicMock()
+    mock_db_user.id = 999  # matches payload user_id
+
+    with patch("src.bot.payment_callbacks.get_session") as mock_get_session:
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch("src.bot.payment_callbacks.UserRepository") as MockUserRepo:
+            MockUserRepo.return_value.get_by_telegram_id = AsyncMock(return_value=mock_db_user)
+            await handler(update, context)
+
+    payment_service.handle_successful_payment.assert_awaited_once()
+    call_kwargs = payment_service.handle_successful_payment.await_args.kwargs
+    assert call_kwargs["period"] == "year"

@@ -6,7 +6,6 @@ Works identically to TelegramStarsProvider but with currency=RUB.
 """
 
 import logging
-from typing import Optional
 
 from telegram import Bot, LabeledPrice
 
@@ -19,10 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class YooKassaProvider:
-    """Payment provider for YooKassa via native Telegram Payments.
-
-    Uses sendInvoice with provider_token and currency=RUB.
-    """
+    """Payment provider for YooKassa via native Telegram Payments."""
 
     def __init__(self, bot: Bot, provider_token: str):
         self.bot = bot
@@ -33,7 +29,6 @@ class YooKassaProvider:
         return "yookassa"
 
     # Минимальная сумма для RUB в Telegram Payments API (в копейках)
-    # https://core.telegram.org/bots/payments/currencies.json → RUB.min_amount
     MIN_RUB_AMOUNT = 8773
 
     async def create_payment(self, request: PaymentRequest) -> PaymentResult:
@@ -62,6 +57,10 @@ class YooKassaProvider:
             label = request.price_label or request.description
             prices = [LabeledPrice(label=label, amount=amount)]
 
+            payload = f"{request.payment_type.value}:{request.item_id}:{request.user_id}"
+            if request.period:
+                payload += f":{request.period}"
+
             logger.info(
                 "Creating YooKassa invoice: amount=%d currency=RUB user_id=%s item_id=%s",
                 amount,
@@ -72,7 +71,7 @@ class YooKassaProvider:
             invoice_link = await self.bot.create_invoice_link(
                 title=title,
                 description=request.description,
-                payload=f"{request.payment_type.value}:{request.item_id}:{request.user_id}",
+                payload=payload,
                 provider_token=self.provider_token,
                 currency="RUB",
                 prices=prices,
@@ -83,43 +82,16 @@ class YooKassaProvider:
                 payment_url=invoice_link,
             )
         except Exception as e:
-            logger.error(f"Failed to create YooKassa invoice: {e}")
+            logger.error("Failed to create YooKassa invoice: %s", e)
             return PaymentResult(
                 success=False,
-                error_message=str(e),
+                error_message="Ошибка создания платежа. Попробуйте позже.",
             )
 
     async def handle_callback(self, data: dict) -> PaymentResult:
-        """Handle YooKassa payment callback.
-
-        Native Telegram Payments are fully managed by Telegram.
-        The bot receives pre_checkout_query and successful_payment updates directly.
-        """
+        """Handle YooKassa payment callback."""
         return PaymentResult(success=True)
 
     async def verify_payment(self, transaction_id: str) -> PaymentResult:
-        """Verify YooKassa payment. Native Telegram Payments are verified by Telegram."""
+        """Verify YooKassa payment."""
         return PaymentResult(success=True, provider_transaction_id=transaction_id)
-
-    @staticmethod
-    def parse_payload(payload: str) -> Optional[dict]:
-        """Parse payment payload string into components.
-
-        Payload format: {payment_type}:{item_id}:{user_id}
-
-        Returns:
-            Parsed dict or None on malformed payload.
-        """
-        try:
-            parts = payload.split(":")
-            if len(parts) != 3:
-                logger.warning(f"Malformed YooKassa payload (expected 3 parts): {payload!r}")
-                return None
-            return {
-                "payment_type": parts[0],
-                "item_id": int(parts[1]),
-                "user_id": int(parts[2]),
-            }
-        except (ValueError, IndexError) as e:
-            logger.warning(f"Failed to parse YooKassa payload {payload!r}: {e}")
-            return None

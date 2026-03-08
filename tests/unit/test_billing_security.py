@@ -163,34 +163,42 @@ class TestParseMethodsLogging:
     """Parse methods should log warnings on malformed input."""
 
     def test_parse_payload_logs_on_malformed(self) -> None:
-        """parse_payload returns None and logs on bad input."""
-        from src.services.payments.telegram_stars import TelegramStarsProvider
+        """parse_payment_payload returns None and logs on bad input."""
+        from src.services.payments.base import parse_payment_payload
 
-        result = TelegramStarsProvider.parse_payload("bad:payload")
+        result = parse_payment_payload("bad:payload")
         assert result is None
 
     def test_parse_payload_valid(self) -> None:
-        """parse_payload works for valid input."""
-        from src.services.payments.telegram_stars import TelegramStarsProvider
+        """parse_payment_payload works for valid input."""
+        from src.services.payments.base import parse_payment_payload
 
-        result = TelegramStarsProvider.parse_payload("package:1:42")
+        result = parse_payment_payload("package:1:42")
         assert result is not None
         assert result["payment_type"] == "package"
         assert result["item_id"] == 1
         assert result["user_id"] == 42
 
-    def test_yookassa_parse_payload_logs_on_malformed(self) -> None:
-        """YooKassa parse_payload returns None on malformed data."""
-        from src.services.payments.yookassa_provider import YooKassaProvider
+    def test_parse_payload_with_period(self) -> None:
+        """parse_payment_payload handles period field."""
+        from src.services.payments.base import parse_payment_payload
 
-        result = YooKassaProvider.parse_payload("bad")
+        result = parse_payment_payload("subscription:2:42:year")
+        assert result is not None
+        assert result["period"] == "year"
+
+    def test_parse_payload_logs_on_malformed_yookassa(self) -> None:
+        """parse_payment_payload returns None on malformed data (was YooKassa test)."""
+        from src.services.payments.base import parse_payment_payload
+
+        result = parse_payment_payload("bad")
         assert result is None
 
-    def test_yookassa_parse_payload_valid(self) -> None:
-        """YooKassa parse_payload works for valid input."""
-        from src.services.payments.yookassa_provider import YooKassaProvider
+    def test_parse_payload_valid_yookassa(self) -> None:
+        """parse_payment_payload works for valid input (was YooKassa test)."""
+        from src.services.payments.base import parse_payment_payload
 
-        result = YooKassaProvider.parse_payload("package:1:42")
+        result = parse_payment_payload("package:1:42")
         assert result is not None
         assert result["item_id"] == 1
         assert result["user_id"] == 42

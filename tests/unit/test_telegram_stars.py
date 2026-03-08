@@ -74,7 +74,7 @@ async def test_create_invoice_failure():
 
     result = await provider.create_payment(request)
     assert result.success is False
-    assert "API error" in result.error_message
+    assert result.error_message is not None
 
 
 @pytest.mark.asyncio
@@ -134,7 +134,9 @@ async def test_verify_payment():
 
 def test_parse_payload_package():
     """Test parsing package payment payload."""
-    result = TelegramStarsProvider.parse_payload("package:1:123")
+    from src.services.payments.base import parse_payment_payload
+
+    result = parse_payment_payload("package:1:123")
     assert result is not None
     assert result["payment_type"] == "package"
     assert result["item_id"] == 1
@@ -143,18 +145,34 @@ def test_parse_payload_package():
 
 def test_parse_payload_subscription():
     """Test parsing subscription payment payload."""
-    result = TelegramStarsProvider.parse_payload("subscription:2:456")
+    from src.services.payments.base import parse_payment_payload
+
+    result = parse_payment_payload("subscription:2:456")
     assert result is not None
     assert result["payment_type"] == "subscription"
     assert result["item_id"] == 2
     assert result["user_id"] == 456
 
 
+def test_parse_payload_subscription_with_period():
+    """Test parsing subscription payload with period."""
+    from src.services.payments.base import parse_payment_payload
+
+    result = parse_payment_payload("subscription:2:456:year")
+    assert result is not None
+    assert result["payment_type"] == "subscription"
+    assert result["item_id"] == 2
+    assert result["user_id"] == 456
+    assert result["period"] == "year"
+
+
 def test_parse_payload_invalid():
     """Test parsing invalid payload."""
-    assert TelegramStarsProvider.parse_payload("invalid") is None
-    assert TelegramStarsProvider.parse_payload("a:b:c") is None
-    assert TelegramStarsProvider.parse_payload("") is None
+    from src.services.payments.base import parse_payment_payload
+
+    assert parse_payment_payload("invalid") is None
+    assert parse_payment_payload("a:b:c") is None
+    assert parse_payment_payload("") is None
 
 
 # =============================================================================

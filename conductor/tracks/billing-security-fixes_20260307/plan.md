@@ -3,7 +3,7 @@
 **Track ID:** billing-security-fixes_20260307
 **Spec:** [spec.md](./spec.md)
 **Created:** 2026-03-07
-**Status:** [ ] Not Started
+**Status:** [~] In Progress
 
 ## Overview
 
@@ -17,19 +17,19 @@
 
 ### Tasks
 
-- [ ] Task 1.1: Тесты — pre_checkout_query отклоняет невалидный payload и неверную сумму
-- [ ] Task 1.2: Тесты — successful_payment_handler сверяет user_id из payload с effective_user
-- [ ] Task 1.3: Тесты — period подписки корректно передаётся в payload и активируется
-- [ ] Task 1.4: Расширить payload формат до `{type}:{item_id}:{user_id}:{period}` (period опционален для пакетов)
-- [ ] Task 1.5: Вынести `_parse_payment_payload` в `src/services/payments/base.py` как единую реализацию (fix дублирования #15)
-- [ ] Task 1.6: Реализовать валидацию в `pre_checkout_query_handler` — парсинг payload, проверка существования товара, сверка суммы
-- [ ] Task 1.7: В `successful_payment_handler` — сверить `effective_user.id` с user_id из payload через DB lookup
-- [ ] Task 1.8: Передать `period` из payload в `handle_successful_payment` для подписок
+- [x] Task 1.1: Тесты — pre_checkout_query отклоняет невалидный payload и неверную сумму
+- [x] Task 1.2: Тесты — successful_payment_handler сверяет user_id из payload с effective_user
+- [x] Task 1.3: Тесты — period подписки корректно передаётся в payload и активируется
+- [x] Task 1.4: Расширить payload формат до `{type}:{item_id}:{user_id}:{period}` (period опционален для пакетов)
+- [x] Task 1.5: Вынести `_parse_payment_payload` в `src/services/payments/base.py` как единую реализацию (fix дублирования #15)
+- [x] Task 1.6: Реализовать валидацию в `pre_checkout_query_handler` — парсинг payload, проверка существования товара, сверка суммы
+- [x] Task 1.7: В `successful_payment_handler` — сверить `effective_user.id` с user_id из payload через DB lookup
+- [x] Task 1.8: Передать `period` из payload в `handle_successful_payment` для подписок
 
 ### Verification
 
-- [ ] Тесты Phase 1 проходят
-- [ ] mypy, ruff, black чистые
+- [x] Тесты Phase 1 проходят
+- [x] mypy, ruff, black чистые
 
 ---
 

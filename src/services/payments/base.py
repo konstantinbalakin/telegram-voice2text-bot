@@ -102,6 +102,7 @@ class PaymentRequest:
     title: Optional[str] = None
     price_label: Optional[str] = None
     customer_email: Optional[str] = None
+    period: Optional[str] = None
 
 
 @dataclass
@@ -137,3 +138,35 @@ class PaymentProvider(Protocol):
     async def verify_payment(self, transaction_id: str) -> PaymentResult:
         """Verify a payment status with the provider."""
         ...
+
+
+def parse_payment_payload(payload: str) -> Optional[dict]:
+    """Parse payment payload string into components.
+
+    Payload format:
+        {payment_type}:{item_id}:{user_id}              — for packages
+        {payment_type}:{item_id}:{user_id}:{period}     — for subscriptions
+
+    Returns:
+        Parsed dict with keys: payment_type, item_id, user_id, period (optional).
+        None on malformed payload.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    try:
+        parts = payload.split(":")
+        if len(parts) < 3 or len(parts) > 4:
+            logger.warning("Malformed payment payload (expected 3-4 parts): %r", payload)
+            return None
+        result: dict = {
+            "payment_type": parts[0],
+            "item_id": int(parts[1]),
+            "user_id": int(parts[2]),
+        }
+        if len(parts) == 4:
+            result["period"] = parts[3]
+        return result
+    except (ValueError, IndexError) as e:
+        logger.warning("Failed to parse payment payload %r: %s", payload, e)
+        return None

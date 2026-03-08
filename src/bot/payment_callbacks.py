@@ -8,7 +8,12 @@ from typing import TYPE_CHECKING, Any, Callable
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
-from src.services.payments.base import PaymentRequest, PaymentType, SubscriptionPeriod
+from src.services.payments.base import (
+    PaymentRequest,
+    PaymentType,
+    SubscriptionPeriod,
+    parse_payment_payload,
+)
 from src.storage.database import get_session
 from src.storage.billing_repositories import MinutePackageRepository, SubscriptionRepository
 from src.storage.repositories import UserRepository
@@ -216,6 +221,7 @@ class PaymentCallbackHandlers:
                 title=f"Подписка {tier_name}",
                 description=sub_desc or f"Тариф «{tier_name}» — {period_ru.lower()}",
                 price_label=f"{tier_name} ({period_ru})",
+                period=period,
             )
 
             result = await self.payment_service.create_payment(
@@ -348,6 +354,7 @@ class PaymentCallbackHandlers:
                 title=f"Подписка {tier_name}",
                 description=sub_desc or f"Тариф «{tier_name}» — {period_ru.lower()}",
                 price_label=f"{tier_name} ({period_ru})",
+                period=period,
             )
 
             result = await self.payment_service.create_payment(
@@ -380,16 +387,79 @@ class PaymentCallbackHandlers:
 
 
 def pre_checkout_query_handler(payment_service: "PaymentService") -> _Handler:
-    """Create a PreCheckoutQuery handler for Telegram Stars payments.
-
-    Always approves pre-checkout queries for Telegram Stars.
-    """
+    """Create a PreCheckoutQuery handler with payload and amount validation."""
 
     async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.pre_checkout_query:
             return
 
-        await update.pre_checkout_query.answer(ok=True)
+        query = update.pre_checkout_query
+        payload_data = parse_payment_payload(query.invoice_payload)
+
+        if not payload_data:
+            logger.warning("Pre-checkout: malformed payload %r", query.invoice_payload)
+            await query.answer(ok=False, error_message="Невалидный платёж")
+            return
+
+        try:
+            payment_type = PaymentType(payload_data["payment_type"])
+        except ValueError:
+            logger.warning("Pre-checkout: unknown payment_type %r", payload_data["payment_type"])
+            await query.answer(ok=False, error_message="Невалидный тип платежа")
+            return
+
+        item_id = payload_data["item_id"]
+        currency = query.currency
+        total_amount = query.total_amount
+
+        try:
+            async with get_session() as session:
+                if payment_type == PaymentType.PACKAGE:
+                    repo = MinutePackageRepository(session)
+                    package = await repo.get_by_id(item_id)
+                    if not package:
+                        logger.warning("Pre-checkout: package %d not found", item_id)
+                        await query.answer(ok=False, error_message="Товар не найден")
+                        return
+                    expected = (
+                        package.price_stars if currency == "XTR" else int(package.price_rub * 100)
+                    )
+                elif payment_type == PaymentType.SUBSCRIPTION:
+                    sub_repo = SubscriptionRepository(session)
+                    period = payload_data.get("period", "month")
+                    prices = await sub_repo.get_tier_prices(tier_id=item_id)
+                    matching = [p for p in prices if p.period == period]
+                    if not matching:
+                        logger.warning(
+                            "Pre-checkout: subscription tier %d period %s not found",
+                            item_id,
+                            period,
+                        )
+                        await query.answer(ok=False, error_message="Товар не найден")
+                        return
+                    price = matching[0]
+                    expected = (
+                        price.amount_stars if currency == "XTR" else int(price.amount_rub * 100)
+                    )
+                else:
+                    await query.answer(ok=False, error_message="Неизвестный тип платежа")
+                    return
+
+            if total_amount != expected:
+                logger.warning(
+                    "Pre-checkout: amount mismatch for %s:%d — got %d, expected %d",
+                    payment_type.value,
+                    item_id,
+                    total_amount,
+                    expected,
+                )
+                await query.answer(ok=False, error_message="Сумма платежа не совпадает")
+                return
+
+            await query.answer(ok=True)
+        except Exception as e:
+            logger.error("Pre-checkout validation error: %s", e, exc_info=True)
+            await query.answer(ok=False, error_message="Ошибка валидации платежа")
 
     return handler
 
@@ -397,8 +467,8 @@ def pre_checkout_query_handler(payment_service: "PaymentService") -> _Handler:
 def successful_payment_handler(payment_service: "PaymentService") -> _Handler:
     """Create a handler for successful Telegram payments (Stars and YooKassa).
 
-    Parses payload and calls PaymentService.handle_successful_payment().
-    Detects provider by currency: XTR = telegram_stars, RUB = yookassa.
+    Parses payload, verifies user_id matches effective_user, and calls
+    PaymentService.handle_successful_payment(). Detects provider by currency.
     """
 
     async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -408,25 +478,45 @@ def successful_payment_handler(payment_service: "PaymentService") -> _Handler:
         payment = update.message.successful_payment
 
         try:
-            payload_data = _parse_payment_payload(payment.invoice_payload)
+            payload_data = parse_payment_payload(payment.invoice_payload)
             if not payload_data:
-                logger.error(f"Failed to parse payment payload: {payment.invoice_payload}")
+                logger.error("Failed to parse payment payload: %s", payment.invoice_payload)
                 await update.message.reply_text("Ошибка обработки платежа. Свяжитесь с поддержкой.")
                 return
 
             payment_type = PaymentType(payload_data["payment_type"])
             item_id = payload_data["item_id"]
-            db_user_id = payload_data["user_id"]  # already internal DB user ID
+            payload_user_id = payload_data["user_id"]
+            period = payload_data.get("period", "month")
+
+            # SECURITY: verify effective_user matches payload user_id
+            effective_user = update.effective_user
+            if effective_user:
+                async with get_session() as session:
+                    user_repo = UserRepository(session)
+                    db_user = await user_repo.get_by_telegram_id(effective_user.id)
+                    if not db_user or db_user.id != payload_user_id:
+                        logger.critical(
+                            "IDOR attempt: effective_user tg_id=%s (db_id=%s) != payload user_id=%s",
+                            effective_user.id,
+                            db_user.id if db_user else "NOT_FOUND",
+                            payload_user_id,
+                        )
+                        await update.message.reply_text(
+                            "Ошибка обработки платежа. Свяжитесь с поддержкой."
+                        )
+                        return
 
             # Detect provider by currency
             provider_name = "yookassa" if payment.currency == "RUB" else "telegram_stars"
 
             success = await payment_service.handle_successful_payment(
                 provider_name=provider_name,
-                user_id=db_user_id,
+                user_id=payload_user_id,
                 payment_type=payment_type,
                 item_id=item_id,
                 provider_transaction_id=payment.telegram_payment_charge_id,
+                period=period,
             )
 
             if success:
@@ -434,38 +524,7 @@ def successful_payment_handler(payment_service: "PaymentService") -> _Handler:
             else:
                 await update.message.reply_text("Ошибка обработки платежа. Свяжитесь с поддержкой.")
         except Exception as e:
-            logger.error(f"Error in successful_payment_handler: {e}", exc_info=True)
+            logger.error("Error in successful_payment_handler: %s", e, exc_info=True)
             await update.message.reply_text("Ошибка обработки платежа. Попробуйте позже.")
 
     return handler
-
-
-def _parse_payment_payload(payload: str) -> dict | None:
-    """Parse payment payload string into components.
-
-    Payload format: {payment_type}:{item_id}:{user_id}
-    Used by both Telegram Stars and YooKassa native payments.
-    """
-    try:
-        parts = payload.split(":")
-        if len(parts) != 3:
-            logger.warning(f"Malformed payment payload (expected 3 parts): {payload!r}")
-            return None
-        return {
-            "payment_type": parts[0],
-            "item_id": int(parts[1]),
-            "user_id": int(parts[2]),
-        }
-    except (ValueError, IndexError) as e:
-        logger.warning(f"Failed to parse payment payload {payload!r}: {e}")
-        return None
-
-
-async def _get_user_db_id(telegram_user_id: int) -> int:
-    """Get internal DB user ID from Telegram user ID."""
-    async with get_session() as session:
-        user_repo = UserRepository(session)
-        db_user = await user_repo.get_by_telegram_id(telegram_user_id)
-        if not db_user:
-            raise ValueError(f"User {telegram_user_id} not found in database")
-        return db_user.id
