@@ -161,7 +161,6 @@ class BillingService:
                 user_id=user_id, usage_date=date.today()
             )
             daily_used = daily_usage.minutes_used if daily_usage else 0.0
-            daily_remaining = max(0.0, daily_limit - daily_used)
 
             bonus_minutes = await balance_repo.get_total_minutes(
                 user_id=user_id, balance_type=BalanceType.BONUS
@@ -177,15 +176,11 @@ class BillingService:
                 user_id=user_id, balance_type=BalanceType.PACKAGE
             )
 
-            total_available = daily_remaining + bonus_minutes + package_minutes
-
             return UserBalance(
                 daily_limit=daily_limit,
                 daily_used=daily_used,
-                daily_remaining=daily_remaining,
                 bonus_minutes=bonus_minutes,
                 package_minutes=package_minutes,
-                total_available=total_available,
                 bonus_expires_at=bonus_expires_at,
                 package_expires_at=package_expires_at,
             )
