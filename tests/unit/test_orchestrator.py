@@ -1697,10 +1697,8 @@ async def test_notification_shows_exhausted_message():
         return_value=UserBalance(
             daily_limit=10.0,
             daily_used=15.0,
-            daily_remaining=0.0,
             bonus_minutes=5.0,
             package_minutes=0.0,
-            total_available=5.0,
         )
     )
 
@@ -1728,43 +1726,44 @@ async def test_notification_shows_exhausted_message():
     mock_variant_repo.create = AsyncMock()
 
     with patch("src.config.settings.billing_enabled", True):
-        with patch("src.config.settings.interactive_mode_enabled", False):
-            with patch(
-                "src.services.transcription_orchestrator.UsageRepository",
-                return_value=mock_usage_repo,
-            ):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
                 with patch(
-                    "src.services.transcription_orchestrator.TranscriptionStateRepository",
-                    return_value=mock_state_repo,
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
                 ):
                     with patch(
-                        "src.services.transcription_orchestrator.TranscriptionVariantRepository",
-                        return_value=mock_variant_repo,
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
                     ):
-                        orch = _make_orchestrator(
-                            router=router,
-                            audio_handler=audio_handler,
-                            billing_service=billing_service,
-                        )
-                        request = _make_request(db_user_id=1)
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                            )
+                            request = _make_request(db_user_id=1)
 
-                        await orch.process_transcription(request)
+                            await orch.process_transcription(request)
 
-                        # Check that get_limit_status was called
-                        billing_service.get_limit_status.assert_awaited_with(user_id=1)
+                            # Check that get_limit_status was called
+                            billing_service.get_limit_status.assert_awaited_with(user_id=1)
 
-                        # Check that reply_text was called with exhausted message
-                        assert request.user_message.reply_text.called
-                        call_args_list = request.user_message.reply_text.call_args_list
-                        exhausted_msg = None
-                        for call in call_args_list:
-                            args, kwargs = call
-                            if args and "исчерпан" in args[0]:
-                                exhausted_msg = args[0]
-                                break
+                            # Check that reply_text was called with exhausted message
+                            assert request.user_message.reply_text.called
+                            call_args_list = request.user_message.reply_text.call_args_list
+                            exhausted_msg = None
+                            for call in call_args_list:
+                                args, kwargs = call
+                                if args and "исчерпан" in args[0]:
+                                    exhausted_msg = args[0]
+                                    break
 
-                        assert exhausted_msg is not None
-                        assert "Дневной лимит исчерпан!" in exhausted_msg
+                            assert exhausted_msg is not None
+                            assert "Дневной лимит исчерпан!" in exhausted_msg
 
 
 @pytest.mark.asyncio
@@ -1779,10 +1778,8 @@ async def test_notification_shows_warning_message():
         return_value=UserBalance(
             daily_limit=10.0,
             daily_used=8.5,
-            daily_remaining=1.5,
             bonus_minutes=20.0,
             package_minutes=50.0,
-            total_available=71.5,
         )
     )
 
@@ -1810,40 +1807,41 @@ async def test_notification_shows_warning_message():
     mock_variant_repo.create = AsyncMock()
 
     with patch("src.config.settings.billing_enabled", True):
-        with patch("src.config.settings.interactive_mode_enabled", False):
-            with patch(
-                "src.services.transcription_orchestrator.UsageRepository",
-                return_value=mock_usage_repo,
-            ):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
                 with patch(
-                    "src.services.transcription_orchestrator.TranscriptionStateRepository",
-                    return_value=mock_state_repo,
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
                 ):
                     with patch(
-                        "src.services.transcription_orchestrator.TranscriptionVariantRepository",
-                        return_value=mock_variant_repo,
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
                     ):
-                        orch = _make_orchestrator(
-                            router=router,
-                            audio_handler=audio_handler,
-                            billing_service=billing_service,
-                        )
-                        request = _make_request(db_user_id=1)
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                            )
+                            request = _make_request(db_user_id=1)
 
-                        await orch.process_transcription(request)
+                            await orch.process_transcription(request)
 
-                        # Check that reply_text was called with warning message
-                        assert request.user_message.reply_text.called
-                        call_args_list = request.user_message.reply_text.call_args_list
-                        warning_msg = None
-                        for call in call_args_list:
-                            args, kwargs = call
-                            if args and "почти исчерпан" in args[0]:
-                                warning_msg = args[0]
-                                break
+                            # Check that reply_text was called with warning message
+                            assert request.user_message.reply_text.called
+                            call_args_list = request.user_message.reply_text.call_args_list
+                            warning_msg = None
+                            for call in call_args_list:
+                                args, kwargs = call
+                                if args and "почти исчерпан" in args[0]:
+                                    warning_msg = args[0]
+                                    break
 
-                        assert warning_msg is not None
-                        assert "Дневной лимит почти исчерпан!" in warning_msg
+                            assert warning_msg is not None
+                            assert "Дневной лимит почти исчерпан!" in warning_msg
 
 
 @pytest.mark.asyncio
@@ -1858,10 +1856,8 @@ async def test_notification_uses_min_of_daily_used_and_limit():
         return_value=UserBalance(
             daily_limit=10.0,
             daily_used=20.9,
-            daily_remaining=0.0,
             bonus_minutes=49.1,
             package_minutes=0.0,
-            total_available=49.1,
         )
     )
 
@@ -1889,43 +1885,44 @@ async def test_notification_uses_min_of_daily_used_and_limit():
     mock_variant_repo.create = AsyncMock()
 
     with patch("src.config.settings.billing_enabled", True):
-        with patch("src.config.settings.interactive_mode_enabled", False):
-            with patch(
-                "src.services.transcription_orchestrator.UsageRepository",
-                return_value=mock_usage_repo,
-            ):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
                 with patch(
-                    "src.services.transcription_orchestrator.TranscriptionStateRepository",
-                    return_value=mock_state_repo,
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
                 ):
                     with patch(
-                        "src.services.transcription_orchestrator.TranscriptionVariantRepository",
-                        return_value=mock_variant_repo,
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
                     ):
-                        orch = _make_orchestrator(
-                            router=router,
-                            audio_handler=audio_handler,
-                            billing_service=billing_service,
-                        )
-                        request = _make_request(db_user_id=1)
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                            )
+                            request = _make_request(db_user_id=1)
 
-                        await orch.process_transcription(request)
+                            await orch.process_transcription(request)
 
-                        # Check that reply_text was called
-                        assert request.user_message.reply_text.called
-                        call_args_list = request.user_message.reply_text.call_args_list
+                            # Check that reply_text was called
+                            assert request.user_message.reply_text.called
+                            call_args_list = request.user_message.reply_text.call_args_list
 
-                        exhausted_msg = None
-                        for call in call_args_list:
-                            args, kwargs = call
-                            if args and "исчерпан" in args[0]:
-                                exhausted_msg = args[0]
-                                break
+                            exhausted_msg = None
+                            for call in call_args_list:
+                                args, kwargs = call
+                                if args and "исчерпан" in args[0]:
+                                    exhausted_msg = args[0]
+                                    break
 
-                        assert exhausted_msg is not None
-                        # Check that message shows 10.0 (limit) not 20.9 (daily_used)
-                        assert "10.0 из 10.0 мин" in exhausted_msg
-                        assert "20.9" not in exhausted_msg
+                            assert exhausted_msg is not None
+                            # Check that message shows 10.0 (limit) not 20.9 (daily_used)
+                            assert "10.0 из 10.0 мин" in exhausted_msg
+                            assert "20.9" not in exhausted_msg
 
 
 @pytest.mark.asyncio
@@ -1940,10 +1937,8 @@ async def test_notification_sends_balance_screen_after_warning():
         return_value=UserBalance(
             daily_limit=10.0,
             daily_used=10.0,
-            daily_remaining=0.0,
             bonus_minutes=0.0,
             package_minutes=0.0,
-            total_available=0.0,
         )
     )
 
@@ -1976,28 +1971,29 @@ async def test_notification_sends_balance_screen_after_warning():
     mock_variant_repo.create = AsyncMock()
 
     with patch("src.config.settings.billing_enabled", True):
-        with patch("src.config.settings.interactive_mode_enabled", False):
-            with patch(
-                "src.services.transcription_orchestrator.UsageRepository",
-                return_value=mock_usage_repo,
-            ):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
                 with patch(
-                    "src.services.transcription_orchestrator.TranscriptionStateRepository",
-                    return_value=mock_state_repo,
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
                 ):
                     with patch(
-                        "src.services.transcription_orchestrator.TranscriptionVariantRepository",
-                        return_value=mock_variant_repo,
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
                     ):
-                        orch = _make_orchestrator(
-                            router=router,
-                            audio_handler=audio_handler,
-                            billing_service=billing_service,
-                            billing_commands=billing_commands,
-                        )
-                        request = _make_request(db_user_id=1)
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                                billing_commands=billing_commands,
+                            )
+                            request = _make_request(db_user_id=1)
 
-                        await orch.process_transcription(request)
+                            await orch.process_transcription(request)
 
-                        # Verify balance screen was sent
-                        billing_commands.build_balance_text_and_markup.assert_awaited_once()
+                            # Verify balance screen was sent
+                            billing_commands.build_balance_text_and_markup.assert_awaited_once()

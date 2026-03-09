@@ -296,37 +296,48 @@ class TestBuyCommand:
 # =============================================================================
 
 
+@patch("src.bot.billing_commands.get_session")
 class TestSubscriptionsCatalog:
     """Tests for billing:subscriptions catalog callback."""
 
     @pytest.mark.asyncio
-    async def test_catalog_shows_tiers(self) -> None:
+    async def test_catalog_shows_tiers(self, mock_get_session: MagicMock) -> None:
         """Test subscription catalog shows available tiers."""
         from src.bot.billing_commands import BillingCommands
 
-        tier = MagicMock()
-        tier.id = 1
-        tier.name = "Pro"
-        tier.daily_limit_minutes = 30
-        tier.description = "Pro subscription"
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        price = MagicMock()
-        price.period = "month"
-        price.amount_rub = 29900
-        price.amount_stars = 150
+        db_user = MagicMock()
+        db_user.id = 42
 
-        subscription_service = AsyncMock()
-        subscription_service.get_available_tiers = AsyncMock(return_value=[tier])
-        subscription_service.get_tier_prices = AsyncMock(return_value=[price])
+        with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
+            mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
 
-        cmds = BillingCommands(
-            billing_service=AsyncMock(),
-            subscription_service=subscription_service,
-            payment_service=AsyncMock(),
-        )
+            tier = MagicMock()
+            tier.id = 1
+            tier.name = "Pro"
+            tier.daily_limit_minutes = 30
+            tier.description = "Pro subscription"
 
-        update, callback_query = _make_callback_update("billing:subscriptions")
-        await cmds.subscriptions_catalog_callback(update, _make_context())
+            price = MagicMock()
+            price.period = "month"
+            price.amount_rub = 29900
+            price.amount_stars = 150
+
+            subscription_service = AsyncMock()
+            subscription_service.get_available_tiers = AsyncMock(return_value=[tier])
+            subscription_service.get_tier_prices = AsyncMock(return_value=[price])
+
+            cmds = BillingCommands(
+                billing_service=AsyncMock(),
+                subscription_service=subscription_service,
+                payment_service=AsyncMock(),
+            )
+
+            update, callback_query = _make_callback_update("billing:subscriptions")
+            await cmds.subscriptions_catalog_callback(update, _make_context())
 
         callback_query.answer.assert_awaited_once()
         callback_query.edit_message_text.assert_awaited_once()
@@ -340,21 +351,31 @@ class TestSubscriptionsCatalog:
         assert "billing:back_main" in all_callbacks
 
     @pytest.mark.asyncio
-    async def test_catalog_no_tiers(self) -> None:
+    async def test_catalog_no_tiers(self, mock_get_session: MagicMock) -> None:
         """Test subscription catalog when no tiers available."""
         from src.bot.billing_commands import BillingCommands
 
-        subscription_service = AsyncMock()
-        subscription_service.get_available_tiers = AsyncMock(return_value=[])
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        cmds = BillingCommands(
-            billing_service=AsyncMock(),
-            subscription_service=subscription_service,
-            payment_service=AsyncMock(),
-        )
+        db_user = MagicMock()
+        db_user.id = 42
 
-        update, callback_query = _make_callback_update("billing:subscriptions")
-        await cmds.subscriptions_catalog_callback(update, _make_context())
+        with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
+            mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
+
+            subscription_service = AsyncMock()
+            subscription_service.get_available_tiers = AsyncMock(return_value=[])
+
+            cmds = BillingCommands(
+                billing_service=AsyncMock(),
+                subscription_service=subscription_service,
+                payment_service=AsyncMock(),
+            )
+
+            update, callback_query = _make_callback_update("billing:subscriptions")
+            await cmds.subscriptions_catalog_callback(update, _make_context())
 
         text = callback_query.edit_message_text.await_args.args[0]
         assert "недоступн" in text.lower()
@@ -365,32 +386,43 @@ class TestSubscriptionsCatalog:
 # =============================================================================
 
 
+@patch("src.bot.billing_commands.get_session")
 class TestPackagesCatalog:
     """Tests for billing:packages catalog callback."""
 
     @pytest.mark.asyncio
-    async def test_catalog_shows_packages(self) -> None:
+    async def test_catalog_shows_packages(self, mock_get_session: MagicMock) -> None:
         """Test packages catalog shows available packages."""
         from src.bot.billing_commands import BillingCommands
 
-        pkg = MagicMock()
-        pkg.id = 1
-        pkg.name = "50 минут"
-        pkg.minutes = 50
-        pkg.price_rub = 14900
-        pkg.price_stars = 75
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        payment_service = AsyncMock()
-        payment_service.get_active_packages = AsyncMock(return_value=[pkg])
+        db_user = MagicMock()
+        db_user.id = 42
 
-        cmds = BillingCommands(
-            billing_service=AsyncMock(),
-            subscription_service=AsyncMock(),
-            payment_service=payment_service,
-        )
+        with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
+            mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
 
-        update, callback_query = _make_callback_update("billing:packages")
-        await cmds.packages_catalog_callback(update, _make_context())
+            pkg = MagicMock()
+            pkg.id = 1
+            pkg.name = "50 минут"
+            pkg.minutes = 50
+            pkg.price_rub = 14900
+            pkg.price_stars = 75
+
+            payment_service = AsyncMock()
+            payment_service.get_active_packages = AsyncMock(return_value=[pkg])
+
+            cmds = BillingCommands(
+                billing_service=AsyncMock(),
+                subscription_service=AsyncMock(),
+                payment_service=payment_service,
+            )
+
+            update, callback_query = _make_callback_update("billing:packages")
+            await cmds.packages_catalog_callback(update, _make_context())
 
         callback_query.answer.assert_awaited_once()
         text = callback_query.edit_message_text.await_args.args[0]
@@ -403,21 +435,31 @@ class TestPackagesCatalog:
         assert "billing:back_main" in all_callbacks
 
     @pytest.mark.asyncio
-    async def test_catalog_no_packages(self) -> None:
+    async def test_catalog_no_packages(self, mock_get_session: MagicMock) -> None:
         """Test packages catalog when no packages available."""
         from src.bot.billing_commands import BillingCommands
 
-        payment_service = AsyncMock()
-        payment_service.get_active_packages = AsyncMock(return_value=[])
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        cmds = BillingCommands(
-            billing_service=AsyncMock(),
-            subscription_service=AsyncMock(),
-            payment_service=payment_service,
-        )
+        db_user = MagicMock()
+        db_user.id = 42
 
-        update, callback_query = _make_callback_update("billing:packages")
-        await cmds.packages_catalog_callback(update, _make_context())
+        with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
+            mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
+
+            payment_service = AsyncMock()
+            payment_service.get_active_packages = AsyncMock(return_value=[])
+
+            cmds = BillingCommands(
+                billing_service=AsyncMock(),
+                subscription_service=AsyncMock(),
+                payment_service=payment_service,
+            )
+
+            update, callback_query = _make_callback_update("billing:packages")
+            await cmds.packages_catalog_callback(update, _make_context())
 
         text = callback_query.edit_message_text.await_args.args[0]
         assert "недоступн" in text.lower()
@@ -428,37 +470,48 @@ class TestPackagesCatalog:
 # =============================================================================
 
 
+@patch("src.bot.billing_commands.get_session")
 class TestSubscriptionDetail:
     """Tests for billing:sub_detail callback."""
 
     @pytest.mark.asyncio
-    async def test_detail_shows_info_and_payment_buttons(self) -> None:
+    async def test_detail_shows_info_and_payment_buttons(self, mock_get_session: MagicMock) -> None:
         """Test subscription detail shows description and payment buttons."""
         from src.bot.billing_commands import BillingCommands
 
-        mock_tier = MagicMock()
-        mock_tier.name = "Pro"
-        mock_tier.daily_limit_minutes = 30
-        mock_tier.description = "Pro plan"
+        mock_session = AsyncMock()
+        mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_get_session.return_value.__aexit__ = AsyncMock(return_value=False)
 
-        mock_price = MagicMock()
-        mock_price.period = "week"
-        mock_price.amount_rub = 9900
-        mock_price.amount_stars = 50
-        mock_price.description = "30 мин/день в течение недели"
+        db_user = MagicMock()
+        db_user.id = 42
 
-        subscription_service = AsyncMock()
-        subscription_service.get_tier_by_id = AsyncMock(return_value=mock_tier)
-        subscription_service.get_tier_prices = AsyncMock(return_value=[mock_price])
+        with patch("src.bot.billing_commands.UserRepository") as mock_user_repo_cls:
+            mock_user_repo_cls.return_value.get_by_telegram_id = AsyncMock(return_value=db_user)
 
-        cmds = BillingCommands(
-            billing_service=AsyncMock(),
-            subscription_service=subscription_service,
-            payment_service=AsyncMock(),
-        )
+            mock_tier = MagicMock()
+            mock_tier.name = "Pro"
+            mock_tier.daily_limit_minutes = 30
+            mock_tier.description = "Pro plan"
 
-        update, callback_query = _make_callback_update("billing:sub_detail:1:week")
-        await cmds.subscription_detail_callback(update, _make_context())
+            mock_price = MagicMock()
+            mock_price.period = "week"
+            mock_price.amount_rub = 9900
+            mock_price.amount_stars = 50
+            mock_price.description = "30 мин/день в течение недели"
+
+            subscription_service = AsyncMock()
+            subscription_service.get_tier_by_id = AsyncMock(return_value=mock_tier)
+            subscription_service.get_tier_prices = AsyncMock(return_value=[mock_price])
+
+            cmds = BillingCommands(
+                billing_service=AsyncMock(),
+                subscription_service=subscription_service,
+                payment_service=AsyncMock(),
+            )
+
+            update, callback_query = _make_callback_update("billing:sub_detail:1:week")
+            await cmds.subscription_detail_callback(update, _make_context())
 
         callback_query.answer.assert_awaited_once()
         text = callback_query.edit_message_text.await_args.args[0]
