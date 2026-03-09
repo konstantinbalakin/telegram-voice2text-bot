@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 Telegram Voice2Text Bot - Production-ready Telegram bot for voice transcription with AI-powered text processing.
@@ -158,6 +154,12 @@ src/
 - **Async mocks**: `unittest.mock.AsyncMock` for async methods
 - **DB patching**: `@patch("src.storage.database.get_session")` for repository tests
 - **Run single test**: `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/test_foo.py -v`
+
+### CRITICAL: Изоляция тестов от окружения
+
+- **Всегда мокать `get_session`** в unit-тестах. Если тестируемый код (или любой вызываемый им метод) обращается к `get_session()`, он ДОЛЖЕН быть замокан. Локальная SQLite-база — не замена моку.
+- **Всегда патчить ВСЕ settings**, влияющие на тестируемый code path. Если код проверяет `settings.billing_enabled` и `settings.billing_test_mode`, патчить оба. Нельзя полагаться на дефолты — `.env` перезаписывает их.
+- **При коммите проверять `git status`** — все изменённые файлы должны попасть в коммит. `git add file1 file2` с явным перечислением файлов рискует пропустить файлы; после `git add` проверять `git diff --cached --stat`.
 
 ## Development Commands
 

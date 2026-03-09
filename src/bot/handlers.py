@@ -4,7 +4,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import TYPE_CHECKING, Optional
 
 from telegram import Update
@@ -13,7 +13,6 @@ from telegram.error import BadRequest
 
 from src.config import settings, SUPPORTED_AUDIO_MIMES
 from src.storage.database import get_session
-from src.storage.models import User
 from src.storage.repositories import (
     UserRepository,
     UsageRepository,
@@ -25,6 +24,8 @@ from src.services.queue_manager import QueueManager, TranscriptionRequest
 from src.services.telegram_client import TelegramClientService
 
 if TYPE_CHECKING:
+    from src.bot.billing_commands import BillingCommands
+    from src.services.billing_service import BillingService
     from src.services.transcription_orchestrator import TranscriptionOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,8 @@ class BotHandlers:
         queue_manager: QueueManager,
         orchestrator: "TranscriptionOrchestrator",
         telegram_client: Optional[TelegramClientService] = None,
+        billing_service: Optional["BillingService"] = None,
+        billing_commands: Optional["BillingCommands"] = None,
     ):
         """Initialize bot handlers.
 
@@ -137,12 +140,16 @@ class BotHandlers:
             queue_manager: Queue manager for request handling
             orchestrator: Transcription orchestrator for processing pipeline
             telegram_client: Optional Telegram Client API service for large files
+            billing_service: Optional billing service for limit checks
+            billing_commands: Optional billing commands for balance screen
         """
         self.transcription_router = transcription_router
         self.audio_handler = audio_handler
         self.queue_manager = queue_manager
         self.orchestrator = orchestrator
         self.telegram_client = telegram_client
+        self.billing_service = billing_service
+        self.billing_commands = billing_commands
 
         # Register callback for queue updates
         self.queue_manager.set_on_queue_changed(self._update_queue_messages)
@@ -151,42 +158,6 @@ class BotHandlers:
         asyncio.create_task(
             self.queue_manager.start_worker(self.orchestrator.process_transcription)
         )
-
-    def _check_quota(self, user: User, duration: int) -> tuple[bool, str]:
-        """Check if user has enough daily quota for the transcription.
-
-        Args:
-            user: Database user object
-            duration: Audio duration in seconds
-
-        Returns:
-            Tuple of (allowed, message). If allowed is False, message contains
-            the rejection reason to send to the user.
-        """
-        if not settings.enable_quota_check:
-            return (True, "")
-
-        if user.is_unlimited:
-            return (True, "")
-
-        # Reset daily usage if last_reset_date is not today
-        today = date.today()
-        if user.last_reset_date != today:
-            user.today_usage_seconds = 0
-            user.last_reset_date = today
-
-        remaining = user.daily_quota_seconds - user.today_usage_seconds
-        if user.today_usage_seconds + duration > user.daily_quota_seconds:
-            return (
-                False,
-                f"⚠️ Достигнут дневной лимит ({user.daily_quota_seconds} сек).\n\n"
-                f"Использовано: {user.today_usage_seconds} сек\n"
-                f"Остаток: {max(0, remaining)} сек\n"
-                f"Запрошено: {duration} сек\n\n"
-                f"Лимит сбросится завтра.",
-            )
-
-        return (True, "")
 
     async def _update_queue_messages(self) -> None:
         """Update all pending queue messages with new positions and wait times.
@@ -457,20 +428,45 @@ class BotHandlers:
 
         # 4. CHECK QUOTA (skip for document — duration unknown until ffprobe)
         if media_info.duration_seconds is not None:
-            async with get_session() as session:
-                user_repo = UserRepository(session)
-                db_user = await user_repo.get_by_telegram_id(user.id)
-                if not db_user:
-                    db_user = await user_repo.create(
-                        telegram_id=user.id,
-                        username=user.username,
-                        first_name=user.first_name,
-                        last_name=user.last_name,
+            # 4a. Billing system check — fail-closed: billing errors block transcription
+            # Skip check in billing test mode (no limits enforced)
+            if self.billing_service and settings.billing_enabled and not settings.billing_test_mode:
+                try:
+                    async with get_session() as session:
+                        user_repo = UserRepository(session)
+                        billing_user = await user_repo.get_by_telegram_id(user.id)
+                    if billing_user:
+                        duration_minutes = media_info.duration_seconds / 60.0
+                        can_transcribe, billing_msg = (
+                            await self.billing_service.check_can_transcribe(
+                                user_id=billing_user.id, duration_minutes=duration_minutes
+                            )
+                        )
+                        if not can_transcribe:
+                            await update.message.reply_text(f"⚠️ {billing_msg}")
+                            # Send balance screen with purchase buttons
+                            if self.billing_commands:
+                                try:
+                                    text, markup = (
+                                        await self.billing_commands.build_balance_text_and_markup(
+                                            user.id
+                                        )
+                                    )
+                                    await update.message.reply_text(text, reply_markup=markup)
+                                except Exception as balance_err:
+                                    logger.error(
+                                        f"Failed to send balance screen: {balance_err}",
+                                        exc_info=True,
+                                    )
+                            logger.warning(f"User {user.id} rejected: billing limit exceeded")
+                            return
+                except Exception as e:
+                    logger.error(
+                        f"Billing check failed, blocking transcription: {e}", exc_info=True
                     )
-                quota_ok, quota_msg = self._check_quota(db_user, media_info.duration_seconds)
-                if not quota_ok:
-                    await update.message.reply_text(quota_msg)
-                    logger.warning(f"User {user.id} rejected: quota exceeded")
+                    await update.message.reply_text(
+                        "⚠️ Сервис временно недоступен. Попробуйте позже."
+                    )
                     return
 
         # Send initial status
@@ -567,18 +563,6 @@ class BotHandlers:
                     self.audio_handler.cleanup_file(file_path)
                     return
 
-                # Check quota after duration is known
-                async with get_session() as session:
-                    user_repo = UserRepository(session)
-                    quota_user = await user_repo.get_by_telegram_id(user.id)
-                    if quota_user:
-                        quota_ok, quota_msg = self._check_quota(quota_user, duration_seconds)
-                        if not quota_ok:
-                            await status_msg.edit_text(quota_msg)
-                            logger.warning(f"User {user.id} rejected: quota exceeded")
-                            self.audio_handler.cleanup_file(file_path)
-                            return
-
             # Update usage with duration
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
@@ -665,6 +649,7 @@ class BotHandlers:
                 status_message=status_msg,
                 user_message=update.message,
                 usage_id=usage.id,
+                db_user_id=db_user.id,
             )
 
             logger.debug(

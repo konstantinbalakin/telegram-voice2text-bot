@@ -1,0 +1,24 @@
+{
+  "id": "personal-prices-fix_20260307",
+  "title": "Проброс user_id для персональных цен и отображение expires_at в балансе",
+  "type": "bug",
+  "status": "complete",
+  "created": "2026-03-07T12:00:00Z",
+  "updated": "2026-03-07T15:00:00Z",
+  "current_phase": 2,
+  "current_task": "2.5",
+  "phases": {
+    "total": 2,
+    "completed": 2
+  },
+  "tasks": {
+    "total": 12,
+    "completed": 12
+  },
+  "commits": [
+    "3bc6772: fix(billing): пробросить user_id в get_tier_prices и get_active_packages",
+    "aed6c1c: fix(billing): пробросить user_id из UI-слоя в каталоги подписок и пакетов",
+    "418a243: feat(billing): добавить expires_at в UserBalance и get_user_balance",
+    "3c06d5c: feat(billing): отображать expires_at рядом с минутами в /balance"
+  ]
+}

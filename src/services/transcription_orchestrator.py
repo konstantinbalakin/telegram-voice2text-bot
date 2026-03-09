@@ -9,7 +9,7 @@ import shutil
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from telegram import InlineKeyboardMarkup, Message
 
@@ -32,6 +32,10 @@ from src.services.llm_service import LLMService
 from src.services.text_processor import TextProcessor
 from src.bot.keyboards import create_transcription_keyboard
 from src.utils.markdown_utils import sanitize_markdown, escape_markdownv2
+
+if TYPE_CHECKING:
+    from src.bot.billing_commands import BillingCommands
+    from src.services.billing_service import BillingService
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +89,15 @@ class TranscriptionOrchestrator:
         audio_handler: AudioHandler,
         llm_service: Optional[LLMService] = None,
         text_processor: Optional[TextProcessor] = None,
+        billing_service: Optional["BillingService"] = None,
+        billing_commands: Optional["BillingCommands"] = None,
     ):
         self.transcription_router = transcription_router
         self.audio_handler = audio_handler
         self.llm_service = llm_service
         self.text_processor = text_processor
+        self.billing_service = billing_service
+        self.billing_commands = billing_commands
 
     async def _create_interactive_state_and_keyboard(
         self,
@@ -690,6 +698,27 @@ class TranscriptionOrchestrator:
 
             final_text = result.text
 
+            # Billing: deduct minutes BEFORE sending result to prevent free transcription on crash
+            # Skip deduction in billing test mode
+            if (
+                self.billing_service
+                and settings.billing_enabled
+                and not settings.billing_test_mode
+                and request.db_user_id
+            ):
+                try:
+                    duration_minutes = request.duration_seconds / 60.0
+                    await self.billing_service.deduct_minutes(
+                        user_id=request.db_user_id,
+                        usage_id=request.usage_id,
+                        duration_minutes=duration_minutes,
+                    )
+                except Exception as billing_err:
+                    logger.error(
+                        f"Billing deduction error for request {request.id}: {billing_err}",
+                        exc_info=True,
+                    )
+
             needs_structuring = False
             show_draft = False
             emoji_level = 0
@@ -728,13 +757,13 @@ class TranscriptionOrchestrator:
                         for msg in request.draft_messages:
                             try:
                                 await msg.delete()
-                            except Exception:
-                                pass
+                            except Exception as e:
+                                logger.debug(f"Failed to delete message: {e}")
 
                     try:
                         await request.status_message.delete()
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logger.debug(f"Failed to delete/edit message: {e}")
 
                     await self._send_result_and_update_state(
                         request,
@@ -758,8 +787,8 @@ class TranscriptionOrchestrator:
                             await request.status_message.edit_text(
                                 f"✅ Готово:\n\n{draft_text}\n\nℹ️ (улучшение текста недоступно)"
                             )
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logger.debug(f"Failed to edit status message: {e}")
                     final_text = draft_text
             else:
                 try:
@@ -769,6 +798,54 @@ class TranscriptionOrchestrator:
 
                 final_text = result.text
                 await self._send_result_and_update_state(request, result.text, result)
+
+            # Billing: check limit status and warn user (deduction already done above)
+            if (
+                self.billing_service
+                and settings.billing_enabled
+                and not settings.billing_test_mode
+                and request.db_user_id
+            ):
+                try:
+                    status = await self.billing_service.get_limit_status(user_id=request.db_user_id)
+                    if status in ("warning", "exhausted"):
+                        balance = await self.billing_service.get_user_balance(
+                            user_id=request.db_user_id
+                        )
+                        display_used = min(balance.daily_used, balance.daily_limit)
+
+                        if status == "exhausted":
+                            message = (
+                                f"⛔ Дневной лимит исчерпан!\n\n"
+                                f"Использовано: {display_used:.1f} из "
+                                f"{balance.daily_limit:.1f} мин"
+                            )
+                        else:
+                            message = (
+                                f"⚠️ Дневной лимит почти исчерпан!\n\n"
+                                f"Использовано: {display_used:.1f} из "
+                                f"{balance.daily_limit:.1f} мин"
+                            )
+                        await request.user_message.reply_text(message)
+
+                        if self.billing_commands:
+                            try:
+                                text, markup = (
+                                    await self.billing_commands.build_balance_text_and_markup(
+                                        request.user_id
+                                    )
+                                )
+                                await request.user_message.reply_text(text, reply_markup=markup)
+                            except Exception as balance_err:
+                                logger.error(
+                                    f"Failed to send balance screen: {balance_err}",
+                                    exc_info=True,
+                                )
+                except Exception as billing_err:
+                    logger.error(
+                        f"Billing status check error for request {request.id}: {billing_err}",
+                        exc_info=True,
+                    )
 
             async with get_session() as session:
                 usage_repo = UsageRepository(session)
@@ -801,8 +878,8 @@ class TranscriptionOrchestrator:
                 await request.status_message.edit_text(
                     "❌ Произошла ошибка при обработке. Пожалуйста, попробуйте еще раз."
                 )
-            except Exception:
-                pass
+            except Exception as notify_err:
+                logger.debug(f"Failed to send error message: {notify_err}")
 
             self.audio_handler.cleanup_file(request.file_path)
             if processed_path != request.file_path:

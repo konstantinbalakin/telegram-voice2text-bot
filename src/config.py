@@ -166,19 +166,35 @@ class Settings(BaseSettings):
         default=30, description="Estimated LLM processing duration in seconds (for progress bar)"
     )
 
-    # Quotas
-    enable_quota_check: bool = Field(
-        default=False, description="Enable per-user daily quota check before transcription"
-    )
-    default_daily_quota_seconds: int = Field(
-        default=60, description="Default daily quota in seconds"
-    )
+    # Limits
     max_voice_duration_seconds: int = Field(
         default=10800, description="Maximum voice message duration (3 hours)"
     )
     max_file_size_bytes: int = Field(
         default=20 * 1024 * 1024,
         description="Maximum file size in bytes (20 MB - Telegram Bot API limit)",
+    )
+
+    # Billing System
+    billing_enabled: bool = Field(
+        default=False, description="Enable billing system (tarification, quotas, payments)"
+    )
+    billing_limit_warning_threshold: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=1.0,
+        description="Threshold (0.0-1.0) for daily limit warning notification (default: 80%)",
+    )
+
+    billing_test_mode: bool = Field(
+        default=False,
+        description="Test mode: billing UI works but /start shows old greeting, no minute deduction",
+    )
+
+    # YooKassa Configuration (native Telegram Payments via provider_token)
+    yookassa_provider_token: str = Field(
+        default="",
+        description="YooKassa provider token from BotFather for native Telegram Payments",
     )
 
     # LLM Refinement Configuration

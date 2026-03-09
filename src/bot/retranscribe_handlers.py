@@ -259,7 +259,6 @@ async def handle_retranscribe(
                 model_size=result.model_name or result.provider_used,
                 processing_time_seconds=result.processing_time,
                 transcription_length=len(result.text),
-                language="ru",
                 parent_usage_id=usage_id,  # Link to parent
                 original_file_path=usage.original_file_path,  # Preserve file path
             )

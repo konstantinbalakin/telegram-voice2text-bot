@@ -1,0 +1,16 @@
+{
+  "id": "db-optimization_20260306",
+  "title": "Database Schema Optimization & Price Versioning",
+  "type": "refactor",
+  "status": "pending",
+  "created": "2026-03-06T09:30:00Z",
+  "updated": "2026-03-06T09:30:00Z",
+  "phases": {
+    "total": 5,
+    "completed": 0
+  },
+  "tasks": {
+    "total": 28,
+    "completed": 0
+  }
+}

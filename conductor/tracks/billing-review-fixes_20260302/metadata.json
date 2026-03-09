@@ -1,0 +1,27 @@
+{
+  "id": "billing-review-fixes_20260302",
+  "title": "Billing System PR Review Fixes",
+  "type": "refactor",
+  "status": "complete",
+  "created": "2026-03-02T00:00:00Z",
+  "updated": "2026-03-02T16:00:00Z",
+  "current_phase": 6,
+  "current_task": "6.7",
+  "phases": {
+    "total": 6,
+    "completed": 6
+  },
+  "tasks": {
+    "total": 42,
+    "completed": 42
+  },
+  "commits": [
+    "b7f2e43: feat(billing): per-request DB sessions (Phase 1, Tasks 1.1-1.2)",
+    "604295d: feat(billing): Telegram ID to DB ID mapping (Phase 1, Tasks 1.3-1.4)",
+    "84a3e6a: feat(billing): YooKassa async + customer email (Phase 1, Tasks 1.5-1.7)",
+    "6b35b15: feat(billing): error handling and resilience (Phase 2)",
+    "8f59b90: feat(billing): security fixes and payment logic (Phase 3)",
+    "53e7d8a: refactor(billing): add enums, UserBalance dataclass (Phase 4)",
+    "b5b7669: docs(billing): fix docstrings and documentation (Phase 5)"
+  ]
+}

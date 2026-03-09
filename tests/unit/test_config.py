@@ -114,13 +114,7 @@ class TestSettingsDefaults:
     def test_default_progress_rtf(self):
         assert Settings().progress_rtf == pytest.approx(0.05)
 
-    # --- Quotas ---
-    def test_default_enable_quota_check(self):
-        assert Settings().enable_quota_check is False
-
-    def test_default_daily_quota_seconds(self):
-        assert Settings().default_daily_quota_seconds == 60
-
+    # --- Limits ---
     def test_default_max_voice_duration_seconds(self):
         assert Settings().max_voice_duration_seconds == 10800
 
@@ -280,10 +274,6 @@ class TestSettingsEnvOverride:
     def test_override_llm_provider(self, monkeypatch):
         monkeypatch.setenv("LLM_PROVIDER", "openai")
         assert Settings().llm_provider == "openai"
-
-    def test_override_enable_quota_check(self, monkeypatch):
-        monkeypatch.setenv("ENABLE_QUOTA_CHECK", "true")
-        assert Settings().enable_quota_check is True
 
     def test_override_interactive_mode_enabled(self, monkeypatch):
         monkeypatch.setenv("INTERACTIVE_MODE_ENABLED", "true")

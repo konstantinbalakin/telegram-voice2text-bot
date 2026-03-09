@@ -1,7 +1,7 @@
 """Unit tests for BotHandlers class from src/bot/handlers.py."""
 
 import asyncio
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -80,19 +80,11 @@ def _make_context() -> MagicMock:
 def _make_db_user(
     user_id: int = 1,
     telegram_id: int = 100,
-    daily_quota_seconds: int = 60,
-    today_usage_seconds: int = 0,
-    is_unlimited: bool = False,
-    last_reset_date: date | None = None,
 ) -> MagicMock:
     """Create a mock database User."""
     u = MagicMock()
     u.id = user_id
     u.telegram_id = telegram_id
-    u.daily_quota_seconds = daily_quota_seconds
-    u.today_usage_seconds = today_usage_seconds
-    u.is_unlimited = is_unlimited
-    u.last_reset_date = last_reset_date or date.today()
     u.created_at = MagicMock()
     u.created_at.strftime = MagicMock(return_value="01.01.2025")
     return u
@@ -640,34 +632,6 @@ class TestHandleMediaMessage:
         assert "слишком большой" in text
 
     @pytest.mark.asyncio
-    async def test_quota_exceeded_rejected(self) -> None:
-        h = self._setup_handler()
-        update = _make_update()
-        ctx = _make_context()
-        media_info = MediaInfo("f1", 100, 30, "voice")
-
-        db_user = _make_db_user(today_usage_seconds=50, daily_quota_seconds=60)
-        mock_session = MagicMock()
-        mock_user_repo = MagicMock()
-        mock_user_repo.get_by_telegram_id = AsyncMock(return_value=db_user)
-
-        with (
-            patch("src.bot.handlers.settings") as ms,
-            patch("src.bot.handlers.get_session", return_value=_async_ctx_manager(mock_session)),
-            patch("src.bot.handlers.UserRepository", return_value=mock_user_repo),
-        ):
-            ms.max_voice_duration_seconds = 300
-            ms.max_queue_size = 50
-            ms.max_file_size_bytes = 20 * 1024 * 1024
-            ms.telethon_enabled = False
-            ms.enable_quota_check = True
-            await h._handle_media_message(update, ctx, media_info)
-
-        update.message.reply_text.assert_awaited()
-        text = update.message.reply_text.call_args[0][0]
-        assert "дневной лимит" in text.lower() or "Достигнут дневной лимит" in text
-
-    @pytest.mark.asyncio
     async def test_successful_enqueue(self) -> None:
         h = self._setup_handler()
         update = _make_update()
@@ -699,7 +663,6 @@ class TestHandleMediaMessage:
             ms.max_queue_size = 50
             ms.max_file_size_bytes = 20 * 1024 * 1024
             ms.telethon_enabled = False
-            ms.enable_quota_check = False
             ms.progress_rtf = 0.3
             await h._handle_media_message(update, ctx, media_info)
 
@@ -741,7 +704,6 @@ class TestHandleMediaMessage:
             ms.max_queue_size = 50
             ms.max_file_size_bytes = 20 * 1024 * 1024
             ms.telethon_enabled = False
-            ms.enable_quota_check = False
             await h._handle_media_message(update, ctx, media_info)
 
         status_msg.edit_text.assert_awaited()
@@ -779,7 +741,6 @@ class TestHandleMediaMessage:
             ms.max_queue_size = 50
             ms.max_file_size_bytes = 20 * 1024 * 1024
             ms.telethon_enabled = False
-            ms.enable_quota_check = False
             await h._handle_media_message(update, ctx, media_info)
 
         status_msg.edit_text.assert_awaited()
@@ -828,7 +789,6 @@ class TestHandleMediaMessage:
             ms.max_queue_size = 50
             ms.max_file_size_bytes = 20 * 1024 * 1024
             ms.telethon_enabled = True
-            ms.enable_quota_check = False
             ms.progress_rtf = 0.3
             await h._handle_media_message(update, ctx, media_info)
 
@@ -871,7 +831,6 @@ class TestHandleMediaMessage:
             ms.max_queue_size = 50
             ms.max_file_size_bytes = 20 * 1024 * 1024
             ms.telethon_enabled = False
-            ms.enable_quota_check = False
             ms.progress_rtf = 0.3
             await h._handle_media_message(update, ctx, media_info)
 
@@ -892,6 +851,48 @@ class TestHandleMediaMessage:
             await h._handle_media_message(update, ctx, media_info)
 
         update.message.reply_text.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_billing_blocked_sends_balance_screen(self) -> None:
+        """When billing blocks transcription, send warning + balance screen."""
+        h = self._setup_handler()
+        h.billing_service = MagicMock()
+        h.billing_service.check_can_transcribe = AsyncMock(
+            return_value=(False, "Недостаточно минут")
+        )
+        mock_billing_commands = MagicMock()
+        mock_billing_commands.build_balance_text_and_markup = AsyncMock(
+            return_value=("💰 Баланс", MagicMock())
+        )
+        h.billing_commands = mock_billing_commands
+
+        update = _make_update()
+        ctx = _make_context()
+        media_info = MediaInfo("f1", 100, 30, "voice")
+
+        db_user = _make_db_user()
+        mock_session = MagicMock()
+        mock_user_repo = MagicMock()
+        mock_user_repo.get_by_telegram_id = AsyncMock(return_value=db_user)
+
+        with (
+            patch("src.bot.handlers.settings") as ms,
+            patch("src.bot.handlers.get_session", return_value=_async_ctx_manager(mock_session)),
+            patch("src.bot.handlers.UserRepository", return_value=mock_user_repo),
+        ):
+            ms.max_voice_duration_seconds = 300
+            ms.max_queue_size = 50
+            ms.max_file_size_bytes = 20 * 1024 * 1024
+            ms.telethon_enabled = False
+            ms.billing_enabled = True
+            ms.billing_test_mode = False
+            await h._handle_media_message(update, ctx, media_info)
+
+        # Two calls: warning message + balance screen
+        assert update.message.reply_text.await_count == 2
+        first_call_text = update.message.reply_text.call_args_list[0][0][0]
+        assert "Недостаточно минут" in first_call_text
+        mock_billing_commands.build_balance_text_and_markup.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

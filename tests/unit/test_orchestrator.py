@@ -28,6 +28,7 @@ def _make_request(
     duration_seconds: int = 30,
     usage_id: int = 1,
     disable_refinement: bool = False,
+    db_user_id: int = 0,
 ) -> TranscriptionRequest:
     """Create a TranscriptionRequest with mocked Telegram objects."""
     status_message = AsyncMock()
@@ -52,6 +53,7 @@ def _make_request(
         status_message=status_message,
         user_message=user_message,
         usage_id=usage_id,
+        db_user_id=db_user_id,
     )
 
 
@@ -81,6 +83,8 @@ def _make_orchestrator(
     audio_handler: MagicMock | None = None,
     llm_service: MagicMock | None = None,
     text_processor: MagicMock | None = None,
+    billing_service: MagicMock | None = None,
+    billing_commands: MagicMock | None = None,
 ) -> TranscriptionOrchestrator:
     """Create an orchestrator with mocked dependencies."""
     if router is None:
@@ -98,6 +102,8 @@ def _make_orchestrator(
         audio_handler=audio_handler,
         llm_service=llm_service,
         text_processor=text_processor,
+        billing_service=billing_service,
+        billing_commands=billing_commands,
     )
 
 
@@ -1672,3 +1678,322 @@ class TestProcessTranscription:
         last_call = update_calls[-1]
         assert last_call.kwargs["model_size"] == "whisper-1"
         assert last_call.kwargs["processing_time_seconds"] == 2.5
+
+
+# =============================================================================
+# Task 1.3: Daily Limit Notification Tests
+# =============================================================================
+
+
+@pytest.mark.asyncio
+async def test_notification_shows_exhausted_message():
+    """Test: status='exhausted' shows 'Дневной лимит исчерпан!' message."""
+    from src.services.payments.base import UserBalance
+
+    billing_service = AsyncMock()
+    billing_service.deduct_minutes = AsyncMock(return_value={"from_daily": 10.0})
+    billing_service.get_limit_status = AsyncMock(return_value="exhausted")
+    billing_service.get_user_balance = AsyncMock(
+        return_value=UserBalance(
+            daily_limit=10.0,
+            daily_used=15.0,
+            bonus_minutes=5.0,
+            package_minutes=0.0,
+        )
+    )
+
+    router = MagicMock()
+    router.transcribe = AsyncMock(return_value=_make_result())
+    router.get_active_provider_name = MagicMock(return_value="openai")
+    router.get_active_provider_model = MagicMock(return_value="whisper-1")
+    router.strategy = MagicMock(spec=[])
+
+    audio_handler = MagicMock()
+    audio_handler.preprocess_audio = AsyncMock(return_value=Path("/tmp/test_audio.ogg"))
+    audio_handler.cleanup_file = MagicMock()
+
+    mock_usage_repo = AsyncMock()
+    mock_usage_repo.get_by_id = AsyncMock(return_value=None)
+    mock_usage_repo.count_by_user_id = AsyncMock(return_value=1)
+
+    mock_state_repo = AsyncMock()
+    mock_state_repo.get_by_usage_id = AsyncMock(return_value=None)
+    mock_state_repo.create = AsyncMock(return_value=MagicMock(id=1, message_id=999))
+    mock_state_repo.update = AsyncMock()
+
+    mock_variant_repo = AsyncMock()
+    mock_variant_repo.get_variant = AsyncMock(return_value=None)
+    mock_variant_repo.create = AsyncMock()
+
+    with patch("src.config.settings.billing_enabled", True):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
+                with patch(
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
+                ):
+                    with patch(
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
+                    ):
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                            )
+                            request = _make_request(db_user_id=1)
+
+                            await orch.process_transcription(request)
+
+                            # Check that get_limit_status was called
+                            billing_service.get_limit_status.assert_awaited_with(user_id=1)
+
+                            # Check that reply_text was called with exhausted message
+                            assert request.user_message.reply_text.called
+                            call_args_list = request.user_message.reply_text.call_args_list
+                            exhausted_msg = None
+                            for call in call_args_list:
+                                args, kwargs = call
+                                if args and "исчерпан" in args[0]:
+                                    exhausted_msg = args[0]
+                                    break
+
+                            assert exhausted_msg is not None
+                            assert "Дневной лимит исчерпан!" in exhausted_msg
+
+
+@pytest.mark.asyncio
+async def test_notification_shows_warning_message():
+    """Test: status='warning' shows 'Дневной лимит почти исчерпан!' message."""
+    from src.services.payments.base import UserBalance
+
+    billing_service = AsyncMock()
+    billing_service.deduct_minutes = AsyncMock(return_value={"from_daily": 8.5})
+    billing_service.get_limit_status = AsyncMock(return_value="warning")
+    billing_service.get_user_balance = AsyncMock(
+        return_value=UserBalance(
+            daily_limit=10.0,
+            daily_used=8.5,
+            bonus_minutes=20.0,
+            package_minutes=50.0,
+        )
+    )
+
+    router = MagicMock()
+    router.transcribe = AsyncMock(return_value=_make_result())
+    router.get_active_provider_name = MagicMock(return_value="openai")
+    router.get_active_provider_model = MagicMock(return_value="whisper-1")
+    router.strategy = MagicMock(spec=[])
+
+    audio_handler = MagicMock()
+    audio_handler.preprocess_audio = AsyncMock(return_value=Path("/tmp/test_audio.ogg"))
+    audio_handler.cleanup_file = MagicMock()
+
+    mock_usage_repo = AsyncMock()
+    mock_usage_repo.get_by_id = AsyncMock(return_value=None)
+    mock_usage_repo.count_by_user_id = AsyncMock(return_value=1)
+
+    mock_state_repo = AsyncMock()
+    mock_state_repo.get_by_usage_id = AsyncMock(return_value=None)
+    mock_state_repo.create = AsyncMock(return_value=MagicMock(id=1, message_id=999))
+    mock_state_repo.update = AsyncMock()
+
+    mock_variant_repo = AsyncMock()
+    mock_variant_repo.get_variant = AsyncMock(return_value=None)
+    mock_variant_repo.create = AsyncMock()
+
+    with patch("src.config.settings.billing_enabled", True):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
+                with patch(
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
+                ):
+                    with patch(
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
+                    ):
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                            )
+                            request = _make_request(db_user_id=1)
+
+                            await orch.process_transcription(request)
+
+                            # Check that reply_text was called with warning message
+                            assert request.user_message.reply_text.called
+                            call_args_list = request.user_message.reply_text.call_args_list
+                            warning_msg = None
+                            for call in call_args_list:
+                                args, kwargs = call
+                                if args and "почти исчерпан" in args[0]:
+                                    warning_msg = args[0]
+                                    break
+
+                            assert warning_msg is not None
+                            assert "Дневной лимит почти исчерпан!" in warning_msg
+
+
+@pytest.mark.asyncio
+async def test_notification_uses_min_of_daily_used_and_limit():
+    """Test: notification displays min(daily_used, daily_limit) not daily_used."""
+    from src.services.payments.base import UserBalance
+
+    billing_service = AsyncMock()
+    billing_service.deduct_minutes = AsyncMock(return_value={"from_daily": 10.0})
+    billing_service.get_limit_status = AsyncMock(return_value="exhausted")
+    billing_service.get_user_balance = AsyncMock(
+        return_value=UserBalance(
+            daily_limit=10.0,
+            daily_used=20.9,
+            bonus_minutes=49.1,
+            package_minutes=0.0,
+        )
+    )
+
+    router = MagicMock()
+    router.transcribe = AsyncMock(return_value=_make_result())
+    router.get_active_provider_name = MagicMock(return_value="openai")
+    router.get_active_provider_model = MagicMock(return_value="whisper-1")
+    router.strategy = MagicMock(spec=[])
+
+    audio_handler = MagicMock()
+    audio_handler.preprocess_audio = AsyncMock(return_value=Path("/tmp/test_audio.ogg"))
+    audio_handler.cleanup_file = MagicMock()
+
+    mock_usage_repo = AsyncMock()
+    mock_usage_repo.get_by_id = AsyncMock(return_value=None)
+    mock_usage_repo.count_by_user_id = AsyncMock(return_value=1)
+
+    mock_state_repo = AsyncMock()
+    mock_state_repo.get_by_usage_id = AsyncMock(return_value=None)
+    mock_state_repo.create = AsyncMock(return_value=MagicMock(id=1, message_id=999))
+    mock_state_repo.update = AsyncMock()
+
+    mock_variant_repo = AsyncMock()
+    mock_variant_repo.get_variant = AsyncMock(return_value=None)
+    mock_variant_repo.create = AsyncMock()
+
+    with patch("src.config.settings.billing_enabled", True):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
+                with patch(
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
+                ):
+                    with patch(
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
+                    ):
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                            )
+                            request = _make_request(db_user_id=1)
+
+                            await orch.process_transcription(request)
+
+                            # Check that reply_text was called
+                            assert request.user_message.reply_text.called
+                            call_args_list = request.user_message.reply_text.call_args_list
+
+                            exhausted_msg = None
+                            for call in call_args_list:
+                                args, kwargs = call
+                                if args and "исчерпан" in args[0]:
+                                    exhausted_msg = args[0]
+                                    break
+
+                            assert exhausted_msg is not None
+                            # Check that message shows 10.0 (limit) not 20.9 (daily_used)
+                            assert "10.0 из 10.0 мин" in exhausted_msg
+                            assert "20.9" not in exhausted_msg
+
+
+@pytest.mark.asyncio
+async def test_notification_sends_balance_screen_after_warning():
+    """Test: after exhausted/warning message, balance screen with buttons is sent."""
+    from src.services.payments.base import UserBalance
+
+    billing_service = AsyncMock()
+    billing_service.deduct_minutes = AsyncMock(return_value={"from_daily": 10.0})
+    billing_service.get_limit_status = AsyncMock(return_value="exhausted")
+    billing_service.get_user_balance = AsyncMock(
+        return_value=UserBalance(
+            daily_limit=10.0,
+            daily_used=10.0,
+            bonus_minutes=0.0,
+            package_minutes=0.0,
+        )
+    )
+
+    billing_commands = AsyncMock()
+    billing_commands.build_balance_text_and_markup = AsyncMock(
+        return_value=("💰 Баланс", MagicMock())
+    )
+
+    router = MagicMock()
+    router.transcribe = AsyncMock(return_value=_make_result())
+    router.get_active_provider_name = MagicMock(return_value="openai")
+    router.get_active_provider_model = MagicMock(return_value="whisper-1")
+    router.strategy = MagicMock(spec=[])
+
+    audio_handler = MagicMock()
+    audio_handler.preprocess_audio = AsyncMock(return_value=Path("/tmp/test_audio.ogg"))
+    audio_handler.cleanup_file = MagicMock()
+
+    mock_usage_repo = AsyncMock()
+    mock_usage_repo.get_by_id = AsyncMock(return_value=None)
+    mock_usage_repo.count_by_user_id = AsyncMock(return_value=1)
+
+    mock_state_repo = AsyncMock()
+    mock_state_repo.get_by_usage_id = AsyncMock(return_value=None)
+    mock_state_repo.create = AsyncMock(return_value=MagicMock(id=1, message_id=999))
+    mock_state_repo.update = AsyncMock()
+
+    mock_variant_repo = AsyncMock()
+    mock_variant_repo.get_variant = AsyncMock(return_value=None)
+    mock_variant_repo.create = AsyncMock()
+
+    with patch("src.config.settings.billing_enabled", True):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
+                with patch(
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
+                ):
+                    with patch(
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
+                    ):
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                                billing_commands=billing_commands,
+                            )
+                            request = _make_request(db_user_id=1)
+
+                            await orch.process_transcription(request)
+
+                            # Verify balance screen was sent
+                            billing_commands.build_balance_text_and_markup.assert_awaited_once()

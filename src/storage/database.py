@@ -3,7 +3,7 @@ Database connection and session management
 """
 
 import asyncio
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import (
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     async_sessionmaker,
 )
-from sqlalchemy import text
+from sqlalchemy import event, text
 
 from src.config import settings
 
@@ -20,6 +20,13 @@ from src.config import settings
 # Global engine instance
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
+
+
+def _set_sqlite_pragmas(dbapi_conn: Any, connection_record: Any) -> None:
+    """Enable foreign keys on every new SQLite connection."""
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 def get_engine() -> AsyncEngine:
@@ -45,6 +52,11 @@ def get_engine() -> AsyncEngine:
             pool_pre_ping=True,  # Verify connections before using
             connect_args=connect_args,
         )
+
+        # Register PRAGMA foreign_keys=ON for every new connection
+        if "sqlite" in settings.database_url:
+            event.listen(_engine.sync_engine, "connect", _set_sqlite_pragmas)
+
     return _engine
 
 
@@ -109,12 +121,17 @@ async def init_db() -> None:
             db_file = Path(db_path).resolve()
         db_file.parent.mkdir(parents=True, exist_ok=True)
 
-    # Enable WAL mode for SQLite (better concurrency)
+    # Enable WAL mode and PRAGMAs for SQLite
     if "sqlite" in settings.database_url:
         async with get_session() as session:
             await session.execute(text("PRAGMA journal_mode=WAL"))
             await session.execute(text("PRAGMA busy_timeout=30000"))  # 30 seconds
-            logger.info("✅ SQLite WAL mode enabled for better concurrency")
+            await session.execute(text("PRAGMA foreign_keys=ON"))
+            await session.execute(text("PRAGMA synchronous=NORMAL"))
+            await session.execute(text("PRAGMA cache_size=-64000"))  # 64MB
+            await session.execute(text("PRAGMA mmap_size=268435456"))  # 256MB
+            await session.execute(text("PRAGMA temp_store=MEMORY"))
+            logger.info("✅ SQLite PRAGMAs applied: WAL, FK, synchronous, cache, mmap, temp_store")
 
     # Check database migration status
     try:
