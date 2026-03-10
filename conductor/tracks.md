@@ -28,4 +28,6 @@
 
 | [x] | billing-security-fixes_20260307 | Исправление критических проблем безопасности и надёжности биллинга | 2026-03-07 | 2026-03-08 |
 
+| [x] | smart-limit-warning_20260311 | Smart Limit Warnings — Suppress Scary Alerts When Extra Minutes Available | 2026-03-11 | 2026-03-11 |
+
 <!-- Tracks registered by /conductor:new-track -->
