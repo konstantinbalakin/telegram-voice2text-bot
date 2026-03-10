@@ -332,7 +332,7 @@ jobs:
 
             # Billing System
             BILLING_ENABLED=true
-            BILLING_TEST_MODE=true
+            BILLING_TEST_MODE=false
             BILLING_LIMIT_WARNING_THRESHOLD=0.8
             YOOKASSA_PROVIDER_TOKEN=${{ secrets.YOOKASSA_PROVIDER_TOKEN }}
 

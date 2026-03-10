@@ -813,19 +813,36 @@ class TranscriptionOrchestrator:
                             user_id=request.db_user_id
                         )
                         display_used = min(balance.daily_used, balance.daily_limit)
+                        has_extra_minutes = balance.package_minutes > 0 or balance.bonus_minutes > 0
 
                         if status == "exhausted":
-                            message = (
-                                f"⛔ Дневной лимит исчерпан!\n\n"
-                                f"Использовано: {display_used:.1f} из "
-                                f"{balance.daily_limit:.1f} мин"
-                            )
+                            if has_extra_minutes:
+                                message = (
+                                    f"ℹ️ Дневной лимит исчерпан.\n\n"
+                                    f"Использовано: {display_used:.1f} из "
+                                    f"{balance.daily_limit:.1f} мин дневного лимита. "
+                                    f"Остаток будет списан из ваших дополнительных минут."
+                                )
+                            else:
+                                message = (
+                                    f"⛔ Дневной лимит исчерпан!\n\n"
+                                    f"Использовано: {display_used:.1f} из "
+                                    f"{balance.daily_limit:.1f} мин"
+                                )
                         else:
-                            message = (
-                                f"⚠️ Дневной лимит почти исчерпан!\n\n"
-                                f"Использовано: {display_used:.1f} из "
-                                f"{balance.daily_limit:.1f} мин"
-                            )
+                            if has_extra_minutes:
+                                message = (
+                                    f"ℹ️ Дневной лимит почти исчерпан.\n\n"
+                                    f"Использовано: {display_used:.1f} из "
+                                    f"{balance.daily_limit:.1f} мин. "
+                                    f"При исчерпании будут использованы ваши дополнительные минуты."
+                                )
+                            else:
+                                message = (
+                                    f"⚠️ Дневной лимит почти исчерпан!\n\n"
+                                    f"Использовано: {display_used:.1f} из "
+                                    f"{balance.daily_limit:.1f} мин"
+                                )
                         await request.user_message.reply_text(message)
 
                         if self.billing_commands:

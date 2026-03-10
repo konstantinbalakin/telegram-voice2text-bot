@@ -1687,7 +1687,7 @@ class TestProcessTranscription:
 
 @pytest.mark.asyncio
 async def test_notification_shows_exhausted_message():
-    """Test: status='exhausted' shows 'Дневной лимит исчерпан!' message."""
+    """Test: status='exhausted', no extra minutes → shows scary '⛔ Дневной лимит исчерпан!' message."""
     from src.services.payments.base import UserBalance
 
     billing_service = AsyncMock()
@@ -1697,7 +1697,7 @@ async def test_notification_shows_exhausted_message():
         return_value=UserBalance(
             daily_limit=10.0,
             daily_used=15.0,
-            bonus_minutes=5.0,
+            bonus_minutes=0.0,
             package_minutes=0.0,
         )
     )
@@ -1768,7 +1768,7 @@ async def test_notification_shows_exhausted_message():
 
 @pytest.mark.asyncio
 async def test_notification_shows_warning_message():
-    """Test: status='warning' shows 'Дневной лимит почти исчерпан!' message."""
+    """Test: status='warning', no extra minutes → shows scary '⚠️ Дневной лимит почти исчерпан!' message."""
     from src.services.payments.base import UserBalance
 
     billing_service = AsyncMock()
@@ -1778,8 +1778,8 @@ async def test_notification_shows_warning_message():
         return_value=UserBalance(
             daily_limit=10.0,
             daily_used=8.5,
-            bonus_minutes=20.0,
-            package_minutes=50.0,
+            bonus_minutes=0.0,
+            package_minutes=0.0,
         )
     )
 
@@ -1856,7 +1856,7 @@ async def test_notification_uses_min_of_daily_used_and_limit():
         return_value=UserBalance(
             daily_limit=10.0,
             daily_used=20.9,
-            bonus_minutes=49.1,
+            bonus_minutes=0.0,
             package_minutes=0.0,
         )
     )
@@ -1997,3 +1997,232 @@ async def test_notification_sends_balance_screen_after_warning():
 
                             # Verify balance screen was sent
                             billing_commands.build_balance_text_and_markup.assert_awaited_once()
+
+
+def _make_billing_test_setup(
+    status: str,
+    daily_limit: float,
+    daily_used: float,
+    bonus_minutes: float,
+    package_minutes: float,
+) -> tuple:
+    """Helper to create common billing test mocks."""
+    from src.services.payments.base import UserBalance
+
+    billing_service = AsyncMock()
+    billing_service.deduct_minutes = AsyncMock(return_value={"from_daily": daily_used})
+    billing_service.get_limit_status = AsyncMock(return_value=status)
+    billing_service.get_user_balance = AsyncMock(
+        return_value=UserBalance(
+            daily_limit=daily_limit,
+            daily_used=daily_used,
+            bonus_minutes=bonus_minutes,
+            package_minutes=package_minutes,
+        )
+    )
+
+    router = MagicMock()
+    router.transcribe = AsyncMock(return_value=_make_result())
+    router.get_active_provider_name = MagicMock(return_value="openai")
+    router.get_active_provider_model = MagicMock(return_value="whisper-1")
+    router.strategy = MagicMock(spec=[])
+
+    audio_handler = MagicMock()
+    audio_handler.preprocess_audio = AsyncMock(return_value=Path("/tmp/test_audio.ogg"))
+    audio_handler.cleanup_file = MagicMock()
+
+    mock_usage_repo = AsyncMock()
+    mock_usage_repo.get_by_id = AsyncMock(return_value=None)
+    mock_usage_repo.count_by_user_id = AsyncMock(return_value=1)
+
+    mock_state_repo = AsyncMock()
+    mock_state_repo.get_by_usage_id = AsyncMock(return_value=None)
+    mock_state_repo.create = AsyncMock(return_value=MagicMock(id=1, message_id=999))
+    mock_state_repo.update = AsyncMock()
+
+    mock_variant_repo = AsyncMock()
+    mock_variant_repo.get_variant = AsyncMock(return_value=None)
+    mock_variant_repo.create = AsyncMock()
+
+    return (
+        billing_service,
+        router,
+        audio_handler,
+        mock_usage_repo,
+        mock_state_repo,
+        mock_variant_repo,
+    )
+
+
+async def _run_billing_notification_test(
+    billing_service: AsyncMock,
+    router: MagicMock,
+    audio_handler: MagicMock,
+    mock_usage_repo: AsyncMock,
+    mock_state_repo: AsyncMock,
+    mock_variant_repo: AsyncMock,
+) -> list:
+    """Run process_transcription and return reply_text call_args_list."""
+    with patch("src.config.settings.billing_enabled", True):
+        with patch("src.config.settings.billing_test_mode", False):
+            with patch("src.config.settings.interactive_mode_enabled", False):
+                with patch(
+                    "src.services.transcription_orchestrator.UsageRepository",
+                    return_value=mock_usage_repo,
+                ):
+                    with patch(
+                        "src.services.transcription_orchestrator.TranscriptionStateRepository",
+                        return_value=mock_state_repo,
+                    ):
+                        with patch(
+                            "src.services.transcription_orchestrator.TranscriptionVariantRepository",
+                            return_value=mock_variant_repo,
+                        ):
+                            orch = _make_orchestrator(
+                                router=router,
+                                audio_handler=audio_handler,
+                                billing_service=billing_service,
+                            )
+                            request = _make_request(db_user_id=1)
+                            await orch.process_transcription(request)
+                            return request.user_message.reply_text.call_args_list
+
+
+def _find_message_containing(call_args_list: list, substring: str) -> str | None:
+    for call in call_args_list:
+        args, _ = call
+        if args and substring in args[0]:
+            return args[0]
+    return None
+
+
+@pytest.mark.asyncio
+async def test_notification_exhausted_with_package_minutes_shows_soft_message():
+    """Test: status='exhausted' + package_minutes > 0 → soft informational message (no ⛔)."""
+    billing_service, router, audio_handler, usage_repo, state_repo, variant_repo = (
+        _make_billing_test_setup(
+            status="exhausted",
+            daily_limit=10.0,
+            daily_used=10.0,
+            bonus_minutes=0.0,
+            package_minutes=30.0,
+        )
+    )
+    calls = await _run_billing_notification_test(
+        billing_service, router, audio_handler, usage_repo, state_repo, variant_repo
+    )
+
+    msg = _find_message_containing(calls, "исчерпан")
+    assert msg is not None
+    assert "⛔" not in msg, "Scary ⛔ icon should not appear when user has package minutes"
+    assert "дополнительн" in msg.lower(), "Message should mention extra/additional minutes"
+
+
+@pytest.mark.asyncio
+async def test_notification_exhausted_with_bonus_minutes_shows_soft_message():
+    """Test: status='exhausted' + bonus_minutes > 0 → soft informational message (no ⛔)."""
+    billing_service, router, audio_handler, usage_repo, state_repo, variant_repo = (
+        _make_billing_test_setup(
+            status="exhausted",
+            daily_limit=10.0,
+            daily_used=10.0,
+            bonus_minutes=15.0,
+            package_minutes=0.0,
+        )
+    )
+    calls = await _run_billing_notification_test(
+        billing_service, router, audio_handler, usage_repo, state_repo, variant_repo
+    )
+
+    msg = _find_message_containing(calls, "исчерпан")
+    assert msg is not None
+    assert "⛔" not in msg, "Scary ⛔ icon should not appear when user has bonus minutes"
+    assert "дополнительн" in msg.lower(), "Message should mention extra/additional minutes"
+
+
+@pytest.mark.asyncio
+async def test_notification_warning_with_package_minutes_shows_soft_message():
+    """Test: status='warning' + package_minutes > 0 → soft informational message (no ⚠️)."""
+    billing_service, router, audio_handler, usage_repo, state_repo, variant_repo = (
+        _make_billing_test_setup(
+            status="warning",
+            daily_limit=10.0,
+            daily_used=8.5,
+            bonus_minutes=0.0,
+            package_minutes=50.0,
+        )
+    )
+    calls = await _run_billing_notification_test(
+        billing_service, router, audio_handler, usage_repo, state_repo, variant_repo
+    )
+
+    msg = _find_message_containing(calls, "исчерпан")
+    assert msg is not None
+    assert "⚠️" not in msg, "Scary ⚠️ icon should not appear when user has package minutes"
+    assert "дополнительн" in msg.lower(), "Message should mention extra/additional minutes"
+
+
+@pytest.mark.asyncio
+async def test_notification_warning_with_bonus_minutes_shows_soft_message():
+    """Test: status='warning' + bonus_minutes > 0 → soft informational message (no ⚠️)."""
+    billing_service, router, audio_handler, usage_repo, state_repo, variant_repo = (
+        _make_billing_test_setup(
+            status="warning",
+            daily_limit=10.0,
+            daily_used=8.5,
+            bonus_minutes=20.0,
+            package_minutes=0.0,
+        )
+    )
+    calls = await _run_billing_notification_test(
+        billing_service, router, audio_handler, usage_repo, state_repo, variant_repo
+    )
+
+    msg = _find_message_containing(calls, "исчерпан")
+    assert msg is not None
+    assert "⚠️" not in msg, "Scary ⚠️ icon should not appear when user has bonus minutes"
+    assert "дополнительн" in msg.lower(), "Message should mention extra/additional minutes"
+
+
+@pytest.mark.asyncio
+async def test_notification_exhausted_no_extra_minutes_keeps_scary_message():
+    """Test: status='exhausted' + no extra minutes → scary ⛔ message unchanged."""
+    billing_service, router, audio_handler, usage_repo, state_repo, variant_repo = (
+        _make_billing_test_setup(
+            status="exhausted",
+            daily_limit=10.0,
+            daily_used=10.0,
+            bonus_minutes=0.0,
+            package_minutes=0.0,
+        )
+    )
+    calls = await _run_billing_notification_test(
+        billing_service, router, audio_handler, usage_repo, state_repo, variant_repo
+    )
+
+    msg = _find_message_containing(calls, "исчерпан")
+    assert msg is not None
+    assert "⛔" in msg, "Scary ⛔ icon must appear when user has no extra minutes"
+    assert "Дневной лимит исчерпан!" in msg
+
+
+@pytest.mark.asyncio
+async def test_notification_warning_no_extra_minutes_keeps_scary_message():
+    """Test: status='warning' + no extra minutes → scary ⚠️ message unchanged."""
+    billing_service, router, audio_handler, usage_repo, state_repo, variant_repo = (
+        _make_billing_test_setup(
+            status="warning",
+            daily_limit=10.0,
+            daily_used=8.5,
+            bonus_minutes=0.0,
+            package_minutes=0.0,
+        )
+    )
+    calls = await _run_billing_notification_test(
+        billing_service, router, audio_handler, usage_repo, state_repo, variant_repo
+    )
+
+    msg = _find_message_containing(calls, "исчерпан")
+    assert msg is not None
+    assert "⚠️" in msg, "Scary ⚠️ icon must appear when user has no extra minutes"
+    assert "Дневной лимит почти исчерпан!" in msg

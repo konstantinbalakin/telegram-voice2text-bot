@@ -1,0 +1,16 @@
+{
+  "id": "smart-limit-warning_20260311",
+  "title": "Smart Limit Warnings — Suppress Scary Alerts When Extra Minutes Available",
+  "type": "feature",
+  "status": "complete",
+  "created": "2026-03-11T00:00:00Z",
+  "updated": "2026-03-11T00:00:00Z",
+  "phases": {
+    "total": 3,
+    "completed": 3
+  },
+  "tasks": {
+    "total": 14,
+    "completed": 14
+  }
+}
