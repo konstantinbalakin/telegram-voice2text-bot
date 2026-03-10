@@ -27,14 +27,14 @@ def upgrade() -> None:
             "UPDATE subscription_prices SET amount_rub = :rub, amount_stars = :stars, description = :desc "
             "WHERE tier_id = (SELECT id FROM subscription_tiers WHERE name = 'Pro') "
             "AND period = 'week'"
-        ).bindparams(rub=8000, stars=40, desc="Неделя, чтобы попробовать")
+        ).bindparams(rub=8900, stars=40, desc="Неделя, чтобы попробовать")
     )
     op.execute(
         sa.text(
             "UPDATE subscription_prices SET amount_rub = :rub, amount_stars = :stars, description = :desc "
             "WHERE tier_id = (SELECT id FROM subscription_tiers WHERE name = 'Pro') "
             "AND period = 'month'"
-        ).bindparams(rub=18000, stars=90, desc="Самый популярный период. 🏷 Скидка -47% от недельного")
+        ).bindparams(rub=18000, stars=90, desc="Самый популярный период. 🏷 Скидка -53% от недельного")
     )
     op.execute(
         sa.text(
