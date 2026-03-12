@@ -100,7 +100,7 @@ packaging==26.0
     #   onnxruntime
 pillow==12.1.1
     # via weasyprint
-protobuf==6.33.5
+protobuf==7.34.0
     # via onnxruntime
 psutil==6.1.1
     # via telegram-voice2text-bot
