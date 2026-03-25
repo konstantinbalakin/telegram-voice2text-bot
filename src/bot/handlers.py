@@ -11,7 +11,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from telegram.error import BadRequest
 
-from src.config import settings, SUPPORTED_AUDIO_MIMES
+from src.config import settings, SUPPORTED_AUDIO_MIMES, SUPPORTED_VIDEO_MIMES
 from src.storage.database import get_session
 from src.storage.repositories import (
     UserRepository,
@@ -373,10 +373,10 @@ class BotHandlers:
             f"file_size={media_info.file_size}"
         )
 
-        # Document: MIME check at start
+        # Document: MIME check at start (audio + video)
         if media_info.media_type == "document":
             mime_type = media_info.mime_type or ""
-            if mime_type not in SUPPORTED_AUDIO_MIMES:
+            if mime_type not in SUPPORTED_AUDIO_MIMES and mime_type not in SUPPORTED_VIDEO_MIMES:
                 logger.debug(f"Document ignored: unsupported MIME type {mime_type}")
                 return
 
@@ -750,6 +750,14 @@ class BotHandlers:
     ) -> None:
         """Handle video messages by extracting audio track."""
         media_info = self._extract_media_info(update, "video")
+        if media_info:
+            await self._handle_media_message(update, context, media_info)
+
+    async def video_note_message_handler(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        """Handle video note messages (circles) by extracting audio track."""
+        media_info = self._extract_media_info(update, "video_note")
         if media_info:
             await self._handle_media_message(update, context, media_info)
 
