@@ -98,15 +98,15 @@ packaging==26.0
     # via
     #   huggingface-hub
     #   onnxruntime
-pillow==12.1.1
+pillow==12.2.0
     # via weasyprint
-protobuf==7.34.0
+protobuf==7.34.1
     # via onnxruntime
 psutil==6.1.1
     # via telegram-voice2text-bot
 pyaes==1.6.1
     # via telethon
-pyasn1==0.6.2
+pyasn1==0.6.3
     # via rsa
 pycparser==3.0 ; implementation_name != 'PyPy'
     # via cffi
