@@ -16,7 +16,6 @@ from sqlalchemy import event, text
 
 from src.config import settings
 
-
 # Global engine instance
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None

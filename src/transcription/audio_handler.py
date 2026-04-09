@@ -15,7 +15,6 @@ from telegram import File as TelegramFile
 
 from src.config import settings
 
-
 logger = logging.getLogger(__name__)
 
 
