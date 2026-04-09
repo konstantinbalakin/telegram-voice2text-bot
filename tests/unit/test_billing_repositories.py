@@ -224,7 +224,7 @@ async def test_subscription_create_user_subscription(async_session):
         tier_id=tier.id,
         period="month",
         payment_provider="telegram_stars",
-        expires_at=datetime(2026, 4, 2, tzinfo=timezone.utc),
+        expires_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
     )
 
     assert sub.id is not None
@@ -244,7 +244,7 @@ async def test_subscription_get_active_subscription(async_session):
         tier_id=tier.id,
         period="month",
         payment_provider="telegram_stars",
-        expires_at=datetime(2026, 4, 2, tzinfo=timezone.utc),
+        expires_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
     )
 
     active = await repo.get_active_subscription(user_id=user.id)
@@ -275,7 +275,7 @@ async def test_subscription_cancel(async_session):
         tier_id=tier.id,
         period="month",
         payment_provider="telegram_stars",
-        expires_at=datetime(2026, 4, 2, tzinfo=timezone.utc),
+        expires_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
     )
 
     cancelled = await repo.cancel_subscription(sub)
