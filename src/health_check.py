@@ -10,6 +10,7 @@ Exit codes:
 - 0: Healthy (all checks passed)
 - 1: Unhealthy (any check failed)
 """
+
 import asyncio
 import sys
 from pathlib import Path
