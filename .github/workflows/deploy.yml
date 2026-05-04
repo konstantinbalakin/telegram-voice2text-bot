@@ -67,6 +67,10 @@ jobs:
             # Navigate to project directory
             cd /opt/telegram-voice2text-bot || exit 1
 
+            # Create required directories and set permissions for appuser (UID 1000)
+            mkdir -p data logs
+            chown -R 1000:1000 data logs
+
             # Pull latest code (for migration files and docker-compose updates)
             git fetch --all --tags
             git checkout "$VERSION"
