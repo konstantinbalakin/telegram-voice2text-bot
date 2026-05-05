@@ -67,9 +67,9 @@ jobs:
             # Navigate to project directory
             cd /opt/telegram-voice2text-bot || exit 1
 
-            # Create required directories and set permissions for appuser (UID 1000)
+            # Create required directories and set permissions for container access
             mkdir -p data logs
-            sudo chown -R 1000:1000 data logs
+            sudo chmod -R 777 data logs
 
             # Pull latest code (for migration files and docker-compose updates)
             git fetch --all --tags
@@ -390,8 +390,8 @@ jobs:
             # Create required directories (if not exist)
             mkdir -p data logs
 
-            # Set permissions for appuser inside container (UID 1000)
-            sudo chown -R 1000:1000 data logs
+            # Set permissions for container access
+            sudo chmod -R 777 data logs
 
             # Rolling update with zero downtime
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps bot

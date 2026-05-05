@@ -4,6 +4,8 @@ services:
   bot:
     # Use pre-built image from Docker Hub instead of building
     image: ${IMAGE_NAME:-konstantinbalakin/telegram-voice2text-bot:latest}
+    # Run as admin user on host so files are owned by admin, not openclaw
+    user: "1001:1001"
     environment:
       # Application version for logging
       - APP_VERSION=${APP_VERSION:-unknown}
