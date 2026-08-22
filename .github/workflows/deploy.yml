@@ -17,11 +17,50 @@ on:
         type: string
 
 jobs:
-  migrate:
+  check-release:
     runs-on: ubuntu-latest
-    environment: production
     # Only run if Build and Tag succeeded (for workflow_run) or for other triggers
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Need full history to get tags
+
+      - name: Check if a new version was released
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Build and Tag skips build/tag steps for docs-only changes but still
+            # completes successfully - deploy only if it tagged the triggering commit
+            git fetch --tags
+            LATEST_TAG=$(git describe --tags --abbrev=0)
+            TAG_SHA=$(git rev-parse "$LATEST_TAG^{commit}")
+            RUN_SHA="${{ github.event.workflow_run.head_sha }}"
+            echo "Latest tag: $LATEST_TAG ($TAG_SHA)"
+            echo "Build and Tag ran on: $RUN_SHA"
+            if [ "$TAG_SHA" = "$RUN_SHA" ]; then
+              echo "🚢 New release detected: $LATEST_TAG"
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+            else
+              echo "⏭️  No new release (docs-only change) - skipping deploy"
+              echo "should_deploy=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            # Tag push or manual dispatch - always deploy
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          fi
+
+  migrate:
+    needs: check-release
+    runs-on: ubuntu-latest
+    environment: production
+    # Deploy only when a new version was actually released
+    if: needs.check-release.outputs.should_deploy == 'true'
 
     steps:
       - name: Checkout code
