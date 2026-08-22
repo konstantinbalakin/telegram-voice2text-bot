@@ -8,40 +8,12 @@ Telegram Voice2Text Bot - Production-ready Telegram bot for voice transcription 
 
 ## Memory Bank System
 
-This project uses the Claude Code Memory Bank system located in `/memory-bank/`. The Memory Bank maintains project context across sessions through structured documentation files.
-
-### Key Memory Bank Files
-
-Located in `/memory-bank/`:
-
-- `projectbrief.md` - Core requirements and project goals
-- `productContext.md` - Problem statement and user experience goals
-- `activeContext.md` - Current work focus, recent changes, and next steps
-- `systemPatterns.md` - Architecture and technical decisions
-- `techContext.md` - Technologies, dependencies, and development setup
-- `progress.md` - Current status, what works, and what's left to build
-- `plans/` - Detailed implementation plans
-
-### Workflow
-
-1. **Session Start**: Review Memory Bank context to understand current project state
-2. **Task Assessment**: Analyze complexity and approach
-3. **Plan & Decompose** (for complex tasks): Break down into manageable subtasks
-4. **Execute**: Implement solution
-5. **Memory Update**: Document significant changes and learnings
-
-### When to Update Memory Bank
-
-- After implementing significant features
-- When discovering new architectural patterns
-- At natural project milestones
-- When context needs clarification for future sessions
-
-Use the `/workflow:update-memory` slash command to update the Memory Bank.
+This project uses the Claude Code Memory Bank system located in `conductor/index.md`. The Memory Bank maintains project context across sessions through structured documentation files.
 
 ## Documentation
 
 **Main documentation** is located in `/docs/` directory:
+
 - `/docs/README.md` - Documentation index and navigation
 - `/docs/getting-started/` - Installation, configuration, quick start
 - `/docs/development/` - Architecture, testing, git workflow, dependencies
@@ -61,6 +33,7 @@ This project uses **Trunk Based Development** with protected main branch. See `d
 ### Quick Reference
 
 **Start Feature**:
+
 ```bash
 git checkout main
 git pull origin main
@@ -68,6 +41,7 @@ git checkout -b feature/your-feature-name
 ```
 
 **Commit Changes** (use Conventional Commits):
+
 ```bash
 git add <files>
 git commit -m "feat: add something"
@@ -75,11 +49,13 @@ git push origin feature/your-feature-name
 ```
 
 **Create PR**:
+
 ```bash
 gh pr create --title "feat: description" --body "..."
 ```
 
 **Commit Types**:
+
 - `feat:` - New functionality
 - `fix:` - Bug fixes
 - `refactor:` - Code refactoring
@@ -88,6 +64,7 @@ gh pr create --title "feat: description" --body "..."
 - `chore:` - Maintenance
 
 **Slash Command Integration**:
+
 - Use `/commit` for automatic commit message generation
 - Push manually after commit: `git push origin <branch-name>`
 
@@ -103,6 +80,7 @@ uv run pre-commit install   # installs both pre-commit and pre-push hooks
 **Pre-push** (every `git push`): mypy, pytest
 
 Before pushing, ensure ALL CI checks pass locally:
+
 ```bash
 uv run ruff check src/
 uv run black --check src/ tests/
@@ -197,11 +175,13 @@ make down      # Stop container
 ✅ **Current Status**: Production-ready, Phase 10.14 complete
 
 **Completed Phases**:
+
 - Phase 1-6: Project Setup, Core Functionality, Docker, VPS, Queue System ✅
 - Phase 7-9: Logging, Hybrid Transcription, Large Files (Telethon) ✅
 - Phase 10: Interactive Transcription System (all 14 sub-phases) ✅
 
 **Production Configuration**:
+
 - **Bot**: ✅ Live on Telegram, free during user acquisition
 - **Transcription**: ✅ OpenAI Whisper API (gpt-4o models + whisper-1)
 - **Text Processing**: ✅ DeepSeek V3 (структурирование, резюме, "сделать красиво")
@@ -212,6 +192,3 @@ make down      # Stop container
 - **CI/CD**: ✅ GitHub Actions pipeline active
 
 **Next Phase**: Analytics dashboard, quotas & billing, multi-language
-
-## Additional Instructions
-- @memory-bank/!memory-bank.md

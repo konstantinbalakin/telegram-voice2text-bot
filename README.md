@@ -8,22 +8,26 @@
 ## ✨ Особенности
 
 ### Транскрибация
+
 - ✅ **OpenAI Whisper API** - высококачественное распознавание речи
 - ✅ **Поддержка больших файлов** - до 2 GB через Telethon (MTProto Client API)
 - ✅ **Работа с документами и видео** - обработка аудио из .aac, .flac, .mp4, .mov и других форматов
 - ✅ **Качественное распознавание** - отличное качество для русского и других языков
 
 ### Интеллектуальная обработка (DeepSeek AI)
+
 - ✅ **"Структурировать"** - автоматическое структурирование текста с заголовками и списками
 - ✅ **"Сделать красиво"** - превращение в публикационный текст с сохранением вашего стиля
 - ✅ **"О чем этот текст"** - краткое резюме ключевых моментов
 
 ### UX и производительность
+
 - ✅ **Живой прогресс-бар** - визуальная обратная связь в реальном времени
 - ✅ **Система очередей** - управление нагрузкой, до 10 запросов
 - ✅ **Автоматическое структурирование** - для длинных аудио показываем черновик, затем структурируем
 
 ### Биллинг и подписки
+
 - ✅ **Бесплатный уровень** - 10 минут в день + 60 бонусных минут при регистрации
 - ✅ **Подписки** - Pro (неделя/месяц/год) с увеличенным дневным лимитом
 - ✅ **Пакеты минут** - покупка пакетов от 50 до 5000 минут
@@ -31,6 +35,7 @@
 - ✅ **Экраны баланса и покупок** - полный контроль над расходами
 
 ### Инфраструктура
+
 - ✅ **База данных** - хранение истории и статистики с автоматическими миграциями
 - ✅ **Docker** - простое развертывание
 - ✅ **CI/CD** - автоматический деплой на VPS с тестированием
@@ -82,6 +87,7 @@ uv run python -m src.main
 ```
 
 P.S. Посмотреть порядок миграций
+
 ```bash
 uv run alembic history
 ```
@@ -103,6 +109,7 @@ uv run alembic history
 ## 🛠 Технологии
 
 ### Core Stack
+
 - **Python 3.11+** - асинхронная архитектура
 - **OpenAI Whisper API** - транскрибация голоса (gpt-4o-transcribe, whisper-1)
 - **DeepSeek V3** - интеллектуальная обработка текста (структурирование, резюме, оформление)
@@ -110,6 +117,7 @@ uv run alembic history
 - **python-telegram-bot 22.5** - Telegram Bot API
 
 ### Data & Infrastructure
+
 - **SQLAlchemy + SQLite** - хранение истории и вариантов текста
 - **Alembic** - автоматические миграции базы данных
 - **Docker + Docker Compose** - контейнеризация
@@ -117,6 +125,7 @@ uv run alembic history
 - **YooKassa** - платежный шлюз (карты РФ, СБП, чеки 54-ФЗ)
 
 ### Optional (для локальной разработки)
+
 - **faster-whisper** - альтернативная локальная транскрибация (без API)
 
 ### Production Configuration
@@ -124,34 +133,40 @@ uv run alembic history
 **Текущая production конфигурация:**
 
 **Транскрибация:**
+
 - **Provider**: OpenAI Whisper API
 - **Models**: gpt-4o-transcribe, gpt-4o-mini-transcribe, whisper-1
 - **Стратегия**: `structure` - автоматическое структурирование текста
 - **Поддержка больших файлов**: до 2 GB через Telethon
 
 **Обработка текста:**
+
 - **LLM**: DeepSeek V3 (deepseek-chat)
 - **Режимы**: Структурирование, "Сделать красиво", Резюме
 - **Emoji**: 4 уровня (0-3), по умолчанию умеренное количество
 
 **Биллинг:**
+
 - **Бесплатный уровень**: 10 минут в день + 60 бонусных минут
 - **Подписки**: Pro (неделя/месяц/год) - от 80 ₽ до 1500 ₽
 - **Пакеты минут**: 50/100/500/5000 минут - от 100 ₽
 - **Платежи**: Карта РФ / СБП через YooKassa
 
 **Инфраструктура:**
+
 - **VPS**: 3GB RAM, 4 CPU cores
 - **Обработка**: Последовательная (1 запрос за раз)
 - **Лимиты**: Максимум 120 сек аудио, очередь до 10 запросов
 - **База данных**: SQLite с кешированием вариантов текста
 
 **Производительность:**
+
 - Транскрибация: ~5-15 секунд (зависит от длины аудио)
 - Структурирование: +3-5 секунд (DeepSeek V3)
 - Прогресс-бар: обновления каждые 5 секунд
 
 **Стоимость на 60 сек аудио:**
+
 - OpenAI Whisper: ~$0.006 (whisper-1) или ~$0.012 (gpt-4o models)
 - DeepSeek структурирование: ~$0.0002
 - **Итого**: ~$0.006-0.012 на минуту аудио
@@ -159,12 +174,15 @@ uv run alembic history
 ## 📋 Использование
 
 ### Загрузка и транскрибация
+
 - Загрузка аудиофайлов до 2 GB (MP3, M4A, WAV, OGG, OPUS)
 - Автоматическая транскрибация с OpenAI Whisper API
 - Прогресс-индикатор при обработке больших файлов
 
 ### Интерактивные кнопки
+
 После транскрибации доступны 3 действия над текстом:
+
 - **📝 Структурировать** - разбить текст на параграфы, заголовки и списки
 - **🪄 Сделать красиво** - превратить в публикационный текст с сохранением стиля автора
 - **📋 О чем этот текст** - получить краткое резюме ключевых моментов
@@ -172,6 +190,7 @@ uv run alembic history
 Все варианты кешируются - повторное нажатие мгновенно показывает результат!
 
 ### Биллинг и подписки
+
 - **Бесплатный уровень**: 10 минут в день + 60 бонусных минут
 - **Подписки Pro**:
   - Неделя (30 мин/день) - 80 ₽
@@ -264,6 +283,7 @@ git push origin main
 ```
 
 **Setup guides:**
+
 - [VPS Setup](docs/deployment/vps-setup.md) - Настройка VPS сервера
 - [CI/CD Pipeline](docs/deployment/cicd.md) - GitHub Actions
 
@@ -288,18 +308,18 @@ telegram-voice2text-bot/
 
 ## 📈 Roadmap
 
-- [x] **Phase 1-4**: Project Setup, Core Functionality, Docker & CI/CD, VPS Deployment
-- [x] **Phase 5-6**: Production Validation, Queue System, Database Migrations
-- [x] **Phase 7-9**: Logging & Versioning, Hybrid Transcription, Large File Support (Telethon)
-- [x] **Phase 10**: Interactive Transcription System
-  - [x] Phase 10.1-10.6: Infrastructure, Structured Mode, Length Variations, Summary, Emoji, Timestamps
-  - [x] Phase 10.7-10.10: File Handling, Retranscription, HTML/PDF Generation
-  - [x] Phase 10.11-10.13: OpenAI gpt-4o Support, StructureStrategy, Long Audio Chunking
-  - [x] Phase 10.14: Magic Mode ("Сделать красиво")
-- [x] **Phase 11**: Billing System (tarification, subscriptions, payments)
-  - [x] Telegram бот: биллинг, подписки, платежи, аналитика
-  - [x] YooKassa (карты РФ, СБП, чеки 54-ФЗ)
-  - [x] Персональные цены и лимиты
+- [X] **Phase 1-4**: Project Setup, Core Functionality, Docker & CI/CD, VPS Deployment
+- [X] **Phase 5-6**: Production Validation, Queue System, Database Migrations
+- [X] **Phase 7-9**: Logging & Versioning, Hybrid Transcription, Large File Support (Telethon)
+- [X] **Phase 10**: Interactive Transcription System
+  - [X] Phase 10.1-10.6: Infrastructure, Structured Mode, Length Variations, Summary, Emoji, Timestamps
+  - [X] Phase 10.7-10.10: File Handling, Retranscription, HTML/PDF Generation
+  - [X] Phase 10.11-10.13: OpenAI gpt-4o Support, StructureStrategy, Long Audio Chunking
+  - [X] Phase 10.14: Magic Mode ("Сделать красиво")
+- [X] **Phase 11**: Billing System (tarification, subscriptions, payments)
+  - [X] Telegram бот: биллинг, подписки, платежи, аналитика
+  - [X] YooKassa (карты РФ, СБП, чеки 54-ФЗ)
+  - [X] Персональные цены и лимиты
 - [ ] **Phase 12**: Web Version
   - [ ] Веб-интерфейс для загрузки аудио
   - [ ] Экраны баланса и покупок
