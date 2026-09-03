@@ -117,10 +117,11 @@ docs/
 - **[pyproject.toml](../pyproject.toml)** - Python dependencies
 - **[Dockerfile](../Dockerfile)** - Docker image definition
 
-### Claude Code Resources
+### AI Agent Resources
 
-- **[CLAUDE.md](../CLAUDE.md)** - Claude Code guidance
-- **[Memory Bank](../memory-bank/)** - Project context for AI
+- **[AGENTS.md](../AGENTS.md)** - AI agent guidance (OpenSpec workflow)
+- **[OpenSpec](../openspec/)** - Spec-driven development: specs и change-предложения
+- **[Memory Bank](../memory-bank/)** - Архив предыдущих итераций (не используется)
 
 ### GitHub Resources
 

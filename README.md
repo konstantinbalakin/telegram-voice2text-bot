@@ -300,7 +300,7 @@ telegram-voice2text-bot/
 ├── tests/                # Unit and integration tests
 ├── docs/                 # Documentation
 ├── alembic/              # Database migrations
-├── memory-bank/          # Claude Code context
+├── memory-bank/          # Архив (не используется, см. openspec/)
 └── .github/workflows/    # CI/CD pipelines
 ```
 

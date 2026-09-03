@@ -6,9 +6,19 @@ Telegram Voice2Text Bot - Production-ready Telegram bot for voice transcription 
 
 **GitHub Repository**: `konstantinbalakin/telegram-voice2text-bot`
 
-## Memory Bank System
+## OpenSpec (Spec-Driven Development)
 
-This project uses the Claude Code Memory Bank system located in `conductor/index.md`. The Memory Bank maintains project context across sessions through structured documentation files.
+This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Specs and change proposals live in `openspec/` (artifacts in Russian, structural headings and SHALL/MUST keywords in English — see `openspec/config.yaml`).
+
+**Workflow for any non-trivial change:**
+
+1. **Propose** — `openspec new change <name>` creates `openspec/changes/<name>/` with `proposal.md`, `specs/` (delta), `design.md`, `tasks.md`. Do not edit project code at this stage.
+2. **Apply** — implement tasks from `tasks.md` on a feature branch, following the Git Workflow below.
+3. **Archive** — `openspec archive <name>` merges the delta into main specs (`openspec/specs/`) and moves the change to `openspec/changes/archive/`.
+
+Useful commands: `openspec list`, `openspec list --specs`, `openspec validate --all`, `openspec show <name>`.
+
+For Hermes users: workflow skills live in `.hermes/skills/openspec-*` (propose / apply-change / archive-change / update-change / sync-specs / explore).
 
 ## Documentation
 
@@ -62,11 +72,6 @@ gh pr create --title "feat: description" --body "..."
 - `docs:` - Documentation
 - `test:` - Tests
 - `chore:` - Maintenance
-
-**Slash Command Integration**:
-
-- Use `/commit` for automatic commit message generation
-- Push manually after commit: `git push origin <branch-name>`
 
 ### Pre-commit / Pre-push Hooks
 
