@@ -6,10 +6,6 @@ Telegram Voice2Text Bot - Production-ready Telegram bot for voice transcription 
 
 **GitHub Repository**: `konstantinbalakin/telegram-voice2text-bot`
 
-## Memory Bank System
-
-This project uses the Claude Code Memory Bank system located in `conductor/index.md`. The Memory Bank maintains project context across sessions through structured documentation files.
-
 ## OpenSpec (Spec-Driven Development)
 
 This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Specs and change proposals live in `openspec/` (artifacts in Russian, structural headings and SHALL/MUST keywords in English — see `openspec/config.yaml`).
@@ -76,11 +72,6 @@ gh pr create --title "feat: description" --body "..."
 - `docs:` - Documentation
 - `test:` - Tests
 - `chore:` - Maintenance
-
-**Slash Command Integration**:
-
-- Use `/commit` for automatic commit message generation
-- Push manually after commit: `git push origin <branch-name>`
 
 ### Pre-commit / Pre-push Hooks
 
