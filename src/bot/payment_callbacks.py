@@ -470,23 +470,35 @@ def successful_payment_handler(payment_service: "PaymentService") -> _Handler:
             payload_user_id = payload_data["user_id"]
             period = payload_data.get("period", "month")
 
-            # SECURITY: verify effective_user matches payload user_id
+            # SECURITY: goods are always credited to the invoice owner
+            # (payload_user_id), never to the payer. A Telegram invoice link
+            # can be legitimately paid by another account (e.g. a family
+            # member without a RU card) — that is not an IDOR attack.
+            # See issue #121.
             effective_user = update.effective_user
+            payer_db_id: int | None = None
             if effective_user:
                 async with get_session() as session:
                     user_repo = UserRepository(session)
                     db_user = await user_repo.get_by_telegram_id(effective_user.id)
-                    if not db_user or db_user.id != payload_user_id:
-                        logger.critical(
-                            "IDOR attempt: effective_user tg_id=%s (db_id=%s) != payload user_id=%s",
-                            effective_user.id,
-                            db_user.id if db_user else "NOT_FOUND",
-                            payload_user_id,
-                        )
-                        await update.message.reply_text(
-                            "Ошибка обработки платежа. Свяжитесь с поддержкой."
-                        )
-                        return
+                    if db_user:
+                        payer_db_id = db_user.id
+
+                if payer_db_id is None:
+                    logger.info(
+                        "Payment for user %s paid by unregistered tg_id=%s — "
+                        "crediting to invoice owner",
+                        payload_user_id,
+                        effective_user.id,
+                    )
+                elif payer_db_id != payload_user_id:
+                    logger.info(
+                        "Payment for user %s paid by another account "
+                        "(tg_id=%s, db_id=%s) — crediting to invoice owner",
+                        payload_user_id,
+                        effective_user.id,
+                        payer_db_id,
+                    )
 
             # Detect provider by currency
             provider_name = "yookassa" if payment.currency == "RUB" else "telegram_stars"
@@ -501,7 +513,19 @@ def successful_payment_handler(payment_service: "PaymentService") -> _Handler:
             )
 
             if success:
-                await update.message.reply_text("✅ Платеж успешно обработан!")
+                if payer_db_id is not None and payer_db_id != payload_user_id:
+                    # Paid by another account — goods went to the invoice owner
+                    await update.message.reply_text(
+                        "✅ Платеж успешно обработан!\n"
+                        "Минуты зачислены владельцу ссылки на оплату."
+                    )
+                elif payer_db_id is None:
+                    await update.message.reply_text(
+                        "✅ Платеж успешно обработан!\n"
+                        "Минуты зачислены владельцу ссылки на оплату."
+                    )
+                else:
+                    await update.message.reply_text("✅ Платеж успешно обработан!")
             else:
                 await update.message.reply_text("Ошибка обработки платежа. Свяжитесь с поддержкой.")
         except Exception as e:
