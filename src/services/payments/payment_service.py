@@ -178,12 +178,6 @@ class PaymentService:
 
         # Find pending purchase for error marking
         pending_purchase = None
-        async with self._repos() as (purchase_repo, _, __, ___):
-            pending_purchase = await purchase_repo.find_pending_purchase(
-                user_id=user_id,
-                purchase_type=payment_type.value,
-                item_id=item_id,
-            )
 
         # Credit or activate
         try:
@@ -207,24 +201,37 @@ class PaymentService:
                 e,
                 exc_info=True,
             )
-            if pending_purchase:
-                async with self._repos() as (purchase_repo, _, __, ___):
-                    await purchase_repo.mark_failed(pending_purchase)
+            async with self._repos() as (purchase_repo, _, __, ___):
+                # Re-fetch inside this session: an instance loaded in a closed
+                # session is detached and mutating it persists nothing (#121).
+                failed = await purchase_repo.find_pending_purchase(
+                    user_id=user_id,
+                    purchase_type=payment_type.value,
+                    item_id=item_id,
+                )
+                if failed:
+                    await purchase_repo.mark_failed(failed)
             return False
 
-        # Mark purchase completed
-        if success and pending_purchase:
-            async with self._repos() as (purchase_repo, _, __, ___):
+        # Mark purchase completed — re-fetch within the marking session so the
+        # status change is actually persisted (detached-instance fix, #121).
+        async with self._repos() as (purchase_repo, _, __, ___):
+            pending_purchase = await purchase_repo.find_pending_purchase(
+                user_id=user_id,
+                purchase_type=payment_type.value,
+                item_id=item_id,
+            )
+            if success and pending_purchase:
                 pending_purchase.provider_transaction_id = provider_transaction_id
                 await purchase_repo.mark_completed(pending_purchase)
                 logger.info("Marked purchase %s as completed", pending_purchase.id)
-        elif success and not pending_purchase:
-            logger.warning(
-                "No pending purchase found for user %s, type=%s, item=%s",
-                user_id,
-                payment_type.value,
-                item_id,
-            )
+            elif success and not pending_purchase:
+                logger.warning(
+                    "No pending purchase found for user %s, type=%s, item=%s",
+                    user_id,
+                    payment_type.value,
+                    item_id,
+                )
 
         return success
 
