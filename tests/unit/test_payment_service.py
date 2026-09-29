@@ -14,7 +14,6 @@ from src.services.payments.base import (
 )
 from src.services.payments.payment_service import PaymentService
 
-
 # === Helpers ===
 
 
@@ -225,7 +224,7 @@ async def test_handle_successful_subscription_payment():
     mocks["purchase_repo"].find_by_transaction_id = AsyncMock(return_value=None)
 
     mock_sub = MagicMock()
-    mocks["subscription_service"].create_subscription.return_value = mock_sub
+    mocks["subscription_service"].purchase_subscription_with_repo.return_value = mock_sub
 
     success = await service.handle_successful_payment(
         provider_name="telegram_stars",
@@ -235,7 +234,7 @@ async def test_handle_successful_subscription_payment():
     )
 
     assert success is True
-    mocks["subscription_service"].create_subscription.assert_called_once()
+    mocks["subscription_service"].purchase_subscription_with_repo.assert_called_once()
 
 
 @pytest.mark.asyncio

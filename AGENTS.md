@@ -197,3 +197,7 @@ make down      # Stop container
 - **CI/CD**: ✅ GitHub Actions pipeline active
 
 **Next Phase**: Analytics dashboard, quotas & billing, multi-language
+
+## kanon (канон-структура доработок)
+
+Артефакты доработок: `kanon/features/YYYYMMDD-<category>-<slug>/` (epic|story|bug|fix|docs|chore). Статусы: draft → approved → planned → in-progress → verify → released; переходы — отдельными коммитами, `draft→approved` — только оператор. Итерации фиксов: `iterations/it-NNN/` внутри фичи. Вход в работу: `kanon/STATUS.md` (якорь первой загрузки). CLI: `kanon status` / `kanon check` (если установлен). Полный цикл — скиллы kanon-interview → kanon-plan → kanon-execute → kanon-verify → kanon-iterate → kanon-docsync/kanon-whatsnew. Рабочая копия для изменений: para-копия (не /opt), флоу: ветка → PR → CI → merge.

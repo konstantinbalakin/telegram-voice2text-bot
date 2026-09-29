@@ -185,12 +185,15 @@ class PaymentService:
             if payment_type == PaymentType.PACKAGE:
                 success = await self._credit_package(user_id=user_id, package_id=item_id)
             elif payment_type == PaymentType.SUBSCRIPTION:
-                success = await self._activate_subscription(
-                    user_id=user_id,
-                    tier_id=item_id,
-                    payment_provider=provider_name,
-                    period=period,
-                )
+                # Сама выдача происходит ниже, в той же сессии, что и
+                # mark_completed (#140). Здесь только проверка доступности
+                # сервиса — чтобы отсутствие subscription_service попало в
+                # ветку mark_failed, а не уронило обработчик до неё.
+                if self.subscription_service is None:
+                    raise RuntimeError(
+                        "PaymentService: subscription_service is required for subscriptions"
+                    )
+                success = True
         except Exception as e:
             logger.critical(
                 "Payment credited but fulfillment FAILED: transaction=%s user=%s type=%s item=%s error=%s",
@@ -212,6 +215,67 @@ class PaymentService:
                 if failed:
                     await purchase_repo.mark_failed(failed)
             return False
+
+        # Subscription flow (#140): purchase_subscription (single entry point,
+        # scenarios 3.1-3.5) and mark_completed share ONE session — either both
+        # commit or the session rolls back and no subscription row is visible.
+        if payment_type == PaymentType.SUBSCRIPTION and success:
+            if self.subscription_service is None:
+                raise RuntimeError(
+                    "PaymentService: subscription_service is required for subscriptions"
+                )
+            try:
+                async with self._repos() as (purchase_repo, subscription_repo, _, ___):
+                    subscription = await self.subscription_service.purchase_subscription_with_repo(
+                        subscription_repo,
+                        user_id=user_id,
+                        tier_id=item_id,
+                        period=period,
+                        payment_provider=provider_name,
+                    )
+                    pending_purchase = await purchase_repo.find_pending_purchase(
+                        user_id=user_id,
+                        purchase_type=payment_type.value,
+                        item_id=item_id,
+                    )
+                    if pending_purchase:
+                        pending_purchase.provider_transaction_id = provider_transaction_id
+                        await purchase_repo.mark_completed(pending_purchase)
+                        logger.info("Marked purchase %s as completed", pending_purchase.id)
+                    else:
+                        logger.warning(
+                            "No pending purchase found for user %s, type=%s, item=%s",
+                            user_id,
+                            payment_type.value,
+                            item_id,
+                        )
+                    logger.info(
+                        "Fulfilled subscription for user %s: tier=%s, subscription=%s",
+                        user_id,
+                        item_id,
+                        subscription.id,
+                    )
+            except Exception as e:
+                # Общая сессия откатилась: выданной подписки нет (атомарность).
+                logger.critical(
+                    "Payment credited but fulfillment FAILED: transaction=%s user=%s type=%s item=%s error=%s",
+                    provider_transaction_id,
+                    user_id,
+                    payment_type.value,
+                    item_id,
+                    e,
+                    exc_info=True,
+                )
+                async with self._repos() as (purchase_repo, _, __, ___):
+                    failed = await purchase_repo.find_pending_purchase(
+                        user_id=user_id,
+                        purchase_type=payment_type.value,
+                        item_id=item_id,
+                    )
+                    if failed:
+                        await purchase_repo.mark_failed(failed)
+                return False
+            return True
 
         # Mark purchase completed — re-fetch within the marking session so the
         # status change is actually persisted (detached-instance fix, #121).
@@ -259,10 +323,11 @@ class PaymentService:
     async def _activate_subscription(
         self, user_id: int, tier_id: int, payment_provider: str, period: str = "month"
     ) -> bool:
-        """Activate subscription for user."""
+        """Activate subscription for user via the single purchase entry point (#140)."""
         if self.subscription_service is None:
             raise RuntimeError("PaymentService: subscription_service is required for subscriptions")
-        await self.subscription_service.create_subscription(
+        # ЕДИНАЯ точка покупки: create_subscription из платёжного потока запрещён.
+        await self.subscription_service.purchase_subscription(
             user_id=user_id,
             tier_id=tier_id,
             period=period,
