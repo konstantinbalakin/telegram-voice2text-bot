@@ -52,7 +52,9 @@ class TestPurchaseStatusEnum:
         assert PurchaseStatus("completed") == PurchaseStatus.COMPLETED
 
     def test_purchase_status_members_count(self) -> None:
-        assert len(PurchaseStatus) == 4
+        # #140: добавлен ABANDONED для брошенных инвойсов
+        assert len(PurchaseStatus) == 5
+        assert PurchaseStatus.ABANDONED == "abandoned"
 
 
 class TestExistingEnumsUnchanged:
