@@ -1,5 +1,5 @@
 ---
-status: open
+status: resolved
 source: operator
 scenario: полигон — юзер купил Pro-год при живой Basic-неделе; по гейту Д1–Д3 сработал
   мгновенный апгрейд (Basic → replaced, Pro active сразу, остаток дней перенесён:
