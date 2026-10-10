@@ -19,8 +19,10 @@ class PaymentType(str, Enum):
 
 class SubscriptionStatus(str, Enum):
     ACTIVE = "active"
+    QUEUED = "queued"  # оплачена, ждёт окончания текущей active (#140)
     EXPIRED = "expired"
     CANCELLED = "cancelled"
+    REPLACED = "replaced"  # заменена апгрейдом (#140, Д2)
 
 
 class SubscriptionPeriod(str, Enum):
@@ -70,6 +72,7 @@ class PurchaseStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     REFUNDED = "refunded"
+    ABANDONED = "abandoned"  # брошенные инвойсы (#140)
 
 
 class Currency(str, Enum):

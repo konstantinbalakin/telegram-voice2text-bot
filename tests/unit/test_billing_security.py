@@ -5,7 +5,6 @@ Tests for billing security and payment logic (Phase 3).
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-
 # =============================================================================
 # Task 3.1: Native Telegram Payments verification (via Telegram, not webhooks)
 # =============================================================================
@@ -129,7 +128,7 @@ class TestSubscriptionPeriodParam:
         from src.services.payments.payment_service import PaymentService
 
         mock_sub_service = AsyncMock()
-        mock_sub_service.create_subscription.return_value = MagicMock(id=1)
+        mock_sub_service.purchase_subscription_with_repo.return_value = MagicMock(id=1)
 
         service = PaymentService(
             purchase_repo=AsyncMock(),
@@ -149,8 +148,8 @@ class TestSubscriptionPeriodParam:
             period="year",
         )
 
-        mock_sub_service.create_subscription.assert_called_once()
-        call_kwargs = mock_sub_service.create_subscription.call_args[1]
+        mock_sub_service.purchase_subscription_with_repo.assert_called_once()
+        call_kwargs = mock_sub_service.purchase_subscription_with_repo.call_args[1]
         assert call_kwargs["period"] == "year"
 
 

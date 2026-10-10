@@ -229,17 +229,19 @@ class SubscriptionRepository:
         payment_provider: str,
         expires_at: datetime,
         auto_renew: bool = False,
+        status: SubscriptionStatus = SubscriptionStatus.ACTIVE,
+        started_at: Optional[datetime] = None,
     ) -> UserSubscription:
-        """Create a user subscription."""
+        """Create a user subscription (#140: status/started_at for queued rows)."""
         subscription = UserSubscription(
             user_id=user_id,
             tier_id=tier_id,
             period=period,
-            started_at=datetime.now(timezone.utc),
+            started_at=started_at or datetime.now(timezone.utc),
             expires_at=expires_at,
             auto_renew=auto_renew,
             payment_provider=payment_provider,
-            status=SubscriptionStatus.ACTIVE,
+            status=status,
         )
         self.session.add(subscription)
         await self.session.flush()
@@ -261,6 +263,120 @@ class SubscriptionRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    async def get_stale_active_subscriptions(self, user_id: int) -> list[UserSubscription]:
+        """Get active-status rows already past expires_at (#140, scenario 3.5).
+
+        Статус ещё active, но время вышло (крон запаздывает) — первопричина
+        IntegrityError при покупке.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        result = await self.session.execute(
+            select(UserSubscription).where(
+                and_(
+                    UserSubscription.user_id == user_id,
+                    UserSubscription.status == SubscriptionStatus.ACTIVE,
+                    func.datetime(UserSubscription.expires_at) <= func.datetime(now),
+                )
+            )
+        )
+        return list(result.scalars().all())
+
+    async def get_queued_subscription(self, user_id: int) -> Optional[UserSubscription]:
+        """Get the queued subscription for a user (#140). At most one by design."""
+        result = await self.session.execute(
+            select(UserSubscription).where(
+                and_(
+                    UserSubscription.user_id == user_id,
+                    UserSubscription.status == SubscriptionStatus.QUEUED,
+                )
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_due_queued_subscriptions(
+        self, user_id: Optional[int] = None
+    ) -> list[UserSubscription]:
+        """Queued rows whose planned start has arrived (#140, волна 3).
+
+        Сравнение на уровне SQL (func.datetime) — SQLite возвращает naive
+        datetime, поэтому aware/naive в Python не смешиваем. Самая ранняя
+        по started_at — первая.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        conditions = [
+            UserSubscription.status == SubscriptionStatus.QUEUED,
+            func.datetime(UserSubscription.started_at) <= func.datetime(now),
+        ]
+        if user_id is not None:
+            conditions.insert(0, UserSubscription.user_id == user_id)
+        result = await self.session.execute(
+            select(UserSubscription)
+            .where(and_(*conditions))
+            .order_by(UserSubscription.started_at.asc())
+        )
+        return list(result.scalars().all())
+
+    async def activate_subscription(self, subscription: UserSubscription) -> UserSubscription:
+        """Activate a queued subscription whose start has arrived (#140, волна 3).
+
+        Д1: started_at/expires_at НЕ пересчитываются — эти даты уже показаны
+        юзеру при оплате. auto_renew=False — продление только ручной оплатой.
+        """
+        subscription.status = SubscriptionStatus.ACTIVE
+        subscription.auto_renew = False
+        subscription.updated_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return subscription
+
+    async def deactivate_all_active(self, user_id: int) -> int:
+        """Deactivate ALL active rows for user regardless of expires_at (#140).
+
+        Гасит и живые, и просроченные-but-active строки (когда крон не успел).
+        Возвращает количество погашенных строк.
+        """
+        now = datetime.now(timezone.utc).isoformat()
+        result = await self.session.execute(
+            select(UserSubscription).where(
+                and_(
+                    UserSubscription.user_id == user_id,
+                    UserSubscription.status == SubscriptionStatus.ACTIVE,
+                )
+            )
+        )
+        rows = list(result.scalars().all())
+        for row in rows:
+            row.status = SubscriptionStatus.CANCELLED
+            row.auto_renew = False
+            row.updated_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        if rows:
+            logger.warning(
+                "deactivate_all_active(%s): cancelled %d stale/active rows "
+                "(first id=%s, max expires_at=%s <= now=%s)",
+                user_id,
+                len(rows),
+                rows[0].id,
+                rows[-1].expires_at,
+                now,
+            )
+        return len(rows)
+
+    async def replace_subscription(self, subscription: UserSubscription) -> UserSubscription:
+        """Mark subscription as replaced by an upgrade (#140, Д2)."""
+        subscription.status = SubscriptionStatus.REPLACED
+        subscription.auto_renew = False
+        subscription.updated_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return subscription
+
+    async def cancel_subscription_row(self, subscription: UserSubscription) -> UserSubscription:
+        """Cancel a queued row outright (#140, Д3: before re-creating queued)."""
+        subscription.status = SubscriptionStatus.CANCELLED
+        subscription.auto_renew = False
+        subscription.updated_at = datetime.now(timezone.utc)
+        await self.session.flush()
+        return subscription
 
     async def get_active_subscription_with_tier(self, user_id: int) -> Optional[UserSubscription]:
         """Get active subscription with tier eagerly loaded (avoids N+1).

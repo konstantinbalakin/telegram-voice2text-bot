@@ -5,7 +5,6 @@ End-to-end tests for billing system full cycle (Phase 12)
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-
 # =============================================================================
 # E2E: Audio → Billing Check → Deduction → Notification
 # =============================================================================
@@ -180,7 +179,9 @@ class TestE2EPurchaseCycle:
         package_repo = AsyncMock()
 
         subscription_service = AsyncMock()
-        subscription_service.create_subscription = AsyncMock(return_value=MagicMock(id=1))
+        subscription_service.purchase_subscription_with_repo = AsyncMock(
+            return_value=MagicMock(id=1)
+        )
 
         payment_service = PaymentService(
             purchase_repo=purchase_repo,
@@ -198,4 +199,4 @@ class TestE2EPurchaseCycle:
             provider_transaction_id="tx_456",
         )
         assert result is True
-        subscription_service.create_subscription.assert_called_once()
+        subscription_service.purchase_subscription_with_repo.assert_called_once()
