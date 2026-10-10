@@ -321,10 +321,10 @@ class PaymentCallbackHandlers:
             db_user_id = await self._get_db_user_id(telegram_user_id)
 
             if provider_name == "telegram_stars":
-                price, _ = await self._get_subscription_price(tier_id, period)
+                _, price = await self._get_subscription_price(tier_id, period)
                 currency = Currency.XTR
             else:
-                _, price = await self._get_subscription_price(tier_id, period)
+                price, _ = await self._get_subscription_price(tier_id, period)
                 currency = Currency.RUB
 
             tier_name = await self._get_tier_name(tier_id)
