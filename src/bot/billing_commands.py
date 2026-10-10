@@ -82,6 +82,15 @@ class BillingCommands:
             expires = active_sub.expires_at.strftime("%d.%m.%Y")
             lines.append(f"\n⭐ Подписка: {tier_name}")
             lines.append(f"📅 Действует до: {expires}")
+
+            # Очередь продления (#140): юзер заплатил — должен это видеть
+            queued_info = await self.subscription_service.get_queued_subscription_info(db_user.id)
+            if queued_info:
+                queued, q_tier = queued_info
+                q_name = q_tier.name if q_tier else queued.tier_id
+                q_start = queued.started_at.strftime("%d.%m.%Y")
+                q_end = queued.expires_at.strftime("%d.%m.%Y")
+                lines.append(f"➡️ Продлено: {q_name} с {q_start} по {q_end}")
         else:
             lines.append("\n📋 Подписка: нет")
 
