@@ -105,6 +105,42 @@ class TestPreviewAnyTierAtActive:
         )
         assert len(rows) == 1
 
+    async def test_no_queued_flag_false(self, async_session, service, tiers):
+        """it-008: только active, без queued — replaces_queued=False."""
+        user = await _create_user(async_session)
+        await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
+
+        preview = await service.preview_purchase(user.id, tiers["basic"].id, "month")
+        assert preview is not None
+        assert preview.replaces_queued is False
+
+    async def test_existing_queued_flag_true(self, async_session, service, tiers):
+        """it-008: есть queued — preview предупреждает, что покупка её отменит."""
+        user = await _create_user(async_session)
+        await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
+        # queued: Pro встанет в очередь на конец Basic
+        await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
+
+        preview = await service.preview_purchase(user.id, tiers["basic"].id, "week")
+        assert preview is not None
+        assert preview.replaces_queued is True
+        assert preview.tier_id == tiers["basic"].id
+
+    async def test_cancelled_queued_does_not_set_flag(self, async_session, service, tiers):
+        """it-008: отменённая queued не триггерит предупреждение."""
+        user = await _create_user(async_session)
+        await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
+        queued = await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
+        # отменяем через репозиторий напрямую (сервисного API отмены queued нет)
+        from src.storage.billing_repositories import SubscriptionRepository
+
+        repo = SubscriptionRepository(async_session)
+        await repo.cancel_subscription_row(queued)
+
+        preview = await service.preview_purchase(user.id, tiers["basic"].id, "week")
+        assert preview is not None
+        assert preview.replaces_queued is False
+
     async def test_higher_tier_also_renewal_no_carry(self, async_session, service, tiers):
         user = await _create_user(async_session)
         sub = await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
@@ -192,6 +228,35 @@ class TestRenderConfirmation:
         assert "действует сразу" not in text
         assert "Апгрейд" not in text
         assert "остато" not in text  # без «остаток N дн.»
+        assert "отменена" not in text  # без queued предупреждения не нужно
+
+    def test_replaces_queued_named_warning(self):
+        """it-008: существующая queued отменяется — предупреждение с именем тира."""
+        from dataclasses import replace
+
+        d1 = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
+        preview = replace(_preview(d1, d1 + timedelta(days=30)), replaces_queued=True)
+        text = render_purchase_confirmation(
+            preview,
+            "Basic",
+            30.0,
+            current_tier_name="Basic",
+            replaces_queued_tier_name="Pro",
+        )
+        assert "Запланированная подписка Pro будет отменена" in text
+        assert "в очередь встанет новая" in text
+        # без тавтологии: не «подписка заменяет подписку»
+        assert "заменяет" not in text
+        assert "Продолжить" in text
+
+    def test_replaces_queued_without_tier_name_generic(self):
+        """it-008: имя тира не нашлось — предупреждение остаётся, без имени."""
+        from dataclasses import replace
+
+        d1 = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
+        preview = replace(_preview(d1, d1 + timedelta(days=30)), replaces_queued=True)
+        text = render_purchase_confirmation(preview, "Basic", 30.0, current_tier_name="Basic")
+        assert "Ранее запланированная подписка будет отменена" in text
 
     def test_text_without_current_tier_name(self):
         d1 = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
@@ -315,6 +380,61 @@ class TestNoActiveNoConfirmation:
         assert "Оплатить" in buttons
         assert "Отмена" in buttons
         # платёж ещё НЕ создан
+        payment_service.create_payment.assert_not_awaited()
+
+    async def test_existing_queued_shows_replacement_warning(self):
+        """it-008: при существующей queued подтверждение предупреждает об отмене."""
+        from unittest.mock import patch
+
+        from src.services.subscription_service import PurchasePreview
+
+        preview = PurchasePreview(
+            scenario="renewal",
+            tier_id=101,
+            period="week",
+            started_at=datetime(2026, 11, 1, tzinfo=timezone.utc),
+            expires_at=datetime(2026, 11, 8, tzinfo=timezone.utc),
+            replaces_queued=True,
+        )
+        payment_service = AsyncMock()
+        subscription_service = AsyncMock()
+        subscription_service.preview_purchase = AsyncMock(return_value=preview)
+
+        handlers = PaymentCallbackHandlers(
+            payment_service=payment_service,
+            subscription_service=subscription_service,
+        )
+        handlers._get_db_user_id = AsyncMock(return_value=1)
+        handlers._get_tier_name = AsyncMock(return_value="Basic")
+        handlers._get_tier_limit = AsyncMock(return_value=30.0)
+
+        active_row = MagicMock(tier_id=101)
+        queued_row = MagicMock(tier_id=102)
+        mock_repo = MagicMock()
+        mock_repo.get_active_subscription = AsyncMock(return_value=active_row)
+        mock_repo.get_queued_subscription = AsyncMock(return_value=queued_row)
+        tier_by_id = {101: MagicMock(name="basic-tier"), 102: MagicMock(name="pro-tier")}
+        tier_by_id[101].name = "Basic"
+        tier_by_id[102].name = "Pro"
+        mock_repo.get_tier_by_id = AsyncMock(side_effect=lambda tier_id: tier_by_id[tier_id])
+
+        with (
+            patch("src.bot.payment_callbacks.get_session") as get_session_ctx,
+            patch("src.bot.payment_callbacks.SubscriptionRepository", return_value=mock_repo),
+        ):
+            get_session_ctx.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            get_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            update = _make_update("sub_stars:101:week")
+            await handlers.buy_subscription_stars_callback(update, context=AsyncMock())
+
+        update.callback_query.edit_message_text.assert_awaited_once()
+        args = update.callback_query.edit_message_text.await_args.args
+        kwargs = update.callback_query.edit_message_text.await_args.kwargs
+        text = args[0] if args else kwargs.get("text", "")
+        # предупреждение называет отменяемый тир, без тавтологии
+        assert "Запланированная подписка Pro будет отменена" in text
+        assert "заменяет" not in text
         payment_service.create_payment.assert_not_awaited()
 
     async def test_cancel_callback_edits_cancelled(self):

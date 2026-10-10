@@ -46,18 +46,37 @@ def render_purchase_confirmation(
     tier_name: str,
     tier_limit_minutes: float,
     current_tier_name: str = "",
+    replaces_queued_tier_name: str = "",
 ) -> str:
     """Render confirmation text with dates before payment (#140).
 
     it-007: один текст для любой покупки при живой подписке —
     новая встанет в очередь на конец текущей, ровно оплаченный период
     (апгрейд без мгновенного действия и переноса дней).
+
+    it-008: если у юзера уже есть queued — новая покупка её отменит
+    (правило ≤1 queued). Вместо текущей в очередь встанет новая; без
+    тавтологии («подписка заменяет подписку») — называем, ЧТО именно
+    отменит покупка: запланированный тир по имени.
     """
-    return (
+    lines = [
         f"📅 Новая подписка {tier_name} начнётся {_fmt_date(preview.started_at)} "
         f"— сразу после окончания текущей ({current_tier_name}) — "
-        f"и закончится {_fmt_date(preview.expires_at)}.\n\nПродолжить?"
-    )
+        f"и закончится {_fmt_date(preview.expires_at)}."
+    ]
+    if preview.replaces_queued:
+        if replaces_queued_tier_name:
+            lines.append(
+                f"⚠️ Запланированная подписка {replaces_queued_tier_name} будет отменена — "
+                "в очередь встанет новая."
+            )
+        else:
+            lines.append(
+                "⚠️ Ранее запланированная подписка будет отменена — в очередь встанет новая."
+            )
+    lines.append("")
+    lines.append("Продолжить?")
+    return "\n".join(lines)
 
 
 def _confirm_keyboard(tier_id: int, period: str, provider: str) -> InlineKeyboardMarkup:
@@ -256,17 +275,26 @@ class PaymentCallbackHandlers:
 
         tier_name = await self._get_tier_name(tier_id)
         current_tier = None
+        replaces_queued_tier_name = ""
         async with get_session() as session:
             repo = SubscriptionRepository(session)
             active = await repo.get_active_subscription(user_id=db_user_id)
             if active:
                 current_tier = await repo.get_tier_by_id(tier_id=active.tier_id)
+            # it-008: при существующей queued покупка её отменит —
+            # предупреждение в подтверждении называет её тир по имени.
+            if preview.replaces_queued:
+                queued = await repo.get_queued_subscription(user_id=db_user_id)
+                if queued:
+                    queued_tier = await repo.get_tier_by_id(tier_id=queued.tier_id)
+                    replaces_queued_tier_name = queued_tier.name if queued_tier else ""
 
         text = render_purchase_confirmation(
             preview,
             tier_name=tier_name,
             tier_limit_minutes=await self._get_tier_limit(tier_id),
             current_tier_name=current_tier.name if current_tier else "",
+            replaces_queued_tier_name=replaces_queued_tier_name,
         )
         await update.callback_query.edit_message_text(  # type: ignore[union-attr]
             text,

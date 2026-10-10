@@ -43,6 +43,8 @@ class PurchasePreview:
     period: str
     started_at: Optional[datetime] = None  # None = «сразу» (fresh)
     expires_at: Optional[datetime] = None
+    # it-008: у юзера уже есть queued — покупка ОТМЕНИТ её (правило ≤1 queued).
+    replaces_queued: bool = False
 
 
 class SubscriptionService:
@@ -446,6 +448,8 @@ class SubscriptionService:
                       который сам лениво активирует due-queued)
         - renewal   — любая покупка при живой active: started_at = конец
                       текущей, expires = started_at + оплаченный период
+        - replaces_queued=True — у юзера уже есть queued; покупка отменит
+                      её (правило ≤1 queued), UX обязан предупредить (it-008)
 
         Returns:
             PurchasePreview, если есть живая active (нужно подтверждение).
@@ -457,6 +461,7 @@ class SubscriptionService:
             if active is None:
                 return None
 
+            queued = await subscription_repo.get_queued_subscription(user_id)
             days = SubscriptionPeriod(period).days
             expires_at_norm = (
                 active.expires_at.replace(tzinfo=timezone.utc)
@@ -466,10 +471,12 @@ class SubscriptionService:
 
             # it-007: единый сценарий — любая покупка при живой active
             # встаёт в очередь на конец текущей, ровно оплаченный период.
+            # it-008: существующая queued будет отменена — флаг для UX.
             return PurchasePreview(
                 scenario="renewal",
                 tier_id=tier_id,
                 period=period,
                 started_at=expires_at_norm,
                 expires_at=expires_at_norm + timedelta(days=days),
+                replaces_queued=queued is not None,
             )
