@@ -122,7 +122,17 @@ class SubscriptionService:
         Инвариант: у юзера ≤1 active и ≤1 queued. Прочие due queued (если
         вдруг несколько) гасим — activate только самая ранняя по started_at.
         Д1: started_at/expires_at плановые, не пересчитываются.
+        it-005: перед активацией гасим stale-active строки (status=active с
+        прошедшим expires_at) — иначе UNIQUE constraint на partial index.
         """
+        stale = await subscription_repo.get_stale_active_subscriptions(user_id)
+        for row in stale:
+            await subscription_repo.expire_subscription(row)
+            logger.info(
+                "Expired stale active subscription %s for user %s before queue activation",
+                row.id,
+                user_id,
+            )
         due = await subscription_repo.get_due_queued_subscriptions(user_id)
         if not due:
             return None

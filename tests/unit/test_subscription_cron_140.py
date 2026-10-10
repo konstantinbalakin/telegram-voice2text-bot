@@ -342,3 +342,43 @@ class TestInvariants:
         # прочие queued погашены — активной ровно одна, queued ноль
         assert statuses.count(SubscriptionStatus.QUEUED) == 0
         assert statuses.count(SubscriptionStatus.CANCELLED) == 2
+
+
+class TestLazyActivationStaleActive:
+    """it-005: stale-active + due queued → ленивая активация без IntegrityError."""
+
+    async def test_lazy_activation_expires_stale_first(self, async_session, service, tiers):
+        from datetime import datetime, timedelta, timezone
+
+        from src.storage.models import User
+
+        user = User(telegram_id=991, username="stale")
+        async_session.add(user)
+        await async_session.flush()
+        now = datetime.now(timezone.utc)
+        # stale active: статус active, но expires в прошлом (крон не успел)
+        await _add_row(
+            async_session,
+            user.id,
+            tiers["pro"].id,
+            status=SubscriptionStatus.ACTIVE,
+            started_at=now - timedelta(days=35),
+            expires_at=now - timedelta(days=5),
+        )
+        # due queued: старт в прошлом
+        await _add_row(
+            async_session,
+            user.id,
+            tiers["basic"].id,
+            status=SubscriptionStatus.QUEUED,
+            started_at=now - timedelta(days=5),
+            expires_at=now + timedelta(days=2),
+        )
+
+        active = await service.get_active_subscription(user.id)
+
+        assert active is not None  # IntegrityError не raised (it-005)
+        assert active.status == SubscriptionStatus.ACTIVE
+        assert active.tier_id == tiers["basic"].id
+        rows = await _rows(async_session, user.id)
+        assert rows[0].status == SubscriptionStatus.EXPIRED  # stale погашена
