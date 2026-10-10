@@ -138,9 +138,11 @@ class TestPreviewDowngrade:
         assert preview is not None
         assert preview.scenario == "downgrade"
         assert preview.tier_id == tiers["basic"].id
-        # смена тира с даты окончания текущей
+        # смена тира с даты окончания текущей, конец = оплаченный период (it-004)
         assert preview.started_at == sub.expires_at.replace(tzinfo=timezone.utc)
-        assert preview.expires_at is None
+        assert preview.expires_at is not None
+        delta = preview.expires_at - preview.started_at
+        assert timedelta(days=29) < delta <= timedelta(days=30, minutes=1)
 
 
 class TestPreviewNoActive:

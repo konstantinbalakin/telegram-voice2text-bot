@@ -151,28 +151,33 @@ class TestScenario33Upgrade:
 
 
 class TestScenario34Downgrade:
-    async def test_downgrade_sets_next_tier_no_new_row(self, async_session, service, tiers):
+    async def test_downgrade_creates_queued_with_paid_period(self, async_session, service, tiers):
+        """it-004: оплаченный период сохраняется (неделя = неделя)."""
         user = await _create_user(async_session)
         await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
-        result = await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
+        result = await service.purchase_subscription(user.id, tiers["basic"].id, "week", PROVIDER)
         rows = await _rows(async_session, user.id)
-        assert len(rows) == 1  # новая строка не создаётся
-        assert rows[0].status == SubscriptionStatus.ACTIVE
-        assert rows[0].next_subscription_tier_id == tiers["basic"].id
-        assert result.id == rows[0].id
+        assert result.status == SubscriptionStatus.QUEUED
+        assert result.tier_id == tiers["basic"].id
+        assert result.period == "week"
+        # старт = конец Pro, конец = +7 дней (не +30 старого периода!)
+        assert result.started_at == rows[0].expires_at
+        delta = result.expires_at - result.started_at
+        assert timedelta(days=6) < delta <= timedelta(days=7, minutes=1)
+        # next_tier больше не используется
+        assert rows[0].next_subscription_tier_id is None
 
     async def test_downgrade_cancels_existing_queued(self, async_session, service, tiers):
         user = await _create_user(async_session, telegram_id=78)
         await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
         await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)  # queued
         await service.purchase_subscription(
-            user.id, tiers["basic"].id, "month", PROVIDER
+            user.id, tiers["basic"].id, "week", PROVIDER
         )  # downgrade
         rows = await _rows(async_session, user.id)
         statuses = [r.status for r in rows]
-        assert statuses.count(SubscriptionStatus.CANCELLED) == 1  # queued отменена
-        assert statuses.count(SubscriptionStatus.QUEUED) == 0
-        assert rows[0].next_subscription_tier_id == tiers["basic"].id
+        assert statuses.count(SubscriptionStatus.CANCELLED) == 1  # старая queued отменена
+        assert statuses.count(SubscriptionStatus.QUEUED) == 1  # новая queued (даунгрейд)
 
 
 class TestScenario35StaleActive:

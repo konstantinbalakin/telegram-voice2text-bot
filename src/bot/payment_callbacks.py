@@ -61,10 +61,11 @@ def render_purchase_confirmation(
             f"сразу, окончание новой подписки {_fmt_date(preview.expires_at)} "
             f"(включая остаток {preview.carried_days} дн. старой)\n\nПродолжить?"
         )
-    # downgrade
+    # downgrade (it-004: оплаченный период — даты известны заранее)
     return (
         f"⬇️ С {_fmt_date(preview.started_at)} подписка станет "
-        f"{tier_name}: {tier_limit_minutes:.0f} мин/день\n\nПродолжить?"
+        f"{tier_name}: {tier_limit_minutes:.0f} мин/день, "
+        f"до {_fmt_date(preview.expires_at)}\n\nПродолжить?"
     )
 
 

@@ -342,19 +342,30 @@ class SubscriptionService:
             )
             return subscription
 
-        # 3.4: даунгрейд — next_tier на текущей, новую строку не создаём
+        # 3.4: даунгрейд — queued-строка с оплаченным периодом (it-004):
+        # старт = конец текущей, срок = ОПЛАЧЕННЫЙ период, не старый.
+        # next_tier не используется: период покупки терялся (неделя → месяц).
         queued = await subscription_repo.get_queued_subscription(user_id)
         if queued is not None:
             await subscription_repo.cancel_subscription_row(queued)
             logger.info("Cancelled queued %s for user %s before downgrade", queued.id, user_id)
-        updated = await subscription_repo.set_next_tier(active, next_tier_id=tier_id)
+        subscription = await subscription_repo.create_subscription(
+            user_id=user_id,
+            tier_id=tier_id,
+            period=period,
+            payment_provider=payment_provider,
+            expires_at=active.expires_at + timedelta(days=days),
+            status=SubscriptionStatus.QUEUED,
+            started_at=active.expires_at,
+        )
         logger.info(
-            "Downgrade for user %s: next tier=%s from %s",
+            "Queued downgrade for user %s: tier=%s start=%s end=%s",
             user_id,
             tier_id,
             active.expires_at,
+            active.expires_at + timedelta(days=days),
         )
-        return updated
+        return subscription
 
     async def cancel_subscription(self, user_id: int) -> Optional[UserSubscription]:
         """Cancel active subscription. Remains active until expiry."""
@@ -535,11 +546,16 @@ class SubscriptionService:
                     carried_days=carried_days,
                 )
 
-            # 3.4: даунгрейд — смена тира с даты окончания текущей
+            # 3.4: даунгрейд — queued с оплаченным периодом (it-004)
+            expires_norm = (
+                expires_at_norm.replace(tzinfo=timezone.utc)
+                if expires_at_norm.tzinfo is None
+                else expires_at_norm
+            )
             return PurchasePreview(
                 scenario="downgrade",
                 tier_id=tier_id,
                 period=period,
                 started_at=expires_at_norm,
-                expires_at=None,
+                expires_at=expires_norm + timedelta(days=days),
             )
