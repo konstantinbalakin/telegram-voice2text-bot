@@ -1,6 +1,6 @@
 ---
 id: 20260928-bug-subscription-renewal-140
-status: verify
+status: released
 title: Продление подписки не сжигает платёж (#140)
 ---
 

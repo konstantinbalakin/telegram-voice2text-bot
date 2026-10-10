@@ -52,6 +52,12 @@ class BillingCommands:
         if not db_user:
             return "Пользователь не найден. Используйте /start", None
 
+        # it-006 (#140): сначала активная подписка — её ленивая активация
+        # (get_active_subscription) гасит stale-active и поднимает due-queued,
+        # чтобы get_user_balance ниже увидел уже активную строку и вернул
+        # дневной лимит тира (15 для Basic), а не дефолтные 10.
+        active_sub = await self.subscription_service.get_active_subscription(db_user.id)
+
         balance = await self.billing_service.get_user_balance(db_user.id)
 
         lines = [
@@ -74,8 +80,8 @@ class BillingCommands:
 
         lines.append(f"\n✅ Всего доступно: {balance.total_available:.1f} мин")
 
-        # Subscription info
-        active_sub = await self.subscription_service.get_active_subscription(db_user.id)
+        # Subscription info (it-006: active_sub запрошен ВЫШЕ — до get_user_balance,
+        # чтобы ленивая активация очереди успела сработать до расчёта лимита)
         if active_sub:
             tier = await self.subscription_service.get_tier_by_id(active_sub.tier_id)
             tier_name = tier.name if tier else "Unknown"
