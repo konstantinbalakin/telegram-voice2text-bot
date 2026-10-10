@@ -161,6 +161,17 @@ class SubscriptionService:
         async with self._repos() as (subscription_repo, _, __):
             return await subscription_repo.get_tier_by_id(tier_id=tier_id)
 
+    async def get_queued_subscription_info(
+        self, user_id: int
+    ) -> Optional[tuple[UserSubscription, Optional[SubscriptionTier]]]:
+        """Queued renewal for user + its tier, for UX display (#140 it-002)."""
+        async with self._repos() as (subscription_repo, _, __):
+            queued = await subscription_repo.get_queued_subscription(user_id)
+            if queued is None:
+                return None
+            tier = await subscription_repo.get_tier_by_id(tier_id=queued.tier_id)
+            return queued, tier
+
     async def create_subscription(
         self,
         user_id: int,
