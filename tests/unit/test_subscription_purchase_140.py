@@ -123,36 +123,47 @@ class TestScenario32Renewal:
         assert third.status == SubscriptionStatus.QUEUED
 
 
-class TestScenario33Upgrade:
-    async def test_upgrade_replaces_and_carries_days(self, async_session, service, tiers):
+class TestScenario33AnyTierAtActiveQueued:
+    """it-007: любая покупка при живой active → queued, апгрейд не исключение."""
+
+    async def test_higher_tier_queued_no_replacement_no_carry(self, async_session, service, tiers):
         user = await _create_user(async_session)
         first = await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
-        before = datetime.now(timezone.utc)
-        upgraded = await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
+        queued = await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
         rows = await _rows(async_session, user.id)
-        old = rows[0]
-        assert old.status == SubscriptionStatus.REPLACED  # Д2
-        assert upgraded.status == SubscriptionStatus.ACTIVE
-        assert upgraded.tier_id == tiers["pro"].id
-        # остаток старой перенесён: expires > now + 30d
-        assert upgraded.expires_at > before + timedelta(days=30)
-        assert upgraded.expires_at < first.expires_at + timedelta(days=30) + timedelta(minutes=1)
+        # старая active НЕ тронута: без replace, без переноса дней
+        assert rows[0].status == SubscriptionStatus.ACTIVE
+        assert rows[0].expires_at == first.expires_at
+        assert queued.status == SubscriptionStatus.QUEUED
+        assert queued.tier_id == tiers["pro"].id
+        # Д1: старт = конец текущей, срок = ровно оплаченный период
+        assert queued.started_at == first.expires_at
+        assert queued.expires_at == first.expires_at + timedelta(days=30)
+        # инварианты: 1 active, 1 queued
+        statuses = [r.status for r in rows]
+        assert statuses.count(SubscriptionStatus.ACTIVE) == 1
+        assert statuses.count(SubscriptionStatus.QUEUED) == 1
 
-    async def test_upgrade_to_same_expires_bounds(self, async_session, service, tiers):
-        # границы переноса: остаток старой (≤30 дн. для свежей) + 30 дн. новой
+    async def test_second_purchase_at_active_cancels_previous_queued(
+        self, async_session, service, tiers
+    ):
         user = await _create_user(async_session, telegram_id=77)
         await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
-        before = datetime.now(timezone.utc)
-        up = await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
-        # верхняя граница: перенос не больше полного остатка старой (30 дн.)
-        assert up.expires_at - before <= timedelta(days=60)
-        # нижняя: без переноса было бы ровно 30 дн.
-        assert up.expires_at - before > timedelta(days=30)
+        await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
+        third = await service.purchase_subscription(user.id, tiers["pro"].id, "week", PROVIDER)
+        rows = await _rows(async_session, user.id)
+        statuses = [r.status for r in rows]
+        assert statuses.count(SubscriptionStatus.QUEUED) == 1
+        assert statuses.count(SubscriptionStatus.CANCELLED) == 1
+        assert third.status == SubscriptionStatus.QUEUED
+        assert third.period == "week"
+        delta = third.expires_at - third.started_at
+        assert timedelta(days=6) < delta <= timedelta(days=7, minutes=1)
 
 
 class TestScenario34Downgrade:
     async def test_downgrade_creates_queued_with_paid_period(self, async_session, service, tiers):
-        """it-004: оплаченный период сохраняется (неделя = неделя)."""
+        """Даунгрейд = тот же queued-путь (it-004: оплаченный период)."""
         user = await _create_user(async_session)
         await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
         result = await service.purchase_subscription(user.id, tiers["basic"].id, "week", PROVIDER)
@@ -164,7 +175,7 @@ class TestScenario34Downgrade:
         assert result.started_at == rows[0].expires_at
         delta = result.expires_at - result.started_at
         assert timedelta(days=6) < delta <= timedelta(days=7, minutes=1)
-        # next_tier больше не используется
+        # next_tier не используется
         assert rows[0].next_subscription_tier_id is None
 
     async def test_downgrade_cancels_existing_queued(self, async_session, service, tiers):

@@ -28,34 +28,21 @@ SessionFactory = Callable[..., Any]
 
 @dataclass(frozen=True)
 class PurchasePreview:
-    """Pre-purchase preview of what a subscription purchase would do (#140, волна 5).
+    """Pre-purchase preview of what a subscription purchase would do (#140).
 
-    Показывается юзеру ДО создания инвойса. Сценарии:
+    Показывается юзеру ДО создания инвойса. Сценарии (it-007: любая
+    покупка при живой active → очередь, апгрейд как отдельный сценарий
+    упразднён):
     - "fresh"     — активной подписки нет, новая начнётся сразу
-    - "renewal"   — тот же тир: новая подписка встанет в очередь на конец текущей
-    - "upgrade"   — новый тир выше: вступит в силу сразу, остаток дней переносится
-    - "downgrade" — новый тир ниже: смена с даты окончания текущей
+    - "renewal"   — покупка при живой active: новая подписка встанет
+                    в очередь на конец текущей, ровно оплаченный период
     """
 
     scenario: str
     tier_id: int
     period: str
-    started_at: Optional[datetime] = None  # None = «сразу» (fresh/upgrade)
+    started_at: Optional[datetime] = None  # None = «сразу» (fresh)
     expires_at: Optional[datetime] = None
-    carried_days: int = 0  # только upgrade: остаток дней текущей подписки
-
-
-def remaining_days(expires_at: datetime, now: datetime) -> timedelta:
-    """Carry-over remainder of an active subscription on upgrade (#140, 3.3).
-
-    Полный остаток (дни+часы), не округляем: юзер за него заплатил.
-    SQLite возвращает naive datetime — нормализуем оба аргумента.
-    """
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=timezone.utc)
-    return expires_at - now
 
 
 class SubscriptionService:
@@ -221,15 +208,16 @@ class SubscriptionService:
         period: str,
         payment_provider: str,
     ) -> UserSubscription:
-        """Paid subscription purchase (#140): routes scenarios 3.1-3.5.
+        """Paid subscription purchase (#140): routes scenarios (it-007).
 
         - 3.1 нет active (или истекла) → INSERT active
-        - 3.2 тот же тир при живой active → INSERT queued (старт = конец текущей)
-        - 3.3 апгрейд → старая replaced, новая active + перенос остатка дней
-        - 3.4 даунгрейд → next_tier на active (без новой строки)
+        - любая покупка при живой active → INSERT queued
+          (старт = конец текущей, ровно оплаченный период; it-007:
+          апгрейд без мгновенного действия и переноса дней — решение
+          оператора; бывшие 3.2/3.3/3.4 слились в одну ветку)
         - 3.5 пограничный: stale-active строки гасятся deactivate_all_active
 
-        Инварианты: ≤1 active (индекс БД), ≤1 queued (отменяем старую, Д3).
+        Инварианты: ≤1 active (индекс БД), ≤1 queued (отменяем старую).
         """
         async with self._repos() as (subscription_repo, _, __):
             return await self._purchase_impl(
@@ -297,68 +285,18 @@ class SubscriptionService:
             logger.info("Created active subscription for user %s: tier=%s", user_id, tier_id)
             return subscription
 
-        # есть живая active — сравнить тиры
-        if active.tier_id == tier_id:
-            # 3.2: продление → queued (Д1: старт = плановый конец текущей)
-            queued = await subscription_repo.get_queued_subscription(user_id)
-            if queued is not None:
-                await subscription_repo.cancel_subscription_row(queued)
-                logger.info(
-                    "Cancelled previous queued %s for user %s (one-queued rule)",
-                    queued.id,
-                    user_id,
-                )
-            subscription = await subscription_repo.create_subscription(
-                user_id=user_id,
-                tier_id=tier_id,
-                period=period,
-                payment_provider=payment_provider,
-                expires_at=active.expires_at + timedelta(days=days),
-                status=SubscriptionStatus.QUEUED,
-                started_at=active.expires_at,
-            )
-            logger.info(
-                "Queued renewal for user %s: start=%s end=%s",
-                user_id,
-                active.expires_at,
-                active.expires_at + timedelta(days=days),
-            )
-            return subscription
-
-        new_tier = await subscription_repo.get_tier_by_id(tier_id)
-        current_tier = await subscription_repo.get_tier_by_id(active.tier_id)
-        new_order = new_tier.display_order if new_tier else 0
-        cur_order = current_tier.display_order if current_tier else 0
-
-        if new_order > cur_order:
-            # 3.3: апгрейд — старая replaced, новая active с остатком дней
-            await subscription_repo.replace_subscription(active)
-            remaining = max(remaining_days(active.expires_at, now), timedelta(0))
-            expires = now + timedelta(days=days) + remaining
-            subscription = await subscription_repo.create_subscription(
-                user_id=user_id,
-                tier_id=tier_id,
-                period=period,
-                payment_provider=payment_provider,
-                expires_at=expires,
-            )
-            logger.info(
-                "Upgrade for user %s: old %s replaced, new tier=%s expires=%s " "(+%s carried)",
-                user_id,
-                active.id,
-                tier_id,
-                expires,
-                remaining,
-            )
-            return subscription
-
-        # 3.4: даунгрейд — queued-строка с оплаченным периодом (it-004):
-        # старт = конец текущей, срок = ОПЛАЧЕННЫЙ период, не старый.
-        # next_tier не используется: период покупки терялся (неделя → месяц).
+        # it-007: любая покупка при живой active → queued (решение оператора).
+        # Апгрейд больше не особый случай: без replace+carry, без сравнения
+        # display_order. Старт = конец текущей, срок = ровно оплаченный период.
+        # Правило ≤1 queued обеспечивает «одна будущая подписка».
         queued = await subscription_repo.get_queued_subscription(user_id)
         if queued is not None:
             await subscription_repo.cancel_subscription_row(queued)
-            logger.info("Cancelled queued %s for user %s before downgrade", queued.id, user_id)
+            logger.info(
+                "Cancelled previous queued %s for user %s (one-queued rule)",
+                queued.id,
+                user_id,
+            )
         subscription = await subscription_repo.create_subscription(
             user_id=user_id,
             tier_id=tier_id,
@@ -369,7 +307,7 @@ class SubscriptionService:
             started_at=active.expires_at,
         )
         logger.info(
-            "Queued downgrade for user %s: tier=%s start=%s end=%s",
+            "Queued purchase for user %s: tier=%s start=%s end=%s",
             user_id,
             tier_id,
             active.expires_at,
@@ -498,17 +436,16 @@ class SubscriptionService:
         tier_id: int,
         period: str,
     ) -> Optional[PurchasePreview]:
-        """Preview what a purchase would do, WITHOUT writing to DB (#140, волна 5).
+        """Preview what a purchase would do, WITHOUT writing to DB (#140).
 
         UX-слой бота вызывает это ДО создания инвойса, чтобы показать
-        подтверждение с датами. Сценарии зеркалят purchase_subscription (3.1-3.4):
+        подтверждение с датами. Сценарии (it-007: любая покупка при живой
+        active → очередь):
 
-        - fresh     — нет живой active (None из get_active_subscription, который
-                      сам лениво активирует due-queued)
-        - renewal   — тот же тир: started_at = конец текущей, expires = +период
-        - upgrade   — display_order выше: сразу, expires = now+период+остаток
-        - downgrade — display_order ниже или равен (но тир другой): с даты
-                      окончания текущей
+        - fresh     — нет живой active (None из get_active_subscription,
+                      который сам лениво активирует due-queued)
+        - renewal   — любая покупка при живой active: started_at = конец
+                      текущей, expires = started_at + оплаченный период
 
         Returns:
             PurchasePreview, если есть живая active (нужно подтверждение).
@@ -520,7 +457,6 @@ class SubscriptionService:
             if active is None:
                 return None
 
-            now = datetime.now(timezone.utc)
             days = SubscriptionPeriod(period).days
             expires_at_norm = (
                 active.expires_at.replace(tzinfo=timezone.utc)
@@ -528,44 +464,12 @@ class SubscriptionService:
                 else active.expires_at
             )
 
-            if active.tier_id == tier_id:
-                # 3.2: продление — встанет в очередь на конец текущей
-                return PurchasePreview(
-                    scenario="renewal",
-                    tier_id=tier_id,
-                    period=period,
-                    started_at=expires_at_norm,
-                    expires_at=expires_at_norm + timedelta(days=days),
-                )
-
-            new_tier = await subscription_repo.get_tier_by_id(tier_id=tier_id)
-            current_tier = await subscription_repo.get_tier_by_id(tier_id=active.tier_id)
-            new_order = new_tier.display_order if new_tier else 0
-            cur_order = current_tier.display_order if current_tier else 0
-
-            if new_order > cur_order:
-                # 3.3: апгрейд — вступит в силу сразу, остаток переносится
-                remaining = max(remaining_days(active.expires_at, now), timedelta(0))
-                carried_days = int(remaining.total_seconds() // 86400)
-                return PurchasePreview(
-                    scenario="upgrade",
-                    tier_id=tier_id,
-                    period=period,
-                    started_at=now,
-                    expires_at=now + timedelta(days=days) + remaining,
-                    carried_days=carried_days,
-                )
-
-            # 3.4: даунгрейд — queued с оплаченным периодом (it-004)
-            expires_norm = (
-                expires_at_norm.replace(tzinfo=timezone.utc)
-                if expires_at_norm.tzinfo is None
-                else expires_at_norm
-            )
+            # it-007: единый сценарий — любая покупка при живой active
+            # встаёт в очередь на конец текущей, ровно оплаченный период.
             return PurchasePreview(
-                scenario="downgrade",
+                scenario="renewal",
                 tier_id=tier_id,
                 period=period,
                 started_at=expires_at_norm,
-                expires_at=expires_norm + timedelta(days=days),
+                expires_at=expires_at_norm + timedelta(days=days),
             )

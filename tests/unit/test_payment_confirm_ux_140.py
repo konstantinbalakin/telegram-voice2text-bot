@@ -10,7 +10,6 @@
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 import pytest_asyncio
 from telegram import Update
 
@@ -78,7 +77,9 @@ def service(async_session):
 # ---------------------------------------------------------------------------
 
 
-class TestPreviewRenewal:
+class TestPreviewAnyTierAtActive:
+    """it-007: превью любой покупки при живой active → renewal с датами."""
+
     async def test_same_tier_returns_renewal_with_dates(self, async_session, service, tiers):
         user = await _create_user(async_session)
         first = await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
@@ -104,45 +105,31 @@ class TestPreviewRenewal:
         )
         assert len(rows) == 1
 
-
-class TestPreviewUpgrade:
-    async def test_higher_tier_returns_upgrade_with_carry(self, async_session, service, tiers):
+    async def test_higher_tier_also_renewal_no_carry(self, async_session, service, tiers):
         user = await _create_user(async_session)
         sub = await service.purchase_subscription(user.id, tiers["basic"].id, "month", PROVIDER)
 
         preview = await service.preview_purchase(user.id, tiers["pro"].id, "month")
 
         assert preview is not None
-        assert preview.scenario == "upgrade"
+        assert preview.scenario == "renewal"
         assert preview.tier_id == tiers["pro"].id
-        # начинается сразу (сейчас), +30 дней + остаток текущей
-        now = datetime.now(timezone.utc)
-        assert preview.started_at is not None
-        assert abs((preview.started_at - now).total_seconds()) < 60
-        expected_remaining = sub.expires_at - now
-        assert preview.expires_at is not None
-        assert preview.expires_at > now + timedelta(days=29)
-        assert preview.expires_at - (now + timedelta(days=30)) == pytest.approx(
-            expected_remaining, abs=timedelta(seconds=5)
-        )
-        assert preview.carried_days >= 29  # месяц вперёд
+        # старт = конец текущей, ровно оплаченный период (без остатка)
+        assert preview.started_at == sub.expires_at.replace(tzinfo=timezone.utc)
+        assert preview.expires_at == preview.started_at + timedelta(days=30)
 
-
-class TestPreviewDowngrade:
-    async def test_lower_tier_returns_downgrade_from_expiry(self, async_session, service, tiers):
+    async def test_lower_tier_also_renewal(self, async_session, service, tiers):
         user = await _create_user(async_session)
         sub = await service.purchase_subscription(user.id, tiers["pro"].id, "month", PROVIDER)
 
-        preview = await service.preview_purchase(user.id, tiers["basic"].id, "month")
+        preview = await service.preview_purchase(user.id, tiers["basic"].id, "week")
 
         assert preview is not None
-        assert preview.scenario == "downgrade"
+        assert preview.scenario == "renewal"
         assert preview.tier_id == tiers["basic"].id
-        # смена тира с даты окончания текущей, конец = оплаченный период (it-004)
         assert preview.started_at == sub.expires_at.replace(tzinfo=timezone.utc)
-        assert preview.expires_at is not None
         delta = preview.expires_at - preview.started_at
-        assert timedelta(days=29) < delta <= timedelta(days=30, minutes=1)
+        assert timedelta(days=6) < delta <= timedelta(days=7, minutes=1)
 
 
 class TestPreviewNoActive:
@@ -175,45 +162,44 @@ class TestPreviewNoActive:
 # ---------------------------------------------------------------------------
 
 
-def _preview(scenario: str, started, expires, carried=0):
+def _preview(started, expires):
     from src.services.subscription_service import PurchasePreview
 
     return PurchasePreview(
-        scenario=scenario,
+        scenario="renewal",
         tier_id=102,
         period="month",
         started_at=started,
         expires_at=expires,
-        carried_days=carried,
     )
 
 
 class TestRenderConfirmation:
     def test_renewal_text_contains_dates(self):
         d1 = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
-        preview = _preview("renewal", d1, d1 + timedelta(days=30))
-        text = render_purchase_confirmation(preview, "Pro", 120.0)
-        assert "Продление" in text
+        preview = _preview(d1, d1 + timedelta(days=30))
+        text = render_purchase_confirmation(preview, "Pro", 120.0, current_tier_name="Basic")
+        assert "Pro" in text
         assert "15.10.2026" in text
         assert "14.11.2026" in text
         assert "Продолжить" in text
 
-    def test_upgrade_text_contains_tier_names_and_carry(self):
-        now = datetime.now(timezone.utc)
-        preview = _preview("upgrade", now, now + timedelta(days=45), carried=15)
-        text = render_purchase_confirmation(preview, "Pro", 120.0, current_tier_name="Basic")
-        assert "Basic" in text
-        assert "Pro" in text
-        assert "15" in text  # carried days
-        assert "Апгрейд" in text or "апгрейд" in text
-
-    def test_downgrade_text_contains_start_date_and_limit(self):
+    def test_any_tier_same_queued_text_no_instant_upgrade(self):
+        """it-007: даже апгрейд — текст про очередь, без «действует сразу»."""
         d1 = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
-        preview = _preview("downgrade", d1, None)
+        preview = _preview(d1, d1 + timedelta(days=30))
+        text = render_purchase_confirmation(preview, "Pro", 120.0, current_tier_name="Basic")
+        assert "действует сразу" not in text
+        assert "Апгрейд" not in text
+        assert "остато" not in text  # без «остаток N дн.»
+
+    def test_text_without_current_tier_name(self):
+        d1 = datetime(2026, 10, 15, 12, 0, tzinfo=timezone.utc)
+        preview = _preview(d1, d1 + timedelta(days=30))
         text = render_purchase_confirmation(preview, "Basic", 30.0)
         assert "15.10.2026" in text
         assert "Basic" in text
-        assert "30" in text
+        assert "Продолжить" in text
 
 
 # ---------------------------------------------------------------------------
@@ -279,6 +265,8 @@ class TestNoActiveNoConfirmation:
 
     async def test_active_sub_shows_confirmation(self):
         """С active-подпиской показывается подтверждение с кнопками."""
+        from unittest.mock import patch
+
         from src.services.subscription_service import PurchasePreview
 
         preview = PurchasePreview(
@@ -300,8 +288,20 @@ class TestNoActiveNoConfirmation:
         handlers._get_tier_name = AsyncMock(return_value="Pro")
         handlers._get_tier_limit = AsyncMock(return_value=120.0)
 
-        update = _make_update("sub_stars:102:month")
-        await handlers.buy_subscription_stars_callback(update, context=AsyncMock())
+        # it-007: хендлер всегда подтягивает имя текущего тира из БД —
+        # get_session мокается (изоляция от окружения).
+        mock_repo = MagicMock()
+        mock_repo.get_active_subscription = AsyncMock(return_value=None)
+
+        with (
+            patch("src.bot.payment_callbacks.get_session") as get_session_ctx,
+            patch("src.bot.payment_callbacks.SubscriptionRepository", return_value=mock_repo),
+        ):
+            get_session_ctx.return_value.__aenter__ = AsyncMock(return_value=MagicMock())
+            get_session_ctx.return_value.__aexit__ = AsyncMock(return_value=False)
+
+            update = _make_update("sub_stars:102:month")
+            await handlers.buy_subscription_stars_callback(update, context=AsyncMock())
 
         # подтверждение показано через edit_message_text
         update.callback_query.edit_message_text.assert_awaited_once()

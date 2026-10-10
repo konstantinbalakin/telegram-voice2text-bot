@@ -47,25 +47,16 @@ def render_purchase_confirmation(
     tier_limit_minutes: float,
     current_tier_name: str = "",
 ) -> str:
-    """Render confirmation text with dates before payment (#140, волна 5)."""
-    if preview.scenario == "renewal":
-        return (
-            f"📅 Продление подписки {tier_name}\n\n"
-            f"Текущая подписка действует до {_fmt_date(preview.started_at)}. "
-            f"Новая начнётся {_fmt_date(preview.started_at)} "
-            f"и закончится {_fmt_date(preview.expires_at)}.\n\nПродолжить?"
-        )
-    if preview.scenario == "upgrade":
-        return (
-            f"⬆️ Апгрейд с {current_tier_name} → {tier_name}: новый лимит действует "
-            f"сразу, окончание новой подписки {_fmt_date(preview.expires_at)} "
-            f"(включая остаток {preview.carried_days} дн. старой)\n\nПродолжить?"
-        )
-    # downgrade (it-004: оплаченный период — даты известны заранее)
+    """Render confirmation text with dates before payment (#140).
+
+    it-007: один текст для любой покупки при живой подписке —
+    новая встанет в очередь на конец текущей, ровно оплаченный период
+    (апгрейд без мгновенного действия и переноса дней).
+    """
     return (
-        f"⬇️ С {_fmt_date(preview.started_at)} подписка станет "
-        f"{tier_name}: {tier_limit_minutes:.0f} мин/день, "
-        f"до {_fmt_date(preview.expires_at)}\n\nПродолжить?"
+        f"📅 Новая подписка {tier_name} начнётся {_fmt_date(preview.started_at)} "
+        f"— сразу после окончания текущей ({current_tier_name}) — "
+        f"и закончится {_fmt_date(preview.expires_at)}.\n\nПродолжить?"
     )
 
 
@@ -265,12 +256,11 @@ class PaymentCallbackHandlers:
 
         tier_name = await self._get_tier_name(tier_id)
         current_tier = None
-        if preview.scenario in ("upgrade", "downgrade"):
-            async with get_session() as session:
-                repo = SubscriptionRepository(session)
-                active = await repo.get_active_subscription(user_id=db_user_id)
-                if active:
-                    current_tier = await repo.get_tier_by_id(tier_id=active.tier_id)
+        async with get_session() as session:
+            repo = SubscriptionRepository(session)
+            active = await repo.get_active_subscription(user_id=db_user_id)
+            if active:
+                current_tier = await repo.get_tier_by_id(tier_id=active.tier_id)
 
         text = render_purchase_confirmation(
             preview,
