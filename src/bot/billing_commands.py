@@ -91,6 +91,16 @@ class BillingCommands:
                 q_start = queued.started_at.strftime("%d.%m.%Y")
                 q_end = queued.expires_at.strftime("%d.%m.%Y")
                 lines.append(f"➡️ Продлено: {q_name} с {q_start} по {q_end}")
+
+            # Запланированный даунгрейд (#140 it-003): next_tier на active
+            next_tier_id = getattr(active_sub, "next_subscription_tier_id", None)
+            if isinstance(next_tier_id, int) and next_tier_id:
+                next_tier = await self.subscription_service.get_tier_by_id(next_tier_id)
+                if next_tier and isinstance(next_tier.daily_limit_minutes, (int, float)):
+                    lines.append(
+                        f"🔄 С {expires} подписка станет: {next_tier.name} "
+                        f"({next_tier.daily_limit_minutes:.0f} мин/день)"
+                    )
         else:
             lines.append("\n📋 Подписка: нет")
 
