@@ -7,7 +7,6 @@ _do_buy_subscription при добавлении YooKassa-ветки (волна
 
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 
 from src.bot.payment_callbacks import PaymentCallbackHandlers
 from tests.unit.test_payment_confirm_ux_140 import _make_update
