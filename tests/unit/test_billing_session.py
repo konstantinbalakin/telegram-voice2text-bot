@@ -169,6 +169,9 @@ class TestSubscriptionServicePerRequestSession:
         mock_sub_cls.return_value.get_active_tiers = AsyncMock(return_value=[])
         mock_sub_cls.return_value.get_active_subscription = AsyncMock(return_value=None)
         mock_sub_cls.return_value.get_due_queued_subscriptions = AsyncMock(return_value=[])
+        mock_sub_cls.return_value.get_stale_active_subscriptions = AsyncMock(
+            return_value=[]
+        )  # it-005
 
         service = SubscriptionService(session_factory=factory)
         await service.get_available_tiers()
