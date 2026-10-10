@@ -85,7 +85,7 @@ class BillingCommands:
 
             # Очередь продления (#140): юзер заплатил — должен это видеть
             queued_info = await self.subscription_service.get_queued_subscription_info(db_user.id)
-            if queued_info:
+            if isinstance(queued_info, tuple) and len(queued_info) == 2:
                 queued, q_tier = queued_info
                 q_name = q_tier.name if q_tier else queued.tier_id
                 q_start = queued.started_at.strftime("%d.%m.%Y")
