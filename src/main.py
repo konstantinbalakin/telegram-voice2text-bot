@@ -295,7 +295,10 @@ async def main() -> None:
             assert payment_callback_handlers is not None
             assert pre_checkout_handler is not None
             assert success_payment_handler is not None
-            payment_callbacks = payment_callback_handlers(payment_service=payment_service)
+            payment_callbacks = payment_callback_handlers(
+                payment_service=payment_service,
+                subscription_service=subscription_service,
+            )
             pre_checkout = pre_checkout_handler(payment_service=payment_service)
             success_payment = success_payment_handler(payment_service=payment_service)
 
@@ -320,6 +323,20 @@ async def main() -> None:
                 CallbackQueryHandler(
                     payment_callbacks.buy_subscription_card_callback,
                     pattern=r"^sub_card:\d+:(week|month|year)$",
+                )
+            )
+
+            # UX-подтверждение покупки подписки (#140, волна 5)
+            application.add_handler(
+                CallbackQueryHandler(
+                    payment_callbacks.confirm_subscription_pay_callback,
+                    pattern=r"^sub_pay_(stars|card):\d+:(week|month|year)$",
+                )
+            )
+            application.add_handler(
+                CallbackQueryHandler(
+                    payment_callbacks.cancel_subscription_pay_callback,
+                    pattern=r"^sub_pay_cancel:\d+:(week|month|year)$",
                 )
             )
 

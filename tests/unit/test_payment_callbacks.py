@@ -14,7 +14,6 @@ from src.bot.payment_callbacks import (
     successful_payment_handler,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -598,8 +597,13 @@ async def test_pre_checkout_approves_valid_package():
 
 
 @pytest.mark.asyncio
-async def test_successful_payment_rejects_user_id_mismatch():
-    """Task 1.2: successful_payment_handler rejects when effective_user.id != payload user_id."""
+async def test_successful_payment_different_user_credited_to_invoice_owner():
+    """Issue #121: known user B pays invoice of user A → credited to A, no error.
+
+    The old IDOR check dropped such payments (CRITICAL + support error);
+    Telegram invoice links are legitimately shareable (e.g. family payments),
+    so the handler must fulfill for the invoice owner.
+    """
     payment_service = AsyncMock()
     payment_service.handle_successful_payment = AsyncMock(return_value=True)
 
@@ -617,7 +621,7 @@ async def test_successful_payment_rejects_user_id_mismatch():
     update = MagicMock()
     update.message = message
     # effective_user has telegram_id=555, which maps to db_user_id=777 (not 999)
-    update.effective_user = User(id=555, is_bot=False, first_name="Attacker")
+    update.effective_user = User(id=555, is_bot=False, first_name="Payer")
     context = MagicMock()
 
     mock_db_user = MagicMock()
@@ -631,12 +635,13 @@ async def test_successful_payment_rejects_user_id_mismatch():
             MockUserRepo.return_value.get_by_telegram_id = AsyncMock(return_value=mock_db_user)
             await handler(update, context)
 
-    # Should NOT call handle_successful_payment when user_id doesn't match
-    payment_service.handle_successful_payment.assert_not_awaited()
-    # Should reply with error
-    message.reply_text.assert_awaited_once()
+    # Goods must be credited to the invoice owner (payload user_id), not the payer
+    payment_service.handle_successful_payment.assert_awaited_once()
+    call_kwargs = payment_service.handle_successful_payment.await_args.kwargs
+    assert call_kwargs["user_id"] == 999
+    # Payer must NOT see the generic support error
     reply_text = message.reply_text.await_args.args[0]
-    assert "ошибка" in reply_text.lower() or "Ошибка" in reply_text
+    assert "поддержк" not in reply_text.lower()
 
 
 @pytest.mark.asyncio

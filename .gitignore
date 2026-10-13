@@ -98,3 +98,4 @@ logs/
 logs/security/
 docs/research/analytics/*usage-report*.md
 docs/research/analytics/*usage-report*.xlsx
+data/*.db*

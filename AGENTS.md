@@ -1,0 +1,203 @@
+## Project Overview
+
+Telegram Voice2Text Bot - Production-ready Telegram bot for voice transcription with AI-powered text processing.
+
+**Tech Stack**: OpenAI Whisper API (transcription) + DeepSeek V3 (text processing) + Interactive buttons
+
+**GitHub Repository**: `konstantinbalakin/telegram-voice2text-bot`
+
+## OpenSpec (Spec-Driven Development)
+
+This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec) for spec-driven development. Specs and change proposals live in `openspec/` (artifacts in Russian, structural headings and SHALL/MUST keywords in English — see `openspec/config.yaml`).
+
+**Workflow for any non-trivial change:**
+
+1. **Propose** — `openspec new change <name>` creates `openspec/changes/<name>/` with `proposal.md`, `specs/` (delta), `design.md`, `tasks.md`. Do not edit project code at this stage.
+2. **Apply** — implement tasks from `tasks.md` on a feature branch, following the Git Workflow below.
+3. **Archive** — `openspec archive <name>` merges the delta into main specs (`openspec/specs/`) and moves the change to `openspec/changes/archive/`.
+
+Useful commands: `openspec list`, `openspec list --specs`, `openspec validate --all`, `openspec show <name>`.
+
+For Hermes users: workflow skills live in `.hermes/skills/openspec-*` (propose / apply-change / archive-change / update-change / sync-specs / explore).
+
+## Documentation
+
+**Main documentation** is located in `/docs/` directory:
+
+- `/docs/README.md` - Documentation index and navigation
+- `/docs/getting-started/` - Installation, configuration, quick start
+- `/docs/development/` - Architecture, testing, git workflow, dependencies
+- `/docs/deployment/` - Docker, VPS setup, CI/CD pipeline
+- `/docs/research/` - Performance benchmarks
+
+## Git Workflow
+
+This project uses **Trunk Based Development** with protected main branch. See `docs/development/git-workflow.md` for complete details.
+
+### CRITICAL RULES
+
+- **NEVER commit or push directly to `main` or `master`**. Always create a feature branch first.
+- All changes go through PRs: feature branch → PR → merge to main.
+- Pre-commit hooks enforce this rule (see `.pre-commit-config.yaml`).
+
+### Quick Reference
+
+**Start Feature**:
+
+```bash
+git checkout main
+git pull origin main
+git checkout -b feature/your-feature-name
+```
+
+**Commit Changes** (use Conventional Commits):
+
+```bash
+git add <files>
+git commit -m "feat: add something"
+git push origin feature/your-feature-name
+```
+
+**Create PR**:
+
+```bash
+gh pr create --title "feat: description" --body "..."
+```
+
+**Commit Types**:
+
+- `feat:` - New functionality
+- `fix:` - Bug fixes
+- `refactor:` - Code refactoring
+- `docs:` - Documentation
+- `test:` - Tests
+- `chore:` - Maintenance
+
+### Pre-commit / Pre-push Hooks
+
+This project uses `pre-commit` framework. Hooks are installed automatically:
+
+```bash
+uv run pre-commit install   # installs both pre-commit and pre-push hooks
+```
+
+**Pre-commit** (every `git commit`): no-commit-to-branch, ruff, black
+**Pre-push** (every `git push`): mypy, pytest
+
+Before pushing, ensure ALL CI checks pass locally:
+
+```bash
+uv run ruff check src/
+uv run black --check src/ tests/
+uv run mypy src/
+TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -v
+```
+
+## Source Code Map
+
+```
+src/
+├── main.py                    # Entry point, DI wiring, graceful shutdown
+├── config.py                  # Pydantic Settings from .env
+├── exceptions.py              # BotError hierarchy (each has user_message)
+├── bot/                       # Telegram handlers (BotHandlers, CallbackHandlers, keyboards)
+├── transcription/             # Core: providers/, routing/strategies, models, factory
+├── services/                  # Business logic: orchestrator, queue, LLM, Telethon, PDF
+├── storage/                   # Async SQLAlchemy: database.py, models.py, repositories.py
+└── utils/                     # logging_config, db_retry, html_utils
+```
+
+## Architecture Patterns
+
+- **Dependency Injection**: All services wired in `main.py`, passed via constructors
+- **Strategy Pattern**: `transcription/routing/strategies.py` — 5 routing strategies
+- **Repository Pattern**: `storage/repositories.py` — all DB access through repos
+- **Protocol-based services**: `services/lifecycle.py` — `AsyncService` protocol
+- **Custom exceptions**: `exceptions.py` — always include `user_message` field
+- **Queue + Semaphore**: `services/queue_manager.py` — concurrency control
+
+## Code Conventions
+
+- **Python**: >=3.11, full type annotations everywhere
+- **Black**: line-length=100, target-version=py311
+- **Ruff**: same line-length, extends Black
+- **mypy**: `disallow_untyped_defs=true` (strict)
+- **Logging**: `logger = logging.getLogger(__name__)` in every module
+- **Async**: all I/O is async (`async def`, `await`, `asyncio` primitives)
+- **Config**: all settings via `.env` → `config.py` (Pydantic Settings)
+- **ENV variables**: when adding new environment variables, update **all three** locations:
+  1. `.env.example` — full example with comments
+  2. `.env.example.short` — short example
+  3. `.github/workflows/deploy.yml` — production deployment workflow
+
+## Testing Patterns
+
+- **DB fixtures**: in-memory SQLite via `async_engine`/`async_session` (see `tests/conftest.py`)
+- **Mock helpers**: `_make_handlers()`, `_make_update()`, `_make_context()` in test files
+- **Async mocks**: `unittest.mock.AsyncMock` for async methods
+- **DB patching**: `@patch("src.storage.database.get_session")` for repository tests
+- **Run single test**: `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/test_foo.py -v`
+
+### CRITICAL: Изоляция тестов от окружения
+
+- **Всегда мокать `get_session`** в unit-тестах. Если тестируемый код (или любой вызываемый им метод) обращается к `get_session()`, он ДОЛЖЕН быть замокан. Локальная SQLite-база — не замена моку.
+- **Всегда патчить ВСЕ settings**, влияющие на тестируемый code path. Если код проверяет `settings.billing_enabled` и `settings.billing_test_mode`, патчить оба. Нельзя полагаться на дефолты — `.env` перезаписывает их.
+- **При коммите проверять `git status`** — все изменённые файлы должны попасть в коммит. `git add file1 file2` с явным перечислением файлов рискует пропустить файлы; после `git add` проверять `git diff --cached --stat`.
+
+## Development Commands
+
+This project uses **uv** for Python package management:
+
+```bash
+# Install dependencies
+uv sync --all-extras --all-groups
+
+# Run bot
+uv run python -m src.main
+
+# Run tests
+uv run pytest tests/unit/ -v
+
+# Run linting/formatting
+uv run ruff check src/
+uv run black src/
+uv run mypy src/
+
+# Database migrations
+uv run alembic upgrade head
+uv run alembic revision --autogenerate -m "description"  # create new migration
+
+# Docker via Makefile
+make deps      # Export requirements.txt from uv.lock
+make build     # Build Docker image
+make up        # Start container
+make logs      # Stream logs
+make down      # Stop container
+```
+
+## Development Status
+
+✅ **Current Status**: Production-ready, Phase 10.14 complete
+
+**Completed Phases**:
+
+- Phase 1-6: Project Setup, Core Functionality, Docker, VPS, Queue System ✅
+- Phase 7-9: Logging, Hybrid Transcription, Large Files (Telethon) ✅
+- Phase 10: Interactive Transcription System (all 14 sub-phases) ✅
+
+**Production Configuration**:
+
+- **Bot**: ✅ Live on Telegram, free during user acquisition
+- **Transcription**: ✅ OpenAI Whisper API (gpt-4o models + whisper-1)
+- **Text Processing**: ✅ DeepSeek V3 (структурирование, резюме, "сделать красиво")
+- **Interactive Features**: ✅ 3 buttons - Структурировать, Сделать красиво, О чем этот текст
+- **Large Files**: ✅ Telethon support up to 2 GB
+- **Database**: ✅ SQLite with variant caching
+- **Docker**: ✅ Automated builds and deployments
+- **CI/CD**: ✅ GitHub Actions pipeline active
+
+**Next Phase**: Analytics dashboard, quotas & billing, multi-language
+
+## kanon (канон-структура доработок)
+
+Артефакты доработок: `kanon/features/YYYYMMDD-<category>-<slug>/` (epic|story|bug|fix|docs|chore). Статусы: draft → approved → planned → in-progress → verify → released; переходы — отдельными коммитами, `draft→approved` — только оператор. Итерации фиксов: `iterations/it-NNN/` внутри фичи. Вход в работу: `kanon/STATUS.md` (якорь первой загрузки). CLI: `kanon status` / `kanon check` (если установлен). Полный цикл — скиллы kanon-interview → kanon-plan → kanon-execute → kanon-verify → kanon-iterate → kanon-docsync/kanon-whatsnew. Рабочая копия для изменений: para-копия (не /opt), флоу: ветка → PR → CI → merge.

@@ -3,7 +3,7 @@ Tests for billing system repositories
 """
 
 import pytest
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -224,7 +224,7 @@ async def test_subscription_create_user_subscription(async_session):
         tier_id=tier.id,
         period="month",
         payment_provider="telegram_stars",
-        expires_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
 
     assert sub.id is not None
@@ -244,7 +244,7 @@ async def test_subscription_get_active_subscription(async_session):
         tier_id=tier.id,
         period="month",
         payment_provider="telegram_stars",
-        expires_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
 
     active = await repo.get_active_subscription(user_id=user.id)
@@ -275,7 +275,7 @@ async def test_subscription_cancel(async_session):
         tier_id=tier.id,
         period="month",
         payment_provider="telegram_stars",
-        expires_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
 
     cancelled = await repo.cancel_subscription(sub)

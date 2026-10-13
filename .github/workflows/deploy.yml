@@ -17,15 +17,54 @@ on:
         type: string
 
 jobs:
-  migrate:
+  check-release:
     runs-on: ubuntu-latest
-    environment: production
     # Only run if Build and Tag succeeded (for workflow_run) or for other triggers
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
 
+    outputs:
+      should_deploy: ${{ steps.check.outputs.should_deploy }}
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Need full history to get tags
+
+      - name: Check if a new version was released
+        id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Build and Tag skips build/tag steps for docs-only changes but still
+            # completes successfully - deploy only if it tagged the triggering commit
+            git fetch --tags
+            LATEST_TAG=$(git describe --tags --abbrev=0)
+            TAG_SHA=$(git rev-parse "$LATEST_TAG^{commit}")
+            RUN_SHA="${{ github.event.workflow_run.head_sha }}"
+            echo "Latest tag: $LATEST_TAG ($TAG_SHA)"
+            echo "Build and Tag ran on: $RUN_SHA"
+            if [ "$TAG_SHA" = "$RUN_SHA" ]; then
+              echo "🚢 New release detected: $LATEST_TAG"
+              echo "should_deploy=true" >> $GITHUB_OUTPUT
+            else
+              echo "⏭️  No new release (docs-only change) - skipping deploy"
+              echo "should_deploy=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            # Tag push or manual dispatch - always deploy
+            echo "should_deploy=true" >> $GITHUB_OUTPUT
+          fi
+
+  migrate:
+    needs: check-release
+    runs-on: ubuntu-latest
+    environment: production
+    # Deploy only when a new version was actually released
+    if: needs.check-release.outputs.should_deploy == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Need full history to get tags
 
@@ -57,6 +96,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
           script: |
             set -e  # Exit on error
 
@@ -65,6 +105,10 @@ jobs:
 
             # Navigate to project directory
             cd /opt/telegram-voice2text-bot || exit 1
+
+            # Create required directories and set permissions for container access
+            mkdir -p data logs
+            sudo chmod -R 777 data logs
 
             # Pull latest code (for migration files and docker-compose updates)
             git fetch --all --tags
@@ -190,7 +234,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Need full history to get tags
 
@@ -222,6 +266,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
           script: |
             VERSION="${{ steps.version.outputs.version }}"
             echo "🚀 Deploying version $VERSION to production..."
@@ -384,8 +429,8 @@ jobs:
             # Create required directories (if not exist)
             mkdir -p data logs
 
-            # Set permissions for appuser inside container (UID 1000)
-            chown -R 1000:1000 data logs
+            # Set permissions for container access
+            sudo chmod -R 777 data logs
 
             # Rolling update with zero downtime
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --no-deps bot

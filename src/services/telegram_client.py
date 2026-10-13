@@ -78,6 +78,27 @@ class TelegramClientService:
         """Check if the service is initialized and ready."""
         return self._started
 
+    async def _ensure_connected(self) -> None:
+        """Ensure Telethon client is connected, reconnecting if needed.
+
+        Telethon's MTProto connection can drop due to network issues,
+        idle timeouts, or Telegram server-side disconnects. The ``_started``
+        flag only reflects that we *once* connected successfully, not that the
+        underlying transport is still alive.
+        """
+        if not self._started:
+            raise RuntimeError("Client not started. Call start() first.")
+
+        if not self.client.is_connected():
+            logger.warning("Telethon disconnected, reconnecting...")
+            try:
+                await self.client.connect()
+                logger.info("Telethon reconnected successfully")
+            except Exception as e:
+                logger.error(f"Telethon reconnection failed: {e}")
+                self._started = False
+                raise
+
     async def download_large_file(
         self,
         message_id: int,
@@ -97,8 +118,7 @@ class TelegramClientService:
         Raises:
             RuntimeError: If client not started or download fails
         """
-        if not self._started:
-            raise RuntimeError("Client not started. Call start() first.")
+        await self._ensure_connected()
 
         try:
             logger.info(f"Downloading large file: chat_id={chat_id}, message_id={message_id}")

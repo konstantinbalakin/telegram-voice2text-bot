@@ -1,0 +1,26 @@
+[
+  {
+    "date": "2026-09-28",
+    "status": "draft"
+  },
+  {
+    "date": "2026-09-28",
+    "status": "approved"
+  },
+  {
+    "date": "2026-09-28",
+    "status": "planned"
+  },
+  {
+    "date": "2026-09-29",
+    "status": "in-progress"
+  },
+  {
+    "date": "2026-09-29",
+    "status": "verify"
+  },
+  {
+    "date": "2026-10-10",
+    "status": "released"
+  }
+]

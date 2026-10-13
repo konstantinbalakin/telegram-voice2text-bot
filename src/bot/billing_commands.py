@@ -52,6 +52,12 @@ class BillingCommands:
         if not db_user:
             return "Пользователь не найден. Используйте /start", None
 
+        # it-006 (#140): сначала активная подписка — её ленивая активация
+        # (get_active_subscription) гасит stale-active и поднимает due-queued,
+        # чтобы get_user_balance ниже увидел уже активную строку и вернул
+        # дневной лимит тира (15 для Basic), а не дефолтные 10.
+        active_sub = await self.subscription_service.get_active_subscription(db_user.id)
+
         balance = await self.billing_service.get_user_balance(db_user.id)
 
         lines = [
@@ -74,14 +80,33 @@ class BillingCommands:
 
         lines.append(f"\n✅ Всего доступно: {balance.total_available:.1f} мин")
 
-        # Subscription info
-        active_sub = await self.subscription_service.get_active_subscription(db_user.id)
+        # Subscription info (it-006: active_sub запрошен ВЫШЕ — до get_user_balance,
+        # чтобы ленивая активация очереди успела сработать до расчёта лимита)
         if active_sub:
             tier = await self.subscription_service.get_tier_by_id(active_sub.tier_id)
             tier_name = tier.name if tier else "Unknown"
             expires = active_sub.expires_at.strftime("%d.%m.%Y")
             lines.append(f"\n⭐ Подписка: {tier_name}")
             lines.append(f"📅 Действует до: {expires}")
+
+            # Очередь продления (#140): юзер заплатил — должен это видеть
+            queued_info = await self.subscription_service.get_queued_subscription_info(db_user.id)
+            if isinstance(queued_info, tuple) and len(queued_info) == 2:
+                queued, q_tier = queued_info
+                q_name = q_tier.name if q_tier else queued.tier_id
+                q_start = queued.started_at.strftime("%d.%m.%Y")
+                q_end = queued.expires_at.strftime("%d.%m.%Y")
+                lines.append(f"➡️ Продлено: {q_name} с {q_start} по {q_end}")
+
+            # Запланированный даунгрейд (#140 it-003): next_tier на active
+            next_tier_id = getattr(active_sub, "next_subscription_tier_id", None)
+            if isinstance(next_tier_id, int) and next_tier_id:
+                next_tier = await self.subscription_service.get_tier_by_id(next_tier_id)
+                if next_tier and isinstance(next_tier.daily_limit_minutes, (int, float)):
+                    lines.append(
+                        f"🔄 С {expires} подписка станет: {next_tier.name} "
+                        f"({next_tier.daily_limit_minutes:.0f} мин/день)"
+                    )
         else:
             lines.append("\n📋 Подписка: нет")
 

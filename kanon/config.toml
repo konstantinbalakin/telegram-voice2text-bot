@@ -1,0 +1,10 @@
+# kanon config (v0.1.0)
+# Документация формата — в AGENTS.md и kanon/features/README.md.
+
+[meta]
+preset = "chat-bot"
+canon_version = "0.1.0"
+initialized_at = "2026-09-28"
+
+[core]
+options = []
