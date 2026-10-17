@@ -134,6 +134,8 @@ jobs:
             .claude/**
             CLAUDE.md
             kanon/**
+            .github/**
+            .hermes/**
 
       - name: Calculate next version
         id: version
