@@ -129,10 +129,11 @@ jobs:
         with:
           files_ignore: |
             memory-bank/**
-            *.md
+            **/*.md
             docs/**
             .claude/**
             CLAUDE.md
+            kanon/**
 
       - name: Calculate next version
         id: version
