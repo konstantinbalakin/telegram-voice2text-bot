@@ -198,6 +198,27 @@ make down      # Stop container
 
 **Next Phase**: Analytics dashboard, quotas & billing, multi-language
 
-## kanon (канон-структура доработок)
+<!-- kanon:begin v0.2.0 -->
+## kanon — канон-структура доработок
 
-Артефакты доработок: `kanon/features/YYYYMMDD-<category>-<slug>/` (epic|story|bug|fix|docs|chore). Статусы: draft → approved → planned → in-progress → verify → released; переходы — отдельными коммитами, `draft→approved` — только оператор. Итерации фиксов: `iterations/it-NNN/` внутри фичи. Вход в работу: `kanon/STATUS.md` (якорь первой загрузки). CLI: `kanon status` / `kanon check` (если установлен). Полный цикл — скиллы kanon-interview → kanon-plan → kanon-execute → kanon-verify → kanon-iterate → kanon-docsync/kanon-whatsnew. Рабочая копия для изменений: para-копия (не /opt), флоу: ветка → PR → CI → merge.
+Проект под управлением kanon (пресет: chat-bot). Правила:
+
+- Артефакты доработок: `kanon/features/YYYYMMDD-<category>-<slug>/`.
+  Категории: epic | story | bug | fix | docs | chore.
+- Статус в frontmatter `feature.md`: draft → approved → planned →
+  in-progress → verify → released. Переход — отдельным коммитом;
+  `draft→approved` — только оператор.
+- Со статуса `planned` обязателен `plan.md`; для `released` — `whatsnew.md`.
+  История статусов — `status-log.json`, последний элемент равен frontmatter.
+- Итерации фиксов: `iterations/it-NNN/` внутри папки фичи.
+- Техдока: `docs/dev/` (index → architecture/ api/ data/). Синк техдоки —
+  условие готовности фичи. Релизы: `WHATSNEW.md` в корне.
+- Первое чтение новой сессии: `kanon/STATUS.md`, затем этот файл.
+- CLI (если установлен): `kanon status`, `kanon check`.
+  Без CLI дерево полностью работоспособно вручную. Скиллы цикла:
+  kanon-interview (сторис) → kanon-plan → kanon-execute → kanon-verify
+  (+ чек-листы по пресетам) → kanon-iterate (фиксы) → kanon-docsync +
+  kanon-whatsnew (релиз). Вход: скилл kanon (роутер по состоянию).
+<!-- kanon:end -->
+
+Рабочая копия для изменений: para-копия (не /opt); флоу: ветка → PR → CI → merge.

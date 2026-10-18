@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^\\d{8}-(epic|story|bug|fix|docs|chore)-[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "approved", "planned", "in-progress", "verify", "released"]
+    },
+    "title": {
+      "type": "string"
+    }
+  },
+  "required": ["id", "status", "title"],
+  "additionalProperties": true
+}

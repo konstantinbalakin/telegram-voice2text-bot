@@ -1,0 +1,10 @@
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "date": { "type": "string" },
+      "status": { "type": "string" }
+    }
+  }
+}

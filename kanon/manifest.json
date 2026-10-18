@@ -1,0 +1,21 @@
+{
+  "canon_version": "0.2.0",
+  "generated_by": "kanon-init",
+  "artifacts": [
+    {
+      "path": "AGENTS.md",
+      "kind": "markers",
+      "digest": "sha256:eeab3ed48e053c05c09357bd2a35ab30a6ea5f53945010aaf4ef832ce6e1ecd8"
+    },
+    {
+      "path": "kanon/schema/feature.schema.json",
+      "kind": "file",
+      "digest": "sha256:b337b5e123fd4c1a4fef3329bf7d99317af8733306eabdc90685f4151f5457d5"
+    },
+    {
+      "path": "kanon/schema/status-log.schema.json",
+      "kind": "file",
+      "digest": "sha256:a55fba295352da0c83b30a8e41afd09fbb4ffb5480ce8180b83f4e983eb265a8"
+    }
+  ]
+}
