@@ -1,11 +1,11 @@
 {
-  "canon_version": "0.2.0",
-  "generated_by": "kanon-init",
+  "canon_version": "0.3.0",
+  "generated_by": "kanon-update",
   "artifacts": [
     {
       "path": "AGENTS.md",
       "kind": "markers",
-      "digest": "sha256:eeab3ed48e053c05c09357bd2a35ab30a6ea5f53945010aaf4ef832ce6e1ecd8"
+      "digest": "sha256:291376a3d08020a1dd20259f4c9b5b397c062e9075d8732e6e7bae97cf2c5332"
     },
     {
       "path": "kanon/schema/feature.schema.json",
@@ -16,6 +16,86 @@
       "path": "kanon/schema/status-log.schema.json",
       "kind": "file",
       "digest": "sha256:a55fba295352da0c83b30a8e41afd09fbb4ffb5480ce8180b83f4e983eb265a8"
+    },
+    {
+      "path": ".hermes/skills/kanon/SKILL.md",
+      "kind": "file",
+      "digest": "sha256:52a8c62cec0a06c410f046a38db3979c6eff941410b76da15133b1ad1310794f"
+    },
+    {
+      "path": ".hermes/skills/kanon-docsync/SKILL.md",
+      "kind": "file",
+      "digest": "sha256:f9394bb691b9b58a8ff57c14ddb71c2730bfa673ee6ef5f8dd3124895bd01c40"
+    },
+    {
+      "path": ".hermes/skills/kanon-execute/SKILL.md",
+      "kind": "file",
+      "digest": "sha256:a21e19ae966f20b5139e92ae6e5d220d8bf47d72c268e1e9a38f6d8d18d20413"
+    },
+    {
+      "path": ".hermes/skills/kanon-execute/roles/doc-writer.md",
+      "kind": "file",
+      "digest": "sha256:f98b65035ac98eb4e255e230587d6655009cac53ee5d62351b8a45566f42e97d"
+    },
+    {
+      "path": ".hermes/skills/kanon-execute/roles/executor.md",
+      "kind": "file",
+      "digest": "sha256:622d3b152511421fd963e1db1d33adf051060e7b787cad2b1b39390fab91e3e5"
+    },
+    {
+      "path": ".hermes/skills/kanon-execute/roles/reviewer.md",
+      "kind": "file",
+      "digest": "sha256:3fcd66655d8bc048cfde6931a1ab5e5e961f12288b503d4f4eb876d306290e26"
+    },
+    {
+      "path": ".hermes/skills/kanon-execute/roles/test-fixer.md",
+      "kind": "file",
+      "digest": "sha256:446e7f852e53deec1d5420a7217f8e5a2c7088825799bb48baa78c934f028f81"
+    },
+    {
+      "path": ".hermes/skills/kanon-execute/roles/test-runner.md",
+      "kind": "file",
+      "digest": "sha256:b4b1bf53ffcf1cf44a155aa4952dc895b0dc6febd96d22d1b0aa979844858775"
+    },
+    {
+      "path": ".hermes/skills/kanon-execute/roles/vision.md",
+      "kind": "file",
+      "digest": "sha256:7dadff83e9b4c53ba163de7d9e490aa82cc1519a87d896dad60e0394892cadde"
+    },
+    {
+      "path": ".hermes/skills/kanon-interview/SKILL.md",
+      "kind": "file",
+      "digest": "sha256:fb9fc5903b359ea60b602c8f9ad19d1a2a2fff2674f5ef65abcfc39494d2e1ab"
+    },
+    {
+      "path": ".hermes/skills/kanon-iterate/SKILL.md",
+      "kind": "file",
+      "digest": "sha256:bb0b4dd1dd8d631650efaa17273cfaf7ef9b618c7510c9edaaedb552e2339f93"
+    },
+    {
+      "path": ".hermes/skills/kanon-plan/SKILL.md",
+      "kind": "file",
+      "digest": "sha256:7f9eb6dded3e51cd59969aaca9cd53c84d49e2b9e2c9c02cd5388f62bcdf41b6"
+    },
+    {
+      "path": ".hermes/skills/kanon-verify/SKILL.md",
+      "kind": "file",
+      "digest": "sha256:7157ef7e3ed3c0a42c6d6b26d4f859d45cb1ecbaefe2e9a3b12ac08cc8d409c5"
+    },
+    {
+      "path": ".hermes/skills/kanon-verify/checklists/chat-bot.md",
+      "kind": "file",
+      "digest": "sha256:94c78e5fadeafde9df9f5c19a7d43699d71a564f9de423fa530ad7ab86ddbf73"
+    },
+    {
+      "path": ".hermes/skills/kanon-verify/checklists/cli-tool.md",
+      "kind": "file",
+      "digest": "sha256:7329924ccffa1c80d23ddd6abe562561a1b33264838aeba2508124052412273b"
+    },
+    {
+      "path": ".hermes/skills/kanon-whatsnew/SKILL.md",
+      "kind": "file",
+      "digest": "sha256:6fa7970230927abe92e5123094c312235e73dc83d77da031c590828d27f2ca72"
     }
   ]
 }
