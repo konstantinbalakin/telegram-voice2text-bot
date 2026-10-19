@@ -198,7 +198,7 @@ make down      # Stop container
 
 **Next Phase**: Analytics dashboard, quotas & billing, multi-language
 
-<!-- kanon:begin v0.2.0 -->
+<!-- kanon:begin v0.3.0 -->
 ## kanon — канон-структура доработок
 
 Проект под управлением kanon (пресет: chat-bot).

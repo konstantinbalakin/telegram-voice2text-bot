@@ -1,11 +1,11 @@
 {
-  "canon_version": "0.2.0",
+  "canon_version": "0.3.0",
   "generated_by": "kanon-update",
   "artifacts": [
     {
       "path": "AGENTS.md",
       "kind": "markers",
-      "digest": "sha256:47e524af84a9c6f67035f02e09b6426c731ce4ec9f53c73c2586e2baf9e9f2fb"
+      "digest": "sha256:291376a3d08020a1dd20259f4c9b5b397c062e9075d8732e6e7bae97cf2c5332"
     },
     {
       "path": "kanon/schema/feature.schema.json",
