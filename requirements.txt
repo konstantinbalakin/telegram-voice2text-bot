@@ -16,7 +16,7 @@ brotli==1.2.0 ; platform_python_implementation == 'CPython'
     # via fonttools
 brotlicffi==1.2.0.0 ; platform_python_implementation != 'CPython'
     # via fonttools
-certifi==2026.1.4
+certifi==2026.10.19
     # via
     #   httpcore
     #   httpx
