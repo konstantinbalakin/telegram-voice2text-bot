@@ -1,3 +1,11 @@
 [
-  {"date": "2026-10-21", "status": "draft"}
+  {
+    "date": "2026-10-21",
+    "status": "draft"
+  },
+  {
+    "date": "2026-10-21",
+    "status": "approved",
+    "note": "operator K.: design 0.3 approved + execution start granted (chat 2026-10-21)"
+  }
 ]

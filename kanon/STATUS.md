@@ -8,7 +8,7 @@
 | Доработка | Статус | Что дальше |
 |---|---|---|
 | 20260928-bug-subscription-renewal-140 | released | merge PR #141 |
-| 20261021-fix-emudhra-certifi-bump | draft | гейт approval оператора (дизайн 0.3 уже утверждён К. в чате) |
+| 20261021-fix-emudhra-certifi-bump | approved | план (волна 1 = задачи 1–4 из 0.4) |
 
 ## Наследие (аудит kanon init, 2026-09-28)
 
