@@ -1,6 +1,6 @@
 ---
 name: kanon
-description: Use when the user mentions kanon, a kanon feature ID, "продолжай доработку", "что делать дальше" in a kanon-managed repo, or asks to start/continue work on any feature. Single entry router: reads kanon/STATUS.md + machine state and routes to the right stage skill.
+description: 'Use when the user mentions kanon, a kanon feature ID, "продолжай доработку", "что делать дальше" in a kanon-managed repo, or asks to start/continue work on any feature. Single entry router: reads kanon/STATUS.md + machine state and routes to the right stage skill.'
 ---
 
 # kanon — вход-роутер (R13)
@@ -28,6 +28,7 @@ description: Use when the user mentions kanon, a kanon feature ID, "продол
 | `planned` / `in-progress` | скилл `kanon-execute` (ближайшая незакрытая задача плана) |
 | `verify` или открытые итерации | скилл `kanon-iterate` |
 | всё `released` + новая задача от оператора | скилл `kanon-interview` (новая фича) |
+| задача оператора из самописной `tasks/<дата>-<slug>/` (дизайн уже утверждён) | зарегистрируй фичу в `kanon/features/YYYYMMDD-<category>-<slug>/` с полем «Источник: tasks/...»; пройденные гейты оператора (approval/старт) зафиксируй в `status-log.json`, дальше — по статусу обычным циклом |
 
 Несколько активных фич — покажи список с «что дальше» и спроси оператора,
 какую вести (или веди ту, что оператор назвал последней).
