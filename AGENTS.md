@@ -198,10 +198,28 @@ make down      # Stop container
 
 **Next Phase**: Analytics dashboard, quotas & billing, multi-language
 
-<!-- kanon:begin v0.2.0 -->
+<!-- kanon:begin v0.3.0 -->
 ## kanon — канон-структура доработок
 
-Проект под управлением kanon (пресет: chat-bot). Правила:
+Проект под управлением kanon (пресет: chat-bot).
+
+Источник канона: пакет `kanon-framework` — CLI в `cli/` канон-репозитория,
+скиллы — `skills/kanon-*` репозитория. Эталон прошитого состояния —
+`kanon/manifest.json`.
+
+Bootstrap:
+- Установка CLI: `pip install <путь-к-канон-репозиторию>/cli`
+  (из git/пути; альтернатива — pipx).
+- Установка скиллов в харнес: `kanon install --harness <id>`, где id:
+  hermes → `.hermes/skills`, claude → `.claude/skills`,
+  opencode → `.opencode/skills`, agents → `.agents/skills`.
+- Hermes: скиллы в `.hermes/skills` читаются нативно; если харнес их
+  не подхватывает — добавь путь в `skills.trusted_project_dirs`.
+- Self-load fallback: если харнес не загрузил скиллы — читай их как
+  обычные файлы из перечисленных выше папок (те, что есть в проекте),
+  и следуй им.
+
+Правила:
 
 - Артефакты доработок: `kanon/features/YYYYMMDD-<category>-<slug>/`.
   Категории: epic | story | bug | fix | docs | chore.
