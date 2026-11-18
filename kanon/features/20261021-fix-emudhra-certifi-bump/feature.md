@@ -1,6 +1,6 @@
 ---
 id: 20261021-fix-emudhra-certifi-bump
-status: in-progress
+status: released
 title: eMudhra: образ бота не должен доверять emSign ECC Root CA - G3
 ---
 
