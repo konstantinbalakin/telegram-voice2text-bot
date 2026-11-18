@@ -14,7 +14,7 @@ av==16.1.0
     # via faster-whisper
 brotli==1.2.1 ; platform_python_implementation == 'CPython'
     # via fonttools
-brotlicffi==1.2.0.0 ; platform_python_implementation != 'CPython'
+brotlicffi==1.2.1.0 ; platform_python_implementation != 'CPython'
     # via fonttools
 certifi==2026.10.19
     # via
