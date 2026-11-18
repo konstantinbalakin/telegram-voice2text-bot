@@ -1,6 +1,6 @@
 ---
 id: 20261118-story-stats-30d
-status: in-progress
+status: verify
 title: '/stats: статистика распознаваний пользователя за 30 дней'
 ---
 

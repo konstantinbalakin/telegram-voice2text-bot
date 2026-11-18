@@ -1,5 +1,5 @@
 {
-  "status": "in-progress",
+  "status": "verify",
   "log": [
     {
       "date": "2026-11-18",
@@ -28,6 +28,13 @@
       "to": "in-progress",
       "by": "agent",
       "note": "Волна 1 реализована: модель/миграция, репозиторий, запись языка, /stats, тесты."
+    },
+    {
+      "date": "2026-11-18",
+      "from": "in-progress",
+      "to": "verify",
+      "by": "agent",
+      "note": "Волна 2: тесты/линтеры/mypy зелёные, smoke миграций ок (verify.md)."
     }
   ]
 }

@@ -9,6 +9,7 @@
 |---|---|---|
 | 20260928-bug-subscription-renewal-140 | released | merge PR #141 |
 | 20261021-fix-emudhra-certifi-bump | in-progress | волна 1 (задачи 1–4 из 0.4), kanon-execute |
+| 20261118-story-stats-30d | verify | PR в main, тестовый стенд — решение оператора |
 
 ## Наследие (аудит kanon init, 2026-09-28)
 
