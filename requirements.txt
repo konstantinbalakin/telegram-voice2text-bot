@@ -6,7 +6,7 @@ alembic==1.18.1
     # via telegram-voice2text-bot
 annotated-types==0.7.0
     # via pydantic
-anyio==4.15.1
+anyio==4.14.2
     # via
     #   httpx
     #   openai
@@ -14,7 +14,7 @@ av==16.1.0
     # via faster-whisper
 brotli==1.2.1 ; platform_python_implementation == 'CPython'
     # via fonttools
-brotlicffi==1.2.1.0 ; platform_python_implementation != 'CPython'
+brotlicffi==1.2.0.0 ; platform_python_implementation != 'CPython'
     # via fonttools
 certifi==2026.10.19
     # via
@@ -40,7 +40,7 @@ distro==1.9.0
     # via openai
 faster-whisper==1.2.1
     # via telegram-voice2text-bot
-filelock==4.2.1
+filelock==4.2.4
     # via huggingface-hub
 flatbuffers==25.12.19
     # via onnxruntime
@@ -92,7 +92,7 @@ onnxruntime==1.23.2
     # via faster-whisper
 openai==1.109.1
     # via telegram-voice2text-bot
-packaging==26.0
+packaging==26.3
     # via
     #   huggingface-hub
     #   onnxruntime
