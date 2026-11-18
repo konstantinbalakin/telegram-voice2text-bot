@@ -1,6 +1,6 @@
 ---
 id: 20261118-story-stats-30d
-status: draft
+status: planned
 title: '/stats: статистика распознаваний пользователя за 30 дней'
 ---
 
