@@ -7,8 +7,8 @@
 
 | Доработка | Статус | Что дальше |
 |---|---|---|
-| 20260928-bug-subscription-renewal-140 | released | merge PR #141 |
-| 20261021-fix-emudhra-certifi-bump | in-progress | волна 1 (задачи 1–4 из 0.4), kanon-execute |
+| 20260928-bug-subscription-renewal-140 | released | закрыта: PR #141 merged 2026-10-10 |
+| 20261021-fix-emudhra-certifi-bump | verify | kanon-whatsnew → released (работа закрыта: v0.0.81, PR #149–151) |
 
 ## Наследие (аудит kanon init, 2026-09-28)
 
