@@ -7,7 +7,6 @@ not the Telegram user ID.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from dataclasses import dataclass
 
 
 # =============================================================================

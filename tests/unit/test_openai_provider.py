@@ -143,7 +143,6 @@ class TestOpenAIProviderTranscribe:
     async def test_transcribe_10mb_file_no_chunking(self, initialized_provider, tmp_path):
         """Test 10MB file (< 25MB) transcribes directly without chunking."""
         import httpx
-        from src.config import settings
 
         test_file = tmp_path / "medium.mp3"
 
