@@ -8,7 +8,7 @@
 | Доработка | Статус | Что дальше |
 |---|---|---|
 | 20260928-bug-subscription-renewal-140 | released | закрыта: PR #141 merged 2026-10-10 |
-| 20261021-fix-emudhra-certifi-bump | verify | kanon-whatsnew → released (работа закрыта: v0.0.81, PR #149–151) |
+| 20261021-fix-emudhra-certifi-bump | released | закрыта: прод v0.0.81, PR #149–151 |
 
 ## Наследие (аудит kanon init, 2026-09-28)
 
@@ -20,6 +20,9 @@
 
 ## Последние решения
 
+- 2026-11-19: kanon sync — emudhra-certifi-bump доведена до released
+  задним числом: PR #151 закрыл задачу через старую tasks/,
+  kanon-дерево осталось в in-progress
 - 2026-10-10: полигон #140 пройден — 4/4 сценариев passed, 6 итераций
   фиксов (it-001…it-006); фича переведена в released
 - 2026-09-28: kanon init (детект chat-bot 0.9); фича #140 перенесена в
