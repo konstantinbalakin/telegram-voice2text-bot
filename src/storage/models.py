@@ -95,6 +95,7 @@ class Usage(Base):
 
     # Whisper settings used
     model_size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Stage 3
+    language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)  # Stage 3
 
     # LLM refinement tracking (hybrid mode)
     llm_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Stage 3

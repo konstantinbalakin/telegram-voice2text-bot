@@ -4,7 +4,7 @@
 
 ## Волна 1 — реализация
 
-- [ ] 1. Модель и миграция
+- [x] 1. Модель и миграция
   - `src/storage/models.py`: в `Usage` после `model_size` добавить
     `language: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)`
     с комментарием «Stage 3».
@@ -12,7 +12,7 @@
     `down_revision = "b1c2d3e4f5a6"`: add column `language` VARCHAR(16)
     nullable в `usage`; downgrade — drop column.
   - Проверка: `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -q` зелёный.
-- [ ] 2. Репозиторий
+- [x] 2. Репозиторий
   - `src/storage/repositories.py`:
     - `UsageRepository.create(...)` и `.update(...)`: параметр
       `language: Optional[str] = None` (update — только если не None),
@@ -27,14 +27,14 @@
       `transcription_length IS NOT NULL`, GROUP BY language.
       Агрегация в Python → UsagePeriodStats. Сортировка языков по убыванию
       количества.
-- [ ] 3. Сохранение языка при транскрипции
+- [x] 3. Сохранение языка при транскрипции
   - `src/services/transcription_orchestrator.py` (~строка 869, Stage-3
     update): добавить `language=result.language`.
   - `src/bot/retranscribe_handlers.py` (~строка 252, child create):
     добавить `language=result.language`.
   - `src/bot/handlers.py` (benchmark-режим, usage_repo.create):
     добавить `language=best_result.language`.
-- [ ] 4. Команда /stats
+- [x] 4. Команда /stats
   - `src/bot/handlers.py`, `stats_command`: переписать вывод:
     - Заголовок «📊 Статистика за последние 30 дней».
     - Сообщений обработано, длительность аудио (человеческий формат),
@@ -57,7 +57,7 @@
     None/"unknown" → «не определён».
   - get_session в stats_command уже вызывается напрямую — сохранить
     существующий паттерн (в тестах мокается src.bot.handlers.get_session).
-- [ ] 5. Тесты
+- [x] 5. Тесты
   - `tests/unit/test_handlers.py` TestStatsCommand: обновить под новый
     вывод (мок `get_period_stats`), добавить случаи: 30 дней пусто при
     all-time > 0; языки NULL → «не определён»; форматирование длительности.
@@ -66,7 +66,7 @@
     conftest): окно 30 дней (старые записи не считаются), child-записи
     (parent_usage_id) исключаются, incomplete (transcription_length NULL)
     исключаются, группировка языков, create/update пишут language.
-- [ ] 6. Линтеры и типы
+- [x] 6. Линтеры и типы
   - `uv run ruff check src/ tests/`; `uv run black src/ tests/`;
     `uv run mypy src/` — чисто.
   - `TELEGRAM_BOT_TOKEN=test uv run pytest tests/unit/ -q` — зелёный.

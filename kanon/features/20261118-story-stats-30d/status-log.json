@@ -1,5 +1,5 @@
 {
-  "status": "draft",
+  "status": "in-progress",
   "log": [
     {
       "date": "2026-11-18",
@@ -21,6 +21,13 @@
       "to": "planned",
       "by": "agent",
       "note": "План plan.md написан по итогам изучения кода (models/repositories/handlers/orchestrator)."
+    },
+    {
+      "date": "2026-11-18",
+      "from": "planned",
+      "to": "in-progress",
+      "by": "agent",
+      "note": "Волна 1 реализована: модель/миграция, репозиторий, запись языка, /stats, тесты."
     }
   ]
 }

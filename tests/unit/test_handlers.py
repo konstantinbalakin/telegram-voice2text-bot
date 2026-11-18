@@ -9,9 +9,11 @@ import pytest
 from src.bot.handlers import (
     BotHandlers,
     MediaInfo,
+    _format_duration,
+    _language_display,
     format_wait_time,
 )
-
+from src.storage.repositories import UsagePeriodStats
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -456,8 +458,14 @@ class TestStatsCommand:
         mock_user_repo = MagicMock()
         mock_user_repo.get_by_telegram_id = AsyncMock(return_value=db_user)
         mock_usage_repo = MagicMock()
-        mock_usage_repo.count_by_user_id = AsyncMock(return_value=5)
-        mock_usage_repo.get_user_total_duration = AsyncMock(return_value=150.0)
+        mock_usage_repo.count_by_user_id = AsyncMock(return_value=42)
+        mock_usage_repo.get_period_stats = AsyncMock(
+            return_value=UsagePeriodStats(
+                total_count=5,
+                total_duration_seconds=3725.0,
+                languages=[("ru", 4), ("en", 1)],
+            )
+        )
 
         with (
             patch("src.bot.handlers.get_session", return_value=_async_ctx_manager(mock_session)),
@@ -468,8 +476,108 @@ class TestStatsCommand:
 
         update.message.reply_text.assert_awaited_once()
         text = update.message.reply_text.call_args[0][0]
-        assert "5 сообщений" in text
-        assert "150.0 сек" in text
+        assert "Статистика за последние 30 дней" in text
+        assert "Обработано сообщений: 5" in text
+        assert "1 ч 2 мин 5 сек" in text
+        assert "• Русский — 4" in text
+        assert "• Английский — 1" in text
+        assert "Всего за всё время: 42 сообщений" in text
+        assert "Дата регистрации: 01.01.2025" in text
+
+    @pytest.mark.asyncio
+    async def test_empty_period_with_all_time(self) -> None:
+        h = _make_handlers()
+        update = _make_update()
+        ctx = _make_context()
+
+        db_user = _make_db_user()
+        mock_session = MagicMock()
+        mock_user_repo = MagicMock()
+        mock_user_repo.get_by_telegram_id = AsyncMock(return_value=db_user)
+        mock_usage_repo = MagicMock()
+        mock_usage_repo.count_by_user_id = AsyncMock(return_value=7)
+        mock_usage_repo.get_period_stats = AsyncMock(
+            return_value=UsagePeriodStats(
+                total_count=0,
+                total_duration_seconds=0.0,
+                languages=[],
+            )
+        )
+
+        with (
+            patch("src.bot.handlers.get_session", return_value=_async_ctx_manager(mock_session)),
+            patch("src.bot.handlers.UserRepository", return_value=mock_user_repo),
+            patch("src.bot.handlers.UsageRepository", return_value=mock_usage_repo),
+        ):
+            await h.stats_command(update, ctx)
+
+        update.message.reply_text.assert_awaited_once()
+        text = update.message.reply_text.call_args[0][0]
+        assert "За последние 30 дней нет" in text
+        assert "Всего за всё время: 7 сообщений" in text
+        assert "Дата регистрации: 01.01.2025" in text
+
+    @pytest.mark.asyncio
+    async def test_unknown_language_displayed(self) -> None:
+        h = _make_handlers()
+        update = _make_update()
+        ctx = _make_context()
+
+        db_user = _make_db_user()
+        mock_session = MagicMock()
+        mock_user_repo = MagicMock()
+        mock_user_repo.get_by_telegram_id = AsyncMock(return_value=db_user)
+        mock_usage_repo = MagicMock()
+        mock_usage_repo.count_by_user_id = AsyncMock(return_value=3)
+        mock_usage_repo.get_period_stats = AsyncMock(
+            return_value=UsagePeriodStats(
+                total_count=2,
+                total_duration_seconds=45.0,
+                languages=[(None, 2)],
+            )
+        )
+
+        with (
+            patch("src.bot.handlers.get_session", return_value=_async_ctx_manager(mock_session)),
+            patch("src.bot.handlers.UserRepository", return_value=mock_user_repo),
+            patch("src.bot.handlers.UsageRepository", return_value=mock_usage_repo),
+        ):
+            await h.stats_command(update, ctx)
+
+        update.message.reply_text.assert_awaited_once()
+        text = update.message.reply_text.call_args[0][0]
+        assert "• не определён — 2" in text
+
+
+class TestStatsHelpers:
+    """Tests for _format_duration and _language_display helpers."""
+
+    def test_format_duration_hours_only(self) -> None:
+        assert _format_duration(3600.0) == "1 ч"
+
+    def test_format_duration_full(self) -> None:
+        assert _format_duration(3725.0) == "1 ч 2 мин 5 сек"
+
+    def test_format_duration_seconds_only(self) -> None:
+        assert _format_duration(45.0) == "45 сек"
+
+    def test_format_duration_zero(self) -> None:
+        assert _format_duration(0.0) == "0 сек"
+
+    def test_format_duration_rounds(self) -> None:
+        assert _format_duration(59.6) == "1 мин"
+
+    def test_language_display_known(self) -> None:
+        assert _language_display("ru") == "Русский"
+        assert _language_display("EN") == "Английский"
+        assert _language_display("kk") == "Казахский"
+
+    def test_language_display_none_and_unknown(self) -> None:
+        assert _language_display(None) == "не определён"
+        assert _language_display("unknown") == "не определён"
+
+    def test_language_display_fallback_to_code(self) -> None:
+        assert _language_display("xx") == "xx"
 
 
 # ---------------------------------------------------------------------------

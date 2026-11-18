@@ -3,6 +3,7 @@ Repository pattern for database access
 """
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -20,6 +21,15 @@ from src.storage.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class UsagePeriodStats:
+    """Aggregated usage statistics for a time period (completed transcriptions only)."""
+
+    total_count: int
+    total_duration_seconds: float
+    languages: list[tuple[Optional[str], int]]
 
 
 class UserRepository:
@@ -89,6 +99,7 @@ class UsageRepository:
         llm_processing_time_seconds: Optional[float] = None,
         original_file_path: Optional[str] = None,
         parent_usage_id: Optional[int] = None,
+        language: Optional[str] = None,
     ) -> Usage:
         """Create a new usage record (Stage 1: on file download).
 
@@ -107,6 +118,7 @@ class UsageRepository:
             llm_processing_time_seconds=llm_processing_time_seconds,
             original_file_path=original_file_path,
             parent_usage_id=parent_usage_id,
+            language=language,
             created_at=datetime.now(timezone.utc),
             updated_at=datetime.now(timezone.utc),
         )
@@ -131,6 +143,7 @@ class UsageRepository:
         llm_model: Optional[str] = None,
         llm_processing_time_seconds: Optional[float] = None,
         original_file_path: Optional[str] = None,
+        language: Optional[str] = None,
     ) -> Usage:
         """Update usage record with new data (Stage 2, 3, or 4).
 
@@ -140,7 +153,8 @@ class UsageRepository:
             f"UsageRepository.update(usage_id={usage_id}, duration={voice_duration_seconds}, "
             f"model={model_size}, processing_time={processing_time_seconds}, "
             f"text_length={transcription_length}, llm_model={llm_model}, "
-            f"llm_time={llm_processing_time_seconds}, file_path={original_file_path})"
+            f"llm_time={llm_processing_time_seconds}, file_path={original_file_path}, "
+            f"language={language})"
         )
         usage = await self.get_by_id(usage_id)
         if not usage:
@@ -160,6 +174,8 @@ class UsageRepository:
             usage.llm_processing_time_seconds = llm_processing_time_seconds
         if original_file_path is not None:
             usage.original_file_path = original_file_path
+        if language is not None:
+            usage.language = language
 
         usage.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
@@ -183,6 +199,42 @@ class UsageRepository:
             select(func.sum(Usage.voice_duration_seconds)).where(Usage.user_id == user_id)
         )
         return result.scalar() or 0
+
+    async def get_period_stats(self, user_id: int, since: datetime) -> UsagePeriodStats:
+        """Get aggregated stats for completed top-level transcriptions since a moment.
+
+        Excludes child records (retranscriptions) and incomplete records.
+        """
+        result = await self.session.execute(
+            select(Usage.language, func.count(Usage.id), func.sum(Usage.voice_duration_seconds))
+            .where(
+                Usage.user_id == user_id,
+                Usage.created_at >= since,
+                Usage.parent_usage_id.is_(None),
+                Usage.transcription_length.isnot(None),
+            )
+            .group_by(Usage.language)
+        )
+        rows = result.all()
+        total_count = 0
+        total_duration = 0.0
+        languages: list[tuple[Optional[str], int]] = []
+        for language, count, duration_sum in rows:
+            count = int(count or 0)
+            total_count += count
+            total_duration += float(duration_sum or 0)
+            languages.append((language, count))
+        # Sort by count desc; ties broken by language code for deterministic output
+        languages.sort(key=lambda item: (-item[1], item[0] or ""))
+        logger.debug(
+            f"UsageRepository.get_period_stats(user_id={user_id}, since={since}): "
+            f"count={total_count}, duration={total_duration}, languages={languages}"
+        )
+        return UsagePeriodStats(
+            total_count=total_count,
+            total_duration_seconds=total_duration,
+            languages=languages,
+        )
 
     async def count_by_user_id(self, user_id: int) -> int:
         """Count total number of transcriptions for a user.

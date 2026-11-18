@@ -261,6 +261,7 @@ async def handle_retranscribe(
                 transcription_length=len(result.text),
                 parent_usage_id=usage_id,  # Link to parent
                 original_file_path=usage.original_file_path,  # Preserve file path
+                language=result.language,
             )
 
             logger.info(

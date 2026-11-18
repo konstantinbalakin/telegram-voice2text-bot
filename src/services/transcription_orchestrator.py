@@ -874,6 +874,7 @@ class TranscriptionOrchestrator:
                     llm_model=(
                         settings.llm_model if (needs_refinement and self.llm_service) else None
                     ),
+                    language=result.language,
                 )
 
             self.audio_handler.cleanup_file(request.file_path)

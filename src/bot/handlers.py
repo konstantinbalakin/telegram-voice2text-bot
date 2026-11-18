@@ -4,7 +4,7 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Optional
 
 from telegram import Update
@@ -35,6 +35,51 @@ TELEGRAM_MAX_MESSAGE_LENGTH = 4096
 
 # Telegram Client API file size limit (2 GB)
 TELEGRAM_CLIENT_API_MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds into a human-readable string like «1 ч 2 мин 5 сек»."""
+    total_seconds = int(round(seconds))
+    hours = total_seconds // 3600
+    minutes = (total_seconds // 60) % 60
+    secs = total_seconds % 60
+    parts: list[str] = []
+    if hours:
+        parts.append(f"{hours} ч")
+    if minutes:
+        parts.append(f"{minutes} мин")
+    if secs:
+        parts.append(f"{secs} сек")
+    return " ".join(parts) if parts else "0 сек"
+
+
+def _language_display(code: Optional[str]) -> str:
+    """Convert a language code into a Russian display name."""
+    language_names = {
+        "ru": "Русский",
+        "en": "Английский",
+        "uk": "Украинский",
+        "de": "Немецкий",
+        "fr": "Французский",
+        "es": "Испанский",
+        "it": "Итальянский",
+        "pt": "Португальский",
+        "pl": "Польский",
+        "tr": "Турецкий",
+        "kk": "Казахский",
+        "ky": "Кыргызский",
+        "uz": "Узбекский",
+        "az": "Азербайджанский",
+        "be": "Белорусский",
+        "zh": "Китайский",
+        "ja": "Японский",
+        "ko": "Корейский",
+        "ar": "Арабский",
+        "hi": "Хинди",
+    }
+    if code is None or code.lower() == "unknown":
+        return "не определён"
+    return language_names.get(code.lower(), code)
 
 
 @dataclass
@@ -297,16 +342,32 @@ class BotHandlers:
                     )
                 return
 
-            total_duration = await usage_repo.get_user_total_duration(db_user.id)
-            avg_duration = total_duration / total_count
+            since = datetime.now(timezone.utc) - timedelta(days=30)
+            period_stats = await usage_repo.get_period_stats(db_user.id, since)
 
-            stats_message = (
-                f"Ваша статистика:\n\n"
-                f"Всего обработано: {total_count} сообщений\n"
-                f"Общая продолжительность: {total_duration:.1f} сек\n"
-                f"Средняя длительность: {avg_duration:.1f} сек\n"
-                f"Дата регистрации: {db_user.created_at.strftime('%d.%m.%Y')}"
-            )
+            registered_at = db_user.created_at.strftime("%d.%m.%Y")
+            all_time_line = f"Всего за всё время: {total_count} сообщений"
+
+            if period_stats.total_count == 0:
+                stats_message = (
+                    "За последние 30 дней нет обработанных сообщений.\n\n"
+                    f"{all_time_line}\n"
+                    f"Дата регистрации: {registered_at}"
+                )
+            else:
+                duration_line = _format_duration(period_stats.total_duration_seconds)
+                languages_block = "\n".join(
+                    f"• {_language_display(language)} — {count}"
+                    for language, count in period_stats.languages
+                )
+                stats_message = (
+                    "📊 Статистика за последние 30 дней\n\n"
+                    f"Обработано сообщений: {period_stats.total_count}\n"
+                    f"Длительность аудио: {duration_line}\n"
+                    f"Языки:\n{languages_block}\n\n"
+                    f"{all_time_line}\n"
+                    f"Дата регистрации: {registered_at}"
+                )
 
             if update.message:
                 await update.message.reply_text(stats_message)
@@ -604,6 +665,7 @@ class BotHandlers:
                             transcription_length=len(best_result.text),
                             model_size=best_result.model_name,
                             processing_time_seconds=best_result.processing_time,
+                            language=best_result.language,
                         )
 
                 self.audio_handler.cleanup_file(file_path)
